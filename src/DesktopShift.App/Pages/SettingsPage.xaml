@@ -35,6 +35,50 @@
 
             <Border Style="{StaticResource DesktopShift.CardStyle}">
                 <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Startup and window behavior" />
+                        <TextBlock
+                            MaxWidth="560"
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="DesktopShift runs from the notification area. These settings decide when it starts and what closing its window does." />
+                    </StackPanel>
+
+                    <ToggleSwitch
+                        x:Name="StartWithWindowsToggle"
+                        AutomationProperties.HelpText="Registers DesktopShift as a per-user startup app so it runs after you sign in."
+                        AutomationProperties.Name="Start with Windows"
+                        Header="Start with Windows"
+                        Toggled="OnBehaviorToggled" />
+                    <TextBlock
+                        x:Name="StartupStateValue"
+                        MaxWidth="560"
+                        Style="{StaticResource DesktopShift.CaptionStyle}" />
+
+                    <ToggleSwitch
+                        x:Name="StartMinimizedToggle"
+                        AutomationProperties.HelpText="Starts DesktopShift in the notification area without opening its window."
+                        AutomationProperties.Name="Start minimized to the notification area"
+                        Header="Start minimized to the notification area"
+                        Toggled="OnBehaviorToggled" />
+
+                    <ToggleSwitch
+                        x:Name="CloseToTrayToggle"
+                        AutomationProperties.HelpText="Closing the window hides DesktopShift instead of exiting it. Use Exit in the notification area menu to stop it."
+                        AutomationProperties.Name="Close to the notification area"
+                        Header="Close to the notification area"
+                        Toggled="OnBehaviorToggled" />
+
+                    <InfoBar
+                        x:Name="BehaviorMessage"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning"
+                        Title="Startup setting" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

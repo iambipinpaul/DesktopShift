@@ -1,7 +1,11 @@
 using System.Diagnostics;
+using DesktopShift.App.Tray;
+using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Activation;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
+using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Hosting;
 using DesktopShift.Core.Observation;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
@@ -21,6 +25,8 @@ public partial class App : Application
     private readonly IHost _host;
     private DispatcherQueue? _dispatcherQueue;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
+    private NotificationAreaCoordinator? _notificationArea;
+    private ApplicationShutdownSequence? _shutdownSequence;
     private MainWindow? _window;
     private int _shutdownStarted;
 
@@ -32,6 +38,10 @@ public partial class App : Application
         {
             services.AddSingleton<ISingleInstanceService, SingleInstanceService>();
             services.AddSingleton<SingleInstanceCoordinator>();
+
+            // Registered after AddDesktopShiftFoundation, so this replaces the
+            // in-memory default the foundation installs for tests.
+            services.AddSingleton<IStartupRegistration, StartupTaskRegistration>();
             services.AddSingleton<IWindowsBuildInfoProvider, EnvironmentWindowsBuildInfoProvider>();
             services.AddSingleton<IDesktopTopologyProvider, ValidatedVirtualDesktopTopologyProvider>();
             services.AddSingleton<ICompatibilityCoordinator, CompatibilityCoordinator>();
@@ -75,7 +85,7 @@ public partial class App : Application
             _singleInstanceCoordinator.ActivationRequested += OnActivationRequested;
 
             await _host.StartAsync().ConfigureAwait(true);
-            ShowMainWindow();
+            await StartNotificationAreaAsync().ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -85,28 +95,112 @@ public partial class App : Application
         }
     }
 
-    private void ShowMainWindow()
+    private async Task StartNotificationAreaAsync()
+    {
+        MainWindow window = CreateMainWindow();
+        NotificationAreaCoordinator notificationArea = new(
+            new ShellNotifyIconHost(),
+            new MainWindowShellSurface(window),
+            _host.Services.GetRequiredService<IAutomaticAssignmentPauseController>(),
+            _host.Services.GetRequiredService<IWindowReassignmentService>(),
+            _host.Services.GetRequiredService<IWindowAssignmentActivityProjection>(),
+            _host.Services.GetRequiredService<ICompatibilityCoordinator>(),
+            ExitFromNotificationAreaAsync);
+        _notificationArea = notificationArea;
+        window.CloseRequestHandler = notificationArea.HandleWindowClosing;
+        _shutdownSequence = CreateShutdownSequence(notificationArea);
+
+        ConfigurationState configuration = await _host.Services
+            .GetRequiredService<IConfigurationService>()
+            .LoadAsync()
+            .ConfigureAwait(true);
+        ShellLaunchDisposition disposition = ShellLifetimePolicy.ResolveLaunch(
+            BehaviorSettingsCommand.ResolveBehavior(configuration),
+            isFirstRunComplete: !configuration.IsFirstRun);
+
+        notificationArea.Start(disposition);
+
+        if (disposition == ShellLaunchDisposition.StayInNotificationArea)
+        {
+            // The shell normally runs the compatibility test when its content
+            // loads. A launch that never shows the window has to run it here,
+            // or nothing would ever prove the provider works and startup
+            // reconciliation would wait forever.
+            _ = await _host.Services
+                .GetRequiredService<ICompatibilityCoordinator>()
+                .RunCompatibilityTestAsync()
+                .ConfigureAwait(true);
+        }
+    }
+
+    private MainWindow CreateMainWindow()
     {
         _window ??= _host.Services.GetRequiredService<MainWindow>();
         _window.Closed -= OnMainWindowClosed;
         _window.Closed += OnMainWindowClosed;
-        _window.AppWindow.Show();
-        _window.Show();
+        return _window;
+    }
+
+    private ApplicationShutdownSequence CreateShutdownSequence(
+        NotificationAreaCoordinator notificationArea)
+    {
+        SingleInstanceCoordinator? singleInstance = _singleInstanceCoordinator;
+
+        // Ordered so nothing can raise a command into services that are already
+        // stopping: the notification area first, then the activation
+        // registration, then the hosted services, and finally the container that
+        // owns the WinEvent hooks and the topology provider registration.
+        return new ApplicationShutdownSequence(
+        [
+            new ShutdownStep(
+                "notification area",
+                async _ => await notificationArea.DisposeAsync().ConfigureAwait(false)),
+            new ShutdownStep(
+                "single instance registration",
+                async _ =>
+                {
+                    if (singleInstance is not null)
+                    {
+                        singleInstance.ActivationRequested -= OnActivationRequested;
+                        await singleInstance.DisposeAsync().ConfigureAwait(false);
+                    }
+                }),
+            new ShutdownStep(
+                "hosted services",
+                async _ => await _host.StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false)),
+            new ShutdownStep(
+                "host container",
+                _ =>
+                {
+                    _host.Dispose();
+                    return ValueTask.CompletedTask;
+                }),
+        ]);
     }
 
     private void OnActivationRequested(object? sender, EventArgs args)
     {
         if (_dispatcherQueue?.HasThreadAccess is true)
         {
-            ShowMainWindow();
+            _notificationArea?.HandleActivationRequested();
             return;
         }
 
-        _ = _dispatcherQueue?.TryEnqueue(ShowMainWindow);
+        _ = _dispatcherQueue?.TryEnqueue(
+            () => _notificationArea?.HandleActivationRequested());
+    }
+
+    private async Task ExitFromNotificationAreaAsync(CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        await ShutdownAsync().ConfigureAwait(true);
+        Exit();
     }
 
     private async void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
+        // Reached only when close-to-tray is off; otherwise the close is
+        // cancelled before it gets here and the window is hidden instead.
         await ShutdownAsync().ConfigureAwait(true);
         Exit();
     }
@@ -120,14 +214,32 @@ public partial class App : Application
 
         UnhandledException -= OnUnhandledException;
 
-        if (_singleInstanceCoordinator is not null)
-        {
-            _singleInstanceCoordinator.ActivationRequested -= OnActivationRequested;
-        }
-
         if (_window is not null)
         {
             _window.Closed -= OnMainWindowClosed;
+            _window.CloseRequestHandler = null;
+        }
+
+        if (_shutdownSequence is not null)
+        {
+            ShutdownReport report = await _shutdownSequence
+                .RunAsync()
+                .ConfigureAwait(true);
+            foreach (ShutdownStepFailure failure in report.Failures)
+            {
+                Debug.WriteLine(
+                    $"DesktopShift could not tear down {failure.Name}: {failure.Exception}");
+            }
+
+            return;
+        }
+
+        // A launch that failed before the notification area existed still has to
+        // release the host and the activation registration.
+        if (_singleInstanceCoordinator is not null)
+        {
+            _singleInstanceCoordinator.ActivationRequested -= OnActivationRequested;
+            await _singleInstanceCoordinator.DisposeAsync().ConfigureAwait(true);
         }
 
         await _host.StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);

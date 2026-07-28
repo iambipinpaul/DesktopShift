@@ -36,6 +36,14 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ApplicationRuntimeState>();
         services.TryAddSingleton<IApplicationRuntimeState>(
             static serviceProvider => serviceProvider.GetRequiredService<ApplicationRuntimeState>());
+        services.TryAddSingleton<IAutomaticAssignmentPauseController>(
+            static serviceProvider => serviceProvider.GetRequiredService<ApplicationRuntimeState>());
+
+        // The in-memory registration is the safe default: it is what every test
+        // host gets, so no test can write the machine's real login state. The
+        // packaged application registers the platform implementation after this
+        // call, and the later registration is the one resolved.
+        services.TryAddSingleton<IStartupRegistration, InMemoryStartupRegistration>();
         services.AddHostedService<ApplicationRuntimeHostedService>();
 
         return services;

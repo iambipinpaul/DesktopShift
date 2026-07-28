@@ -10,9 +10,11 @@ using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Navigation;
 using DesktopShift.Core.Observation;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -42,6 +44,8 @@ public sealed partial class MainWindow : Window
     private readonly IManagedDesktopReconciliationService _managedDesktopReconciliationService;
     private readonly IWindowAssignmentActivityProjection _assignmentActivityProjection;
     private readonly IWindowReassignmentService _windowReassignmentService;
+    private readonly BehaviorSettingsCommand _behaviorSettingsCommand;
+    private readonly IStartupRegistration _startupRegistration;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private FirstRunState? _firstRunState;
     private bool _isApplyingTheme;
@@ -57,7 +61,8 @@ public sealed partial class MainWindow : Window
         IConfigurationService configurationService,
         IManagedDesktopReconciliationService managedDesktopReconciliationService,
         IWindowAssignmentActivityProjection assignmentActivityProjection,
-        IWindowReassignmentService windowReassignmentService)
+        IWindowReassignmentService windowReassignmentService,
+        IStartupRegistration startupRegistration)
     {
         _themePreferenceService = themePreferenceService ?? throw new ArgumentNullException(nameof(themePreferenceService));
         _firstRunService = firstRunService ?? throw new ArgumentNullException(nameof(firstRunService));
@@ -79,6 +84,11 @@ public sealed partial class MainWindow : Window
         _windowReassignmentService =
             windowReassignmentService ??
             throw new ArgumentNullException(nameof(windowReassignmentService));
+        _startupRegistration =
+            startupRegistration ?? throw new ArgumentNullException(nameof(startupRegistration));
+        _behaviorSettingsCommand = new BehaviorSettingsCommand(
+            _configurationService,
+            _startupRegistration);
 
         InitializeComponent();
 
@@ -93,6 +103,7 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService.Changed +=
             OnManagedDesktopReconciliationChanged;
         RootLayout.Loaded += OnRootLayoutLoaded;
+        AppWindow.Closing += OnAppWindowClosing;
         Closed += OnClosed;
 
         ApplyTheme(_themePreferenceService.CurrentTheme);
@@ -100,6 +111,16 @@ public sealed partial class MainWindow : Window
     }
 
     public string CurrentDestinationKey { get; private set; } = "overview";
+
+    /// <summary>
+    /// Decides what the window's close button means.
+    /// </summary>
+    /// <remarks>
+    /// Set by the application once the notification-area coordinator exists.
+    /// The decision itself belongs to the coordinator, which can be tested;
+    /// the code-behind only carries the answer back to the close event.
+    /// </remarks>
+    public Func<BehaviorSettings, ShellCloseDisposition>? CloseRequestHandler { get; set; }
 
     public void Show()
     {
@@ -340,6 +361,13 @@ public sealed partial class MainWindow : Window
 
         if (result.Accepted)
         {
+            // Saving the document only records the request. The registration is
+            // what actually makes DesktopShift start with Windows, so it is
+            // applied as soon as the choice is accepted rather than waiting for
+            // the user to find the Settings page.
+            _ = await _startupRegistration.SetEnabledAsync(
+                viewModel.StartWithWindows,
+                cancellationToken);
             _ = await _managedDesktopReconciliationService.ReconcileAsync(
                 ManagedDesktopReconciliationTrigger.ConfigurationAccepted,
                 cancellationToken);
@@ -427,7 +455,11 @@ public sealed partial class MainWindow : Window
         }
         else if (ContentFrame.Content is SettingsPage settingsPage)
         {
-            settingsPage.Update(compatibility, RunCompatibilityTestAsync);
+            settingsPage.Update(
+                compatibility,
+                RunCompatibilityTestAsync,
+                _behaviorSettingsCommand,
+                _lifetimeCancellation.Token);
         }
         else if (ContentFrame.Content is RulesPage rulesPage)
         {
@@ -558,6 +590,20 @@ public sealed partial class MainWindow : Window
             issues.Select(issue => $"{issue.Path}: {issue.Message}"));
     }
 
+    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        BehaviorSettings behavior =
+            BehaviorSettingsCommand.ResolveBehavior(_configurationService.CurrentState);
+
+        // Cancelling the close is the only way a WinUI window survives its own
+        // close button, so the disposition has to be decided here rather than in
+        // Closed, which fires when the window is already gone.
+        if (CloseRequestHandler?.Invoke(behavior) == ShellCloseDisposition.HideToNotificationArea)
+        {
+            args.Cancel = true;
+        }
+    }
+
     private void OnClosed(object sender, WindowEventArgs args)
     {
         _lifetimeCancellation.Cancel();
@@ -566,6 +612,7 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService.Changed -=
             OnManagedDesktopReconciliationChanged;
         RootLayout.Loaded -= OnRootLayoutLoaded;
+        AppWindow.Closing -= OnAppWindowClosing;
         Closed -= OnClosed;
         _lifetimeCancellation.Dispose();
     }

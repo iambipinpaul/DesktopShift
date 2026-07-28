@@ -1,3 +1,4 @@
+using DesktopShift.Core.Hosting;
 using DesktopShift.Core.Observation;
 using Microsoft.Extensions.Hosting;
 
@@ -7,6 +8,7 @@ internal sealed class WindowObservationHostedService(
     IWindowEventSource eventSource,
     IWindowEventQueue eventQueue,
     WindowObservationProcessor processor,
+    IAutomaticAssignmentPauseController pauseController,
     IHostApplicationLifetime applicationLifetime) :
     IHostedService,
     IDisposable
@@ -30,9 +32,7 @@ internal sealed class WindowObservationHostedService(
             }
 
             eventSource.Start();
-            worker = processor.RunAsync(
-                eventQueue,
-                workerCancellation.Token);
+            worker = PumpAsync(workerCancellation.Token);
             _ = worker.ContinueWith(
                 ObserveWorkerCompletion,
                 CancellationToken.None,
@@ -105,6 +105,34 @@ internal sealed class WindowObservationHostedService(
         }
 
         workerCancellation.Dispose();
+    }
+
+    /// <summary>
+    /// Drains the observed-event queue into the processor, and is the one place
+    /// automatic assignment can be paused.
+    /// </summary>
+    /// <remarks>
+    /// Paused events are read and dropped rather than left in the queue. A
+    /// queue held back for the length of a pause would either fill and start
+    /// dropping the newest events, or replay a burst of stale window handles the
+    /// moment the user resumes — neither is what "paused" should mean. Dropping
+    /// here also leaves the manual path untouched: a reassignment batch calls
+    /// the processor directly and never passes through this pump.
+    /// </remarks>
+    private async Task PumpAsync(CancellationToken cancellationToken)
+    {
+        await foreach (WindowEvent windowEvent in
+            eventQueue.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (pauseController.IsPaused)
+            {
+                continue;
+            }
+
+            await processor
+                .ProcessAsync(windowEvent, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private void ObserveWorkerCompletion(Task completedWorker)

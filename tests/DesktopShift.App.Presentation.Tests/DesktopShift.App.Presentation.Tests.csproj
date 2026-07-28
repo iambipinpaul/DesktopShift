@@ -30,5 +30,23 @@
     <Compile
       Include="..\..\src\DesktopShift.App\ViewModels\WindowReassignmentCommand.cs"
       Link="Production\WindowReassignmentCommand.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\BehaviorSettingsCommand.cs"
+      Link="Production\BehaviorSettingsCommand.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Tray\TrayContracts.cs"
+      Link="Production\TrayContracts.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Tray\RecentIssue.cs"
+      Link="Production\RecentIssue.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Tray\TrayMenuPresentation.cs"
+      Link="Production\TrayMenuPresentation.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Tray\TrayNotificationPolicy.cs"
+      Link="Production\TrayNotificationPolicy.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Tray\NotificationAreaCoordinator.cs"
+      Link="Production\NotificationAreaCoordinator.cs" />
   </ItemGroup>
 </Project>
