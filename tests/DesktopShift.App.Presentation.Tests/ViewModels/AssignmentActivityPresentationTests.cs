@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Observation;
 
 namespace DesktopShift.App.Presentation.Tests.ViewModels;
@@ -21,8 +22,11 @@ public sealed class AssignmentActivityPresentationTests
         AssignmentActivityPresentation presentation =
             AssignmentActivityPresentation.Create(activity);
 
-        Assert.AreEqual("Assigned", presentation.Outcome);
-        Assert.AreEqual("Assigned Code.exe to code", presentation.Decision);
+        Assert.AreEqual("Moved", presentation.Outcome);
+        Assert.AreEqual("Moved Code.exe to code", presentation.Decision);
+        Assert.AreEqual(
+            "Move only — background events never switch desktops",
+            presentation.DesktopNavigation);
         Assert.AreEqual("12.4 ms", presentation.Duration);
         Assert.Contains(correlationId.ToString("D"), presentation.Correlation);
         Assert.Contains("Window class: Chrome_WidgetWin_1", presentation.IdentityDetails);
@@ -45,7 +49,8 @@ public sealed class AssignmentActivityPresentationTests
         Assert.AreEqual("Already correct", presentation.Outcome);
         Assert.AreEqual("Code.exe is already on code", presentation.Decision);
         Assert.AreEqual("<1 ms", presentation.Duration);
-        Assert.AreEqual("No move was needed.", presentation.Diagnostic);
+        Assert.Contains("Already on code", presentation.Diagnostic);
+        Assert.Contains("Move only", presentation.Diagnostic);
     }
 
     [TestMethod]
@@ -68,7 +73,7 @@ public sealed class AssignmentActivityPresentationTests
         AssignmentActivityPresentation presentation =
             AssignmentActivityPresentation.Create(activity);
 
-        Assert.AreEqual("Failed", presentation.Outcome);
+        Assert.AreEqual("Move failed", presentation.Outcome);
         Assert.AreEqual("1.25 s", presentation.Duration);
         Assert.Contains("assignment.move_failed", presentation.Diagnostic);
         Assert.Contains("HRESULT 0x80004005", presentation.Diagnostic);
@@ -123,11 +128,114 @@ public sealed class AssignmentActivityPresentationTests
         Assert.Contains(result.CorrelationId.ToString("D"), presentation.Message);
     }
 
+    [TestMethod]
+    public void Create_MoveAndSwitchAreDistinctAndTimed()
+    {
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Succeeded,
+            WindowAssignmentSkipReason.None,
+            TimeSpan.FromMilliseconds(18),
+            moveOutcome: WindowMoveOutcome.Succeeded,
+            switchPolicy: DesktopSwitchPolicy.OnForegroundActivation,
+            switchOutcome: DesktopSwitchOutcome.Succeeded,
+            switchReason: DesktopSwitchDecisionReason.PolicyApproved,
+            switchDuration: TimeSpan.FromMilliseconds(6.2));
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Moved + switched", presentation.Outcome);
+        Assert.AreEqual("Moved to code", presentation.Movement);
+        Assert.AreEqual("Switched to code", presentation.DesktopNavigation);
+        Assert.AreEqual("On Foreground Activation", presentation.SwitchPolicy);
+        Assert.AreEqual("6.2 ms", presentation.SwitchDuration);
+    }
+
+    [TestMethod]
+    public void Create_NeverPolicyShowsMoveOnlySuppression()
+    {
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Succeeded,
+            WindowAssignmentSkipReason.None,
+            TimeSpan.FromMilliseconds(8),
+            moveOutcome: WindowMoveOutcome.Succeeded,
+            switchPolicy: DesktopSwitchPolicy.Never,
+            switchOutcome: DesktopSwitchOutcome.Suppressed,
+            switchReason: DesktopSwitchDecisionReason.PolicyNever);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Moved • switch suppressed", presentation.Outcome);
+        Assert.AreEqual(
+            "Suppressed — the rule’s switch policy is Never",
+            presentation.DesktopNavigation);
+        Assert.AreEqual("Not applicable", presentation.SwitchDuration);
+    }
+
+    [TestMethod]
+    public void Create_LimitedModeMakesUnavailableSwitchExplicit()
+    {
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Succeeded,
+            WindowAssignmentSkipReason.None,
+            TimeSpan.FromMilliseconds(4),
+            moveOutcome: WindowMoveOutcome.AlreadyCorrect,
+            switchPolicy: DesktopSwitchPolicy.OnForegroundActivation,
+            switchOutcome: DesktopSwitchOutcome.Limited,
+            switchReason: DesktopSwitchDecisionReason.CapabilityUnavailable);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Limited Mode", presentation.Outcome);
+        Assert.AreEqual(
+            "Move only — desktop switching is unavailable in Limited Mode",
+            presentation.DesktopNavigation);
+        Assert.Contains("Limited Mode", presentation.AutomationName);
+    }
+
+    [TestMethod]
+    public void Create_SelfGeneratedForegroundSuppressionLinksOriginatingCorrelation()
+    {
+        Guid relatedCorrelation =
+            Guid.Parse("cece401d-0fef-4d7f-80ae-41db8ddbe323");
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.SelfGeneratedForegroundSuppressed,
+            TimeSpan.FromMilliseconds(1),
+            moveOutcome: WindowMoveOutcome.NotAttempted,
+            switchPolicy: DesktopSwitchPolicy.OnForegroundActivation,
+            switchOutcome: DesktopSwitchOutcome.Suppressed,
+            switchReason: DesktopSwitchDecisionReason.SelfGeneratedForegroundEvent,
+            relatedCorrelationId: relatedCorrelation);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Suppressed", presentation.Outcome);
+        Assert.Contains("self-generated foreground event", presentation.Decision);
+        Assert.Contains(
+            relatedCorrelation.ToString("D"),
+            presentation.RelatedCorrelation);
+    }
+
     private static WindowAssignmentActivity CreateActivity(
         Guid correlationId,
         WindowAssignmentOutcome outcome,
         WindowAssignmentSkipReason skipReason,
-        TimeSpan duration) =>
+        TimeSpan duration,
+        WindowMoveOutcome? moveOutcome = null,
+        DesktopSwitchPolicy switchPolicy = DesktopSwitchPolicy.Never,
+        DesktopSwitchOutcome switchOutcome = DesktopSwitchOutcome.NotRequested,
+        DesktopSwitchDecisionReason switchReason =
+            DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
+        TimeSpan switchDuration = default,
+        Guid? relatedCorrelationId = null) =>
         new(
             correlationId,
             new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero),
@@ -145,7 +253,22 @@ public sealed class AssignmentActivityPresentationTests
                 PackageFamilyName: null,
                 AppUserModelId: null,
                 WindowClass: "Chrome_WidgetWin_1"),
-            Error: null);
+            Error: null,
+            MoveOutcome: moveOutcome ?? outcome switch
+            {
+                WindowAssignmentOutcome.Succeeded => WindowMoveOutcome.Succeeded,
+                WindowAssignmentOutcome.Skipped
+                    when skipReason ==
+                        WindowAssignmentSkipReason.AlreadyOnTargetDesktop =>
+                    WindowMoveOutcome.AlreadyCorrect,
+                WindowAssignmentOutcome.Failed => WindowMoveOutcome.Failed,
+                _ => WindowMoveOutcome.NotAttempted,
+            },
+            SwitchPolicy: switchPolicy,
+            SwitchOutcome: switchOutcome,
+            SwitchDecisionReason: switchReason,
+            SwitchDuration: switchDuration,
+            RelatedCorrelationId: relatedCorrelationId);
 
     private sealed class FakeReassignmentService(
         Task<WindowReassignmentBatchResult> result) :

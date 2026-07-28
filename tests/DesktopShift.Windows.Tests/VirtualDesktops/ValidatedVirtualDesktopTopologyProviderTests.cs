@@ -37,7 +37,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         Assert.IsTrue(provider.Capabilities.CanGetCurrentDesktop);
         Assert.IsTrue(provider.Capabilities.CanObserveTopologyChanges);
         Assert.IsTrue(provider.Capabilities.CanCreateDesktop);
-        Assert.IsFalse(provider.Capabilities.CanSwitchDesktop);
+        Assert.IsTrue(provider.Capabilities.CanSwitchDesktop);
         Assert.IsNull(provider.LastFallback);
         Assert.AreEqual(1, bridge.ValidationCount);
     }
@@ -202,10 +202,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
-    public async Task ValidatedAdapter_CreatesDesktopAndStillRejectsSwitch()
+    public async Task ValidatedAdapter_CreatesAndSwitchesDesktops()
     {
         Guid createdDesktopId =
             Guid.Parse("33333333-3333-3333-3333-333333333333");
+        Guid targetDesktopId =
+            Guid.Parse("11111111-1111-1111-1111-111111111111");
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
             CreationResult = NativeBridgeResult<Guid>.Succeeded(createdDesktopId),
@@ -218,13 +220,13 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         DesktopTopologyProviderResult<Guid> create =
             await provider.CreateDesktopAsync();
         DesktopTopologyProviderResult switchResult =
-            await provider.SwitchDesktopAsync(Guid.NewGuid());
+            await provider.SwitchDesktopAsync(targetDesktopId);
 
         Assert.IsTrue(create.IsSuccess);
         Assert.AreEqual(createdDesktopId, create.Value);
-        Assert.AreEqual(DesktopTopologyResultOutcome.Unsupported, switchResult.Outcome);
-        Assert.AreEqual("desktop_topology.switch_not_implemented", switchResult.Error?.Code);
-        Assert.AreEqual(1, bridge.MutationCount);
+        Assert.IsTrue(switchResult.IsSuccess);
+        Assert.AreEqual(targetDesktopId, bridge.LastSwitchedDesktopId);
+        Assert.AreEqual(2, bridge.MutationCount);
     }
 
     [TestMethod]
@@ -257,7 +259,37 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
-    public async Task LimitedMode_ReportsCreationAsUnsupportedWithoutNativeMutation()
+    public async Task SwitchFailure_IsStructuredWithoutDiscardingValidatedInventory()
+    {
+        NativeBridgeError switchError = new(
+            "native.desktop_switch",
+            "DesktopSwitch",
+            "The Windows Shell rejected desktop switching.",
+            unchecked((int)0x80004005));
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            SwitchResult = NativeBridgeResult.Failed(switchError),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult result =
+            await provider.SwitchDesktopAsync(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"));
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(switchError.Code, result.Error?.Code);
+        Assert.AreEqual(switchError.HResult, result.Error?.HResult);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsNull(provider.LastFallback);
+        Assert.IsFalse(bridge.IsDisposed);
+        Assert.AreEqual(1, bridge.MutationCount);
+    }
+
+    [TestMethod]
+    public async Task LimitedMode_ReportsMutationsAsUnsupportedWithoutNativeCall()
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
@@ -275,8 +307,13 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         DesktopTopologyProviderResult<Guid> result =
             await provider.CreateDesktopAsync();
+        DesktopTopologyProviderResult switchResult =
+            await provider.SwitchDesktopAsync(Guid.NewGuid());
 
         Assert.AreEqual(DesktopTopologyResultOutcome.Unsupported, result.Outcome);
+        Assert.AreEqual(
+            DesktopTopologyResultOutcome.Unsupported,
+            switchResult.Outcome);
         Assert.AreEqual(0, bridge.MutationCount);
     }
 
@@ -298,6 +335,27 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         Assert.AreEqual("native.desktop_creation", result.Code);
         Assert.AreEqual("DesktopCreation", result.Stage);
+        Assert.AreEqual(nativeError.HResult, result.HResult);
+    }
+
+    [TestMethod]
+    public void NativeSwitchStage_MapsToStableStructuredProviderCode()
+    {
+        NativeMethods.NativeError nativeError = new()
+        {
+            HResult = unchecked((int)0x80004005),
+            Stage = NativeMethods.NativeStage.DesktopSwitch,
+            Message = "Switch failed.",
+        };
+
+        NativeBridgeError result =
+            ShellNativeVirtualDesktopBridgeFactory.ToError(
+                nativeError,
+                nativeError.HResult,
+                "fallback");
+
+        Assert.AreEqual("native.desktop_switch", result.Code);
+        Assert.AreEqual("DesktopSwitch", result.Stage);
         Assert.AreEqual(nativeError.HResult, result.HResult);
     }
 
@@ -370,11 +428,16 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             NativeBridgeResult<Guid>.Succeeded(
                 Guid.Parse("33333333-3333-3333-3333-333333333333"));
 
+        public NativeBridgeResult SwitchResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
         public int ValidationCount { get; private set; }
 
         public int MutationCount { get; private set; }
 
         public bool IsDisposed { get; private set; }
+
+        public Guid LastSwitchedDesktopId { get; private set; }
 
         public NativeBridgeResult Validate()
         {
@@ -389,6 +452,13 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         {
             MutationCount++;
             return CreationResult;
+        }
+
+        public NativeBridgeResult SwitchDesktop(Guid desktopId)
+        {
+            MutationCount++;
+            LastSwitchedDesktopId = desktopId;
+            return SwitchResult;
         }
 
         public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)

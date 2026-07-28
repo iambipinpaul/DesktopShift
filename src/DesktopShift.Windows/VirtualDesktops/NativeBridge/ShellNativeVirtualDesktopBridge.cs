@@ -196,6 +196,25 @@ internal sealed class ShellNativeVirtualDesktopBridge :
         }
     }
 
+    public NativeBridgeResult SwitchDesktop(Guid desktopId)
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_SwitchDesktop(
+                adapter,
+                in desktopId,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.desktop_switch_failed"));
+        }
+    }
+
     public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)
     {
         ArgumentNullException.ThrowIfNull(onTopologyChanged);

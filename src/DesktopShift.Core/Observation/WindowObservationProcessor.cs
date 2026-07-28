@@ -184,6 +184,8 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly WindowRuleMatcher matcher;
     private readonly WindowEventCoalescer coalescer;
     private readonly IWindowAssignmentService? assignmentService;
+    private readonly INewWindowActivationTracker? activationTracker;
+    private readonly IForegroundSwitchSuppression? switchSuppression;
 
     public WindowObservationProcessor(
         IWindowClassifier classifier,
@@ -192,7 +194,9 @@ public sealed class WindowObservationProcessor : IDisposable
         IWindowObservationActivitySink activitySink,
         WindowRuleMatcher? matcher = null,
         WindowEventCoalescer? coalescer = null,
-        IWindowAssignmentService? assignmentService = null)
+        IWindowAssignmentService? assignmentService = null,
+        INewWindowActivationTracker? activationTracker = null,
+        IForegroundSwitchSuppression? switchSuppression = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -206,6 +210,8 @@ public sealed class WindowObservationProcessor : IDisposable
         this.matcher = matcher ?? new WindowRuleMatcher();
         this.coalescer = coalescer ?? new WindowEventCoalescer();
         this.assignmentService = assignmentService;
+        this.activationTracker = activationTracker;
+        this.switchSuppression = switchSuppression;
     }
 
     public async ValueTask<WindowObservationActivity> ProcessAsync(
@@ -214,6 +220,8 @@ public sealed class WindowObservationProcessor : IDisposable
     {
         if (windowEvent.Kind == WindowEventKind.Destroyed)
         {
+            activationTracker?.Clear(windowEvent.WindowHandle);
+            switchSuppression?.Clear(windowEvent.WindowHandle);
             coalescer.ShouldProcess(windowEvent);
             return await RecordSkipAsync(
                 windowEvent,
@@ -222,7 +230,11 @@ public sealed class WindowObservationProcessor : IDisposable
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
-        if (!coalescer.ShouldProcess(windowEvent))
+        bool hasPendingSwitchSuppression =
+            windowEvent.Kind == WindowEventKind.ForegroundActivated &&
+            switchSuppression?.HasPending(windowEvent.WindowHandle) == true;
+        if (!hasPendingSwitchSuppression &&
+            !coalescer.ShouldProcess(windowEvent))
         {
             return await RecordSkipAsync(
                 windowEvent,
@@ -295,6 +307,11 @@ public sealed class WindowObservationProcessor : IDisposable
         }
 
         WindowAssignmentActivity? assignment = null;
+        if (windowEvent.Kind is WindowEventKind.Created or WindowEventKind.Shown)
+        {
+            activationTracker?.MarkMatchedWindowNew(window.RootWindowHandle);
+        }
+
         if (assignmentService is not null)
         {
             assignment = await assignmentService.AssignAsync(

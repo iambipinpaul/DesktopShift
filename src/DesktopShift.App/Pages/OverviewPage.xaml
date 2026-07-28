@@ -241,6 +241,9 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <StackPanel Spacing="3">
                             <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Outcome" />
@@ -266,6 +269,34 @@
                             <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Correlation ID" />
                             <TextBlock
                                 x:Name="LastAssignmentCorrelation"
+                                FontFamily="Consolas"
+                                IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="3" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Window movement" />
+                            <TextBlock x:Name="LastAssignmentMovement" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Desktop navigation" />
+                            <TextBlock x:Name="LastAssignmentNavigation" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="4" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Switch policy" />
+                            <TextBlock x:Name="LastAssignmentSwitchPolicy" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="4" Grid.Column="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Switch duration" />
+                            <TextBlock x:Name="LastAssignmentSwitchDuration" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel
+                            x:Name="LastAssignmentRelatedCorrelationPanel"
+                            Grid.Row="5"
+                            Grid.ColumnSpan="2"
+                            Spacing="3"
+                            Visibility="Collapsed">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Related correlation ID" />
+                            <TextBlock
+                                x:Name="LastAssignmentRelatedCorrelation"
                                 FontFamily="Consolas"
                                 IsTextSelectionEnabled="True" />
                         </StackPanel>

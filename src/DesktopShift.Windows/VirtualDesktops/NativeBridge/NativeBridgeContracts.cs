@@ -46,6 +46,8 @@ internal interface INativeVirtualDesktopBridge : IDisposable
 
     NativeBridgeResult<Guid> CreateDesktop();
 
+    NativeBridgeResult SwitchDesktop(Guid desktopId);
+
     NativeBridgeResult StartNotifications(Action<string> onTopologyChanged);
 }
 

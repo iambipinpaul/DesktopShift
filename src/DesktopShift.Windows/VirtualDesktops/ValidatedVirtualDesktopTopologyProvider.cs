@@ -10,17 +10,13 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     IDesktopTopologyFallbackSource,
     IDisposable
 {
-    private const string UnsupportedSwitchCode = "desktop_topology.switch_not_implemented";
-    private const string UnsupportedSwitchMessage =
-        "This Full Mode adapter does not enable desktop switching.";
-
     private static readonly VirtualDesktopCapabilities FullManagedDesktopCapabilities = new(
         CanGetWindowDesktopId: true,
         CanMoveWindowToDesktop: true,
         CanEnumerateDesktops: true,
         CanGetCurrentDesktop: true,
         CanCreateDesktop: true,
-        CanSwitchDesktop: false,
+        CanSwitchDesktop: true,
         CanObserveTopologyChanges: true);
 
     private readonly object syncRoot = new();
@@ -346,12 +342,43 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         Guid desktopId,
         CancellationToken cancellationToken = default)
     {
-        _ = desktopId;
         cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(
-            DesktopTopologyProviderResult.Unsupported(
-                UnsupportedSwitchCode,
-                UnsupportedSwitchMessage));
+        INativeVirtualDesktopBridge? bridge = GetActiveBridge();
+        if (bridge is null)
+        {
+            return limitedProvider.SwitchDesktopAsync(
+                desktopId,
+                cancellationToken);
+        }
+
+        try
+        {
+            NativeBridgeResult result = bridge.SwitchDesktop(desktopId);
+            if (result.IsSuccess)
+            {
+                return ValueTask.FromResult(
+                    DesktopTopologyProviderResult.Succeeded());
+            }
+
+            DesktopTopologyProviderError error = ToProviderError(
+                result.Error,
+                "native.desktop_switch_failed",
+                "The validated adapter could not switch virtual desktops.");
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    error.Code,
+                    error.Message,
+                    error.HResult,
+                    error.NativeErrorCode));
+        }
+        catch (Exception exception)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    "native.switch_exception",
+                    "Virtual desktop switching failed unexpectedly.",
+                    exception.HResult));
+        }
     }
 
     public ValueTask<DesktopTopologyProviderResult> StartTopologyNotificationsAsync(

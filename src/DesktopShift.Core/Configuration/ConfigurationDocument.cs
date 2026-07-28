@@ -41,4 +41,5 @@ public enum DesktopSwitchPolicy
 {
     Never,
     OnForegroundActivation,
+    OnNewWindowActivation,
 }

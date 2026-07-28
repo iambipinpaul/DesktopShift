@@ -75,6 +75,8 @@
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <StackPanel Spacing="3">
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Process" />
@@ -92,11 +94,31 @@
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Duration" />
                                                     <TextBlock Text="{Binding Duration}" TextWrapping="Wrap" />
                                                 </StackPanel>
+                                                <StackPanel Grid.Row="2" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Window movement" />
+                                                    <TextBlock Text="{Binding Movement}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="2" Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Desktop navigation" />
+                                                    <TextBlock Text="{Binding DesktopNavigation}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="3" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Switch policy" />
+                                                    <TextBlock Text="{Binding SwitchPolicy}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="3" Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Switch duration" />
+                                                    <TextBlock Text="{Binding SwitchDuration}" TextWrapping="Wrap" />
+                                                </StackPanel>
                                             </Grid>
                                             <TextBlock
                                                 IsTextSelectionEnabled="True"
                                                 Style="{StaticResource DesktopShift.CaptionStyle}"
                                                 Text="{Binding Correlation}" />
+                                            <TextBlock
+                                                IsTextSelectionEnabled="True"
+                                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                Text="{Binding RelatedCorrelation}" />
                                             <TextBlock
                                                 TextWrapping="Wrap"
                                                 Style="{StaticResource DesktopShift.CaptionStyle}"

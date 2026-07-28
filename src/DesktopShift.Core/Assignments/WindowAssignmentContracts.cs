@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Assignments;
@@ -15,6 +16,36 @@ public enum WindowAssignmentSkipReason
     None,
     AlreadyOnTargetDesktop,
     TargetDesktopUnresolved,
+    SelfGeneratedForegroundSuppressed,
+}
+
+public enum WindowMoveOutcome
+{
+    NotAttempted,
+    Succeeded,
+    AlreadyCorrect,
+    Failed,
+}
+
+public enum DesktopSwitchOutcome
+{
+    NotRequested,
+    Succeeded,
+    Suppressed,
+    Limited,
+    Failed,
+}
+
+public enum DesktopSwitchDecisionReason
+{
+    BackgroundEventMoveOnly,
+    PolicyNever,
+    PolicyOnNewWindowNotEligible,
+    CurrentDesktopAlreadyTarget,
+    SelfGeneratedForegroundEvent,
+    CapabilityUnavailable,
+    PolicyApproved,
+    SwitchFailed,
 }
 
 public sealed record WindowAssignmentError(
@@ -36,7 +67,14 @@ public sealed record WindowAssignmentActivity(
     Guid? TargetDesktopId,
     Guid? PreviousDesktopId,
     WindowSafeIdentity Identity,
-    WindowAssignmentError? Error);
+    WindowAssignmentError? Error,
+    WindowMoveOutcome MoveOutcome = WindowMoveOutcome.NotAttempted,
+    DesktopSwitchPolicy SwitchPolicy = DesktopSwitchPolicy.Never,
+    DesktopSwitchOutcome SwitchOutcome = DesktopSwitchOutcome.NotRequested,
+    DesktopSwitchDecisionReason SwitchDecisionReason =
+        DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
+    TimeSpan SwitchDuration = default,
+    Guid? RelatedCorrelationId = null);
 
 public sealed class WindowAssignmentActivityRecordedEventArgs : EventArgs
 {

@@ -551,6 +551,147 @@ namespace
             });
         }
 
+        HRESULT SwitchDesktop(
+            const GUID& id,
+            DesktopShiftNativeError* error)
+        {
+            if (id == GUID_NULL)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageDesktopSwitch,
+                    L"A non-empty target desktop identifier is required.");
+            }
+
+            return Invoke([this, id, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"Desktop switching is disabled until harmless adapter validation succeeds.");
+                }
+
+                HRESULT result = ReadSnapshot(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                const bool isKnown = std::any_of(
+                    snapshot_.begin(),
+                    snapshot_.end(),
+                    [&id](const DesktopShiftNativeDesktop& desktop)
+                    {
+                        return desktop.Id == id;
+                    });
+                if (!isKnown)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"The requested desktop was not present in the validated inventory.");
+                }
+
+                if (currentDesktop_ == id)
+                {
+                    ClearError(error);
+                    return S_OK;
+                }
+
+                ComPtr<IObjectArray> desktops;
+                result = manager_->GetDesktops(desktops.ReleaseAndGetAddressOf());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"The desktop inventory could not be resolved for switching.");
+                }
+
+                UINT count = 0;
+                result = desktops->GetCount(&count);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"The desktop inventory could not be counted for switching.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> target;
+                for (UINT index = 0; index < count; ++index)
+                {
+                    ComPtr<IVirtualDesktop24H2> candidate;
+                    result = desktops->GetAt(
+                        index,
+                        __uuidof(IVirtualDesktop24H2),
+                        reinterpret_cast<void**>(candidate.ReleaseAndGetAddressOf()));
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopSwitch,
+                            L"A desktop entry could not be resolved for switching.");
+                    }
+
+                    GUID candidateId{};
+                    result = candidate->GetId(&candidateId);
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopSwitch,
+                            L"A desktop entry did not return its identifier for switching.");
+                    }
+
+                    if (candidateId == id)
+                    {
+                        target = std::move(candidate);
+                        break;
+                    }
+                }
+
+                if (target == nullptr)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"The requested desktop changed before it could be switched.");
+                }
+
+                result = manager_->SwitchDesktop(target.Get());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopSwitch,
+                        L"The Windows Shell rejected the virtual-desktop switch.");
+                }
+
+                // Switching is committed after the Shell call succeeds. Update
+                // the cached marker without adding post-commit failure paths.
+                currentDesktop_ = id;
+                for (DesktopShiftNativeDesktop& desktop : snapshot_)
+                {
+                    desktop.IsCurrent = desktop.Id == id ? TRUE : FALSE;
+                }
+
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
         HRESULT StartNotifications(
             DesktopShiftTopologyCallback callback,
             void* context,
@@ -1158,6 +1299,37 @@ extern "C"
         catch (...)
         {
             return SetUnexpectedError(error, DesktopShiftNativeStageDesktopCreation);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_SwitchDesktop(
+        void* adapter,
+        const GUID* desktopId,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        if (desktopId == nullptr)
+        {
+            return SetError(
+                error,
+                E_POINTER,
+                DesktopShiftNativeStageDesktopSwitch,
+                L"A target desktop identifier was not provided.");
+        }
+
+        try
+        {
+            const GUID requestedDesktopId = *desktopId;
+            return AsAdapter(adapter)->SwitchDesktop(requestedDesktopId, error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageDesktopSwitch);
         }
     }
 

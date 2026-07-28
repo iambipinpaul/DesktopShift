@@ -8,7 +8,7 @@ namespace DesktopShift.Windows.Tests.VirtualDesktops;
 public sealed class NativeBridgeOptInContractTests
 {
     [TestMethod]
-    public void NativeBridge_ExportsCreationBoundaryWithoutInvokingIt()
+    public void NativeBridge_ExportsMutationBoundariesWithoutInvokingThem()
     {
         string libraryPath = Path.Combine(
             AppContext.BaseDirectory,
@@ -24,6 +24,12 @@ public sealed class NativeBridgeOptInContractTests
                     library,
                     "DesktopShiftNative_CreateDesktop",
                     out nint entryPoint));
+            Assert.AreNotEqual(0, entryPoint);
+            Assert.IsTrue(
+                NativeLibrary.TryGetExport(
+                    library,
+                    "DesktopShiftNative_SwitchDesktop",
+                    out entryPoint));
             Assert.AreNotEqual(0, entryPoint);
         }
         finally
@@ -76,9 +82,18 @@ public sealed class NativeBridgeOptInContractTests
             current.Value,
             inventory.Value!.Single(static desktop => desktop.IsCurrent).Id);
 
-        // Deliberately do not create, switch, remove, rename, or move a desktop
-        // or window. Full Mode keeps a topology-notification registration only
-        // for this provider's lifetime; disposing the provider unregisters it.
+        DesktopTopologyProviderResult switchResult =
+            await provider.SwitchDesktopAsync(current.Value);
+        DesktopTopologyProviderResult<Guid> afterSwitch =
+            await provider.GetCurrentDesktopIdAsync();
+
+        Assert.IsTrue(switchResult.IsSuccess, switchResult.Error?.Message);
+        Assert.IsTrue(afterSwitch.IsSuccess, afterSwitch.Error?.Message);
+        Assert.AreEqual(current.Value, afterSwitch.Value);
+
+        // Switch targets only the already-current desktop, so this contract
+        // does not change the user's active desktop. It deliberately does not
+        // create, remove, rename, or move any desktop or window.
     }
 
     private static OperatingSystemVersion GetCurrentWindowsVersion()

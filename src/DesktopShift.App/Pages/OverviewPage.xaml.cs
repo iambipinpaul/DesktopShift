@@ -195,6 +195,16 @@ public sealed partial class OverviewPage : Page
         LastAssignmentTarget.Text = presentation.TargetDesktop;
         LastAssignmentDuration.Text = presentation.Duration;
         LastAssignmentCorrelation.Text = activity.CorrelationId.ToString("D");
+        LastAssignmentMovement.Text = presentation.Movement;
+        LastAssignmentNavigation.Text = presentation.DesktopNavigation;
+        LastAssignmentSwitchPolicy.Text = presentation.SwitchPolicy;
+        LastAssignmentSwitchDuration.Text = presentation.SwitchDuration;
+        LastAssignmentRelatedCorrelation.Text =
+            activity.RelatedCorrelationId?.ToString("D") ?? string.Empty;
+        LastAssignmentRelatedCorrelationPanel.Visibility =
+            activity.RelatedCorrelationId.HasValue
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         LastAssignmentDetails.Visibility = Visibility.Visible;
         AutomationProperties.SetName(
             AssignmentCard,

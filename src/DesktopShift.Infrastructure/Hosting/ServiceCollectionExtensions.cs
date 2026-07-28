@@ -1,5 +1,6 @@
 using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
@@ -98,6 +99,23 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<BoundedWindowAssignmentActivityStore>();
+        services.TryAddSingleton<BoundedForegroundSwitchSuppression>();
+        services.TryAddSingleton<IForegroundSwitchSuppression>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                BoundedForegroundSwitchSuppression>());
+        services.TryAddSingleton<BoundedNewWindowActivationTracker>();
+        services.TryAddSingleton<INewWindowActivationTracker>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                BoundedNewWindowActivationTracker>());
+        if (services.Any(
+            static descriptor =>
+                descriptor.ServiceType == typeof(IDesktopTopologyProvider)))
+        {
+            services.TryAddSingleton<DesktopSwitchCoordinator>();
+            services.TryAddSingleton<IDesktopSwitchCoordinator>(
+                static serviceProvider => serviceProvider.GetRequiredService<
+                    DesktopSwitchCoordinator>());
+        }
         services.TryAddSingleton<IWindowAssignmentActivitySink>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 BoundedWindowAssignmentActivityStore>());
