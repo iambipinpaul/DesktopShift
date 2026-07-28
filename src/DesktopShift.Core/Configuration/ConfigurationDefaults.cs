@@ -12,6 +12,7 @@ public static class ConfigurationDefaults
         ApplicationRuleTrigger.WindowShown,
         ApplicationRuleTrigger.ForegroundActivated,
         ApplicationRuleTrigger.StartupReconciliation,
+        ApplicationRuleTrigger.ManualReassignment,
     ];
 
     public static ConfigurationDocument Create()

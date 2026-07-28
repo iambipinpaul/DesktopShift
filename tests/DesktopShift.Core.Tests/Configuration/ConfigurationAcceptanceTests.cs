@@ -378,14 +378,12 @@ public sealed class ConfigurationAcceptanceTests
                 ApplicationRuleTrigger.WindowShown,
                 ApplicationRuleTrigger.ForegroundActivated,
                 ApplicationRuleTrigger.StartupReconciliation,
+                ApplicationRuleTrigger.ManualReassignment,
             },
             rule.Triggers.ToArray());
         Assert.AreEqual(
             DesktopSwitchPolicy.OnForegroundActivation,
             rule.SwitchPolicy);
-        Assert.DoesNotContain(
-            ApplicationRuleTrigger.ManualReassignment,
-            rule.Triggers);
     }
 
     private static void AssertHasIssue(

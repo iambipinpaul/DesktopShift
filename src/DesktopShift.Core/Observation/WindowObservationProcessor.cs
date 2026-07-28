@@ -1,3 +1,5 @@
+using DesktopShift.Core.Assignments;
+
 namespace DesktopShift.Core.Observation;
 
 public interface IWindowCoalescingScheduler
@@ -70,6 +72,13 @@ public sealed class WindowEventCoalescer : IDisposable
             if (windowEvent.Kind == WindowEventKind.Destroyed)
             {
                 Remove(windowEvent.WindowHandle);
+                return true;
+            }
+
+            if (windowEvent.Kind is
+                WindowEventKind.StartupReconciliation or
+                WindowEventKind.ManualReassignment)
+            {
                 return true;
             }
 
@@ -174,6 +183,7 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly IWindowObservationActivitySink activitySink;
     private readonly WindowRuleMatcher matcher;
     private readonly WindowEventCoalescer coalescer;
+    private readonly IWindowAssignmentService? assignmentService;
 
     public WindowObservationProcessor(
         IWindowClassifier classifier,
@@ -181,7 +191,8 @@ public sealed class WindowObservationProcessor : IDisposable
         IWindowRuleSource ruleSource,
         IWindowObservationActivitySink activitySink,
         WindowRuleMatcher? matcher = null,
-        WindowEventCoalescer? coalescer = null)
+        WindowEventCoalescer? coalescer = null,
+        IWindowAssignmentService? assignmentService = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -194,6 +205,7 @@ public sealed class WindowObservationProcessor : IDisposable
         this.activitySink = activitySink;
         this.matcher = matcher ?? new WindowRuleMatcher();
         this.coalescer = coalescer ?? new WindowEventCoalescer();
+        this.assignmentService = assignmentService;
     }
 
     public async ValueTask<WindowObservationActivity> ProcessAsync(
@@ -282,6 +294,18 @@ public sealed class WindowObservationProcessor : IDisposable
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
+        WindowAssignmentActivity? assignment = null;
+        if (assignmentService is not null)
+        {
+            assignment = await assignmentService.AssignAsync(
+                new WindowAssignmentRequest(
+                    windowEvent.Kind,
+                    window.RootWindowHandle,
+                    match.Rule,
+                    identity.ToSafeIdentity()),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         WindowObservationActivity activity = new(
             windowEvent.ObservedAt,
             windowEvent.Sequence,
@@ -291,7 +315,13 @@ public sealed class WindowObservationProcessor : IDisposable
             WindowSkipReason.None,
             match.Rule.Id,
             match.Rule.TargetDesktopKey,
-            identity.ToSafeIdentity());
+            identity.ToSafeIdentity(),
+            AssignmentCorrelationId: assignment?.CorrelationId,
+            AssignmentOutcome: assignment?.Outcome,
+            AssignmentDuration: assignment?.Duration,
+            TargetRuntimeDesktopId: assignment?.TargetDesktopId,
+            AssignmentError: assignment?.Error,
+            Assignment: assignment);
         await activitySink
             .RecordAsync(activity, cancellationToken)
             .ConfigureAwait(false);

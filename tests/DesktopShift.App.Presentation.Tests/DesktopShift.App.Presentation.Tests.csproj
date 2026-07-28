@@ -21,5 +21,11 @@
     <Compile
       Include="..\..\src\DesktopShift.App\ViewModels\ManagedDesktopMappingPresentationProjection.cs"
       Link="Production\ManagedDesktopMappingPresentationProjection.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\AssignmentActivityPresentation.cs"
+      Link="Production\AssignmentActivityPresentation.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\WindowReassignmentCommand.cs"
+      Link="Production\WindowReassignmentCommand.cs" />
   </ItemGroup>
 </Project>

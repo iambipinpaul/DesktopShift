@@ -177,6 +177,10 @@ public sealed class WindowRuleMatcher
             WindowEventKind.Shown => ApplicationRuleTrigger.WindowShown,
             WindowEventKind.ForegroundActivated =>
                 ApplicationRuleTrigger.ForegroundActivated,
+            WindowEventKind.StartupReconciliation =>
+                ApplicationRuleTrigger.StartupReconciliation,
+            WindowEventKind.ManualReassignment =>
+                ApplicationRuleTrigger.ManualReassignment,
             _ => ApplicationRuleTrigger.ManualReassignment,
         };
 }

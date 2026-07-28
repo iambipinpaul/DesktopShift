@@ -1,9 +1,11 @@
 using DesktopShift.Core.Appearance;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Infrastructure.Appearance;
+using DesktopShift.Infrastructure.Assignments;
 using DesktopShift.Infrastructure.Configuration;
 using DesktopShift.Infrastructure.ManagedDesktops;
 using DesktopShift.Infrastructure.Observation;
@@ -86,6 +88,34 @@ public static class ServiceCollectionExtensions
             ServiceDescriptor.Singleton<
                 IHostedService,
                 ManagedDesktopReconciliationHostedService>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddDesktopShiftAssignments(
+        this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<BoundedWindowAssignmentActivityStore>();
+        services.TryAddSingleton<IWindowAssignmentActivitySink>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                BoundedWindowAssignmentActivityStore>());
+        services.TryAddSingleton<IWindowAssignmentActivityProjection>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                BoundedWindowAssignmentActivityStore>());
+        services.TryAddSingleton<WindowAssignmentService>();
+        services.TryAddSingleton<IWindowAssignmentService>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                WindowAssignmentService>());
+        services.TryAddSingleton<WindowReassignmentService>();
+        services.TryAddSingleton<IWindowReassignmentService>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                WindowReassignmentService>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                IHostedService,
+                WindowAssignmentReadinessHostedService>());
 
         return services;
     }

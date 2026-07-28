@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using DesktopShift.Core.Activation;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Observation;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
+using DesktopShift.Windows.Assignments;
 using DesktopShift.Windows.Compatibility;
 using DesktopShift.Windows.Observation;
 using DesktopShift.Windows.VirtualDesktops;
@@ -33,11 +35,18 @@ public partial class App : Application
             services.AddSingleton<IWindowsBuildInfoProvider, EnvironmentWindowsBuildInfoProvider>();
             services.AddSingleton<IDesktopTopologyProvider, ValidatedVirtualDesktopTopologyProvider>();
             services.AddSingleton<ICompatibilityCoordinator, CompatibilityCoordinator>();
-            services.AddDesktopShiftManagedDesktopReconciliation();
+            services.AddSingleton<
+                IWindowDesktopPlacementService,
+                WindowsWindowDesktopPlacementService>();
+            services.AddSingleton<
+                ITopLevelWindowEnumerator,
+                WindowsTopLevelWindowEnumerator>();
             services.AddSingleton<IWindowClassifier, WindowsWindowClassifier>();
             services.AddSingleton<IWindowIdentityResolver, WindowsProcessIdentityResolver>();
             services.AddSingleton<IWindowEventSource, WindowsWinEventSource>();
             services.AddDesktopShiftObservation();
+            services.AddDesktopShiftManagedDesktopReconciliation();
+            services.AddDesktopShiftAssignments();
             services.AddSingleton<MainWindow>();
         });
 

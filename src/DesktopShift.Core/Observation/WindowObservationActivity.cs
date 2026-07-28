@@ -1,3 +1,5 @@
+using DesktopShift.Core.Assignments;
+
 namespace DesktopShift.Core.Observation;
 
 public enum WindowObservationOutcome
@@ -16,7 +18,13 @@ public sealed record WindowObservationActivity(
     string? RuleId,
     string? TargetDesktopKey,
     WindowSafeIdentity? Identity,
-    int? NativeErrorCode = null);
+    int? NativeErrorCode = null,
+    Guid? AssignmentCorrelationId = null,
+    WindowAssignmentOutcome? AssignmentOutcome = null,
+    TimeSpan? AssignmentDuration = null,
+    Guid? TargetRuntimeDesktopId = null,
+    WindowAssignmentError? AssignmentError = null,
+    WindowAssignmentActivity? Assignment = null);
 
 public interface IWindowObservationActivitySink
 {

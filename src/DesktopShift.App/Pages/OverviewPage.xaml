@@ -181,6 +181,104 @@
                 </StackPanel>
             </Border>
 
+            <Border
+                x:Name="AssignmentCard"
+                AutomationProperties.LiveSetting="Polite"
+                Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="13">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Width="38"
+                            Height="38"
+                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                            CornerRadius="10">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                Glyph="&#xE8FB;" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock
+                                Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                Text="Last assignment" />
+                            <TextBlock
+                                x:Name="LastAssignmentSummary"
+                                TextWrapping="Wrap"
+                                Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                                Text="No assignment has completed yet." />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                            <ProgressRing
+                                x:Name="ReassignmentProgress"
+                                Width="20"
+                                Height="20"
+                                AutomationProperties.Name="Reassigning windows"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                            <Button
+                                x:Name="ReassignNowButton"
+                                AutomationProperties.HelpText="Enumerates open windows once and awaits the completed reassignment batch."
+                                AutomationProperties.Name="Reassign windows now"
+                                Click="OnReassignNowClick"
+                                Content="Reassign now"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="LastAssignmentDetails" ColumnSpacing="24" RowSpacing="5" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Outcome" />
+                            <TextBlock x:Name="LastAssignmentOutcome" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Completed" />
+                            <TextBlock x:Name="LastAssignmentTime" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Process" />
+                            <TextBlock x:Name="LastAssignmentProcess" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
+                            <TextBlock x:Name="LastAssignmentTarget" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Duration" />
+                            <TextBlock x:Name="LastAssignmentDuration" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Correlation ID" />
+                            <TextBlock
+                                x:Name="LastAssignmentCorrelation"
+                                FontFamily="Consolas"
+                                IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </Grid>
+
+                    <InfoBar
+                        x:Name="ReassignmentResult"
+                        AutomationProperties.Name="Manual reassignment result"
+                        IsClosable="True"
+                        IsOpen="False" />
+                </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource DesktopShift.CardStyle}">
                 <StackPanel Spacing="13">
                     <Grid ColumnSpacing="12">
@@ -208,21 +306,6 @@
                 </StackPanel>
             </Border>
 
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel HorizontalAlignment="Center" Spacing="8">
-                    <FontIcon Style="{StaticResource DesktopShift.EmptyStateIconStyle}" Glyph="&#xE9D9;" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Style="{StaticResource DesktopShift.SectionTitleStyle}"
-                        Text="No assignment activity yet" />
-                    <TextBlock
-                        MaxWidth="520"
-                        HorizontalAlignment="Center"
-                        TextAlignment="Center"
-                        Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                        Text="Once window observation is available, assignment decisions and recoverable errors will be summarized here." />
-                </StackPanel>
-            </Border>
         </StackPanel>
     </ScrollViewer>
 </Page>

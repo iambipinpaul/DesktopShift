@@ -6,6 +6,8 @@ public enum WindowEventKind
     Shown,
     ForegroundActivated,
     Destroyed,
+    StartupReconciliation,
+    ManualReassignment,
 }
 
 public readonly record struct WindowEvent(

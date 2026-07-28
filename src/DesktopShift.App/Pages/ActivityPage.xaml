@@ -12,122 +12,210 @@
                 Margin="32,28"
                 HorizontalAlignment="Left"
                 Spacing="20">
-            <StackPanel Spacing="5">
-                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
-                <TextBlock
-                    Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                    Text="Recent window matches and skips. DesktopShift records only privacy-safe app identity—not titles, paths, or command lines." />
-            </StackPanel>
-
-            <Border
-                x:Name="EmptyState"
-                MinHeight="300"
-                AutomationProperties.Name="No window observation activity"
-                Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                    <FontIcon Style="{StaticResource DesktopShift.EmptyStateIconStyle}" Glyph="&#xE9D9;" />
-                    <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Nothing to report" />
+                <StackPanel Spacing="5">
+                    <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
                     <TextBlock
-                        MaxWidth="500"
-                        TextAlignment="Center"
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                        Text="Matched and skipped window observations will appear here after observation starts." />
+                        Text="Recent assignments, window matches, and skips. DesktopShift records only privacy-safe app identity—not titles, paths, or command lines." />
                 </StackPanel>
-            </Border>
 
-            <StackPanel x:Name="ActivityPanel" Spacing="12" Visibility="Collapsed">
-                <Grid>
-                    <TextBlock
-                        Style="{StaticResource DesktopShift.SectionTitleStyle}"
-                        Text="Recent observations" />
-                    <TextBlock
-                        x:Name="ActivityCount"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        AutomationProperties.LiveSetting="Polite"
-                        Style="{StaticResource DesktopShift.CaptionStyle}" />
-                </Grid>
-
-                <ItemsControl
-                    x:Name="ActivityList"
-                    AutomationProperties.Name="Recent window observation activity">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border
-                                Margin="0,0,0,4"
-                                AutomationProperties.Name="{Binding AutomationName}"
-                                Style="{StaticResource DesktopShift.CardStyle}">
-                                <Grid ColumnSpacing="16" RowSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border
-                                        MinWidth="74"
-                                        Padding="10,5"
-                                        VerticalAlignment="Top"
-                                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                        CornerRadius="999">
-                                        <TextBlock
-                                            HorizontalAlignment="Center"
-                                            FontSize="12"
-                                            FontWeight="SemiBold"
-                                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
-                                            Text="{Binding Outcome}" />
-                                    </Border>
-
-                                    <StackPanel Grid.Column="1" Spacing="9">
-                                        <Grid ColumnSpacing="12">
+                <StackPanel x:Name="AssignmentPanel" Spacing="12" Visibility="Collapsed">
+                    <Grid>
+                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Recent assignments" />
+                        <TextBlock
+                            x:Name="AssignmentCount"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite"
+                            Style="{StaticResource DesktopShift.CaptionStyle}" />
+                    </Grid>
+                    <ItemsControl
+                        x:Name="AssignmentList"
+                        AutomationProperties.Name="Recent window assignment activity">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,4"
+                                    AutomationProperties.Name="{Binding AutomationName}"
+                                    Style="{StaticResource DesktopShift.CardStyle}">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border
+                                            MinWidth="80"
+                                            Padding="10,5"
+                                            VerticalAlignment="Top"
+                                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                                            CornerRadius="999">
                                             <TextBlock
-                                                Style="{StaticResource DesktopShift.SectionTitleStyle}"
-                                                Text="{Binding Decision}" />
+                                                HorizontalAlignment="Center"
+                                                FontSize="12"
+                                                FontWeight="SemiBold"
+                                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                                                Text="{Binding Outcome}" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="9">
+                                            <Grid ColumnSpacing="12">
+                                                <TextBlock
+                                                    Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                                    Text="{Binding Decision}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                    Text="{Binding OccurredAt}" />
+                                            </Grid>
+                                            <Grid ColumnSpacing="24" RowSpacing="5">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Process" />
+                                                    <TextBlock Text="{Binding ProcessName}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
+                                                    <TextBlock Text="{Binding TargetDesktop}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Trigger" />
+                                                    <TextBlock Text="{Binding Trigger}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Duration" />
+                                                    <TextBlock Text="{Binding Duration}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
                                             <TextBlock
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
+                                                IsTextSelectionEnabled="True"
                                                 Style="{StaticResource DesktopShift.CaptionStyle}"
-                                                Text="{Binding OccurredAt}" />
-                                        </Grid>
+                                                Text="{Binding Correlation}" />
+                                            <TextBlock
+                                                TextWrapping="Wrap"
+                                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                Text="{Binding IdentityDetails}" />
+                                            <TextBlock
+                                                TextWrapping="Wrap"
+                                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                Text="{Binding Diagnostic}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
 
-                                        <Grid ColumnSpacing="24" RowSpacing="5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <StackPanel Spacing="3">
-                                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Trigger" />
-                                                <TextBlock Text="{Binding Trigger}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Spacing="3">
-                                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Process" />
-                                                <TextBlock Text="{Binding ProcessName}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Row="1" Spacing="3">
-                                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Rule" />
-                                                <TextBlock Text="{Binding Rule}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
-                                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
-                                                <TextBlock Text="{Binding TargetDesktop}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Grid>
+                <Border
+                    x:Name="EmptyState"
+                    MinHeight="300"
+                    AutomationProperties.Name="No assignment or window observation activity"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                        <FontIcon Style="{StaticResource DesktopShift.EmptyStateIconStyle}" Glyph="&#xE9D9;" />
+                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Nothing to report" />
+                        <TextBlock
+                            MaxWidth="500"
+                            TextAlignment="Center"
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="Successful, skipped, and failed assignments will appear here with privacy-safe window observations." />
+                    </StackPanel>
+                </Border>
 
-                                        <TextBlock
-                                            Style="{StaticResource DesktopShift.CaptionStyle}"
-                                            Text="{Binding IdentityDetails}" />
-                                        <TextBlock
-                                            Style="{StaticResource DesktopShift.CaptionStyle}"
-                                            Text="{Binding Diagnostic}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
+                <StackPanel x:Name="ActivityPanel" Spacing="12" Visibility="Collapsed">
+                    <Grid>
+                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Window observations" />
+                        <TextBlock
+                            x:Name="ActivityCount"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite"
+                            Style="{StaticResource DesktopShift.CaptionStyle}" />
+                    </Grid>
+                    <ItemsControl
+                        x:Name="ActivityList"
+                        AutomationProperties.Name="Recent window observation activity">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="0,0,0,4"
+                                    AutomationProperties.Name="{Binding AutomationName}"
+                                    Style="{StaticResource DesktopShift.CardStyle}">
+                                    <Grid ColumnSpacing="16" RowSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border
+                                            MinWidth="74"
+                                            Padding="10,5"
+                                            VerticalAlignment="Top"
+                                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                                            CornerRadius="999">
+                                            <TextBlock
+                                                HorizontalAlignment="Center"
+                                                FontSize="12"
+                                                FontWeight="SemiBold"
+                                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                                                Text="{Binding Outcome}" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="9">
+                                            <Grid ColumnSpacing="12">
+                                                <TextBlock
+                                                    Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                                    Text="{Binding Decision}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                    Text="{Binding OccurredAt}" />
+                                            </Grid>
+                                            <Grid ColumnSpacing="24" RowSpacing="5">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Trigger" />
+                                                    <TextBlock Text="{Binding Trigger}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Process" />
+                                                    <TextBlock Text="{Binding ProcessName}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Rule" />
+                                                    <TextBlock Text="{Binding Rule}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
+                                                    <TextBlock Text="{Binding TargetDesktop}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <TextBlock
+                                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                Text="{Binding IdentityDetails}" />
+                                            <TextBlock
+                                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                Text="{Binding Diagnostic}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

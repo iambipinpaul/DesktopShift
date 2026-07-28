@@ -7,6 +7,7 @@ using DesktopShift.App.Pages;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core;
 using DesktopShift.Core.Appearance;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.ManagedDesktops;
@@ -39,6 +40,8 @@ public sealed partial class MainWindow : Window
     private readonly IWindowObservationActivityProjection _activityProjection;
     private readonly IConfigurationService _configurationService;
     private readonly IManagedDesktopReconciliationService _managedDesktopReconciliationService;
+    private readonly IWindowAssignmentActivityProjection _assignmentActivityProjection;
+    private readonly IWindowReassignmentService _windowReassignmentService;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private FirstRunState? _firstRunState;
     private bool _isApplyingTheme;
@@ -52,7 +55,9 @@ public sealed partial class MainWindow : Window
         IDesktopTopologyProvider desktopTopologyProvider,
         IWindowObservationActivityProjection activityProjection,
         IConfigurationService configurationService,
-        IManagedDesktopReconciliationService managedDesktopReconciliationService)
+        IManagedDesktopReconciliationService managedDesktopReconciliationService,
+        IWindowAssignmentActivityProjection assignmentActivityProjection,
+        IWindowReassignmentService windowReassignmentService)
     {
         _themePreferenceService = themePreferenceService ?? throw new ArgumentNullException(nameof(themePreferenceService));
         _firstRunService = firstRunService ?? throw new ArgumentNullException(nameof(firstRunService));
@@ -68,6 +73,12 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService =
             managedDesktopReconciliationService ??
             throw new ArgumentNullException(nameof(managedDesktopReconciliationService));
+        _assignmentActivityProjection =
+            assignmentActivityProjection ??
+            throw new ArgumentNullException(nameof(assignmentActivityProjection));
+        _windowReassignmentService =
+            windowReassignmentService ??
+            throw new ArgumentNullException(nameof(windowReassignmentService));
 
         InitializeComponent();
 
@@ -409,6 +420,10 @@ public sealed partial class MainWindow : Window
                     _firstRunState?.IsCompleted == true,
                     compatibility));
             overviewPage.UpdateMappings(managedDesktopMappings);
+            overviewPage.UpdateAssignments(
+                _assignmentActivityProjection,
+                _windowReassignmentService,
+                _lifetimeCancellation.Token);
         }
         else if (ContentFrame.Content is SettingsPage settingsPage)
         {
@@ -429,6 +444,7 @@ public sealed partial class MainWindow : Window
         else if (ContentFrame.Content is ActivityPage activityPage)
         {
             activityPage.Update(_activityProjection);
+            activityPage.UpdateAssignments(_assignmentActivityProjection);
         }
     }
 
