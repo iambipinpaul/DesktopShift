@@ -4,9 +4,9 @@ namespace DesktopShift.Core.Configuration;
 
 public static class ConfigurationDefaults
 {
-    // Still version 1: packageFamilyNames and appUserModelIds are optional
-    // trailing members, so a document written before they existed deserializes
-    // with them absent and they read as empty.
+    // Still version 1: packageFamilyNames, appUserModelIds, executablePaths and
+    // windowClasses are optional trailing members, so a document written before
+    // they existed deserializes with them absent and they read as empty.
     public const int CurrentSchemaVersion = 1;
 
     private static readonly ImmutableArray<ApplicationRuleTrigger> DefaultTriggers =
@@ -61,6 +61,28 @@ public static class ConfigurationDefaults
                     "remote-desktop",
                     "Remote Desktop Connection",
                     "remote",
+                    // The classic client is unpackaged, so a process name is the
+                    // strongest identity it has. mstsc.exe owns every window a
+                    // session produces: the connection dialog before a session
+                    // exists, the TscShellContainerClass session frame, and the
+                    // dialogs the frame owns.
+                    //
+                    // No window class is declared. Declaring one would narrow
+                    // the rule to the shapes named here and silently unmanage
+                    // any other session surface, and every surface mstsc.exe
+                    // shows belongs on Remote anyway. A user who wants only
+                    // connected sessions on Remote can add
+                    // windowClasses: ["TscShellContainerClass"] to this rule.
+                    //
+                    // msrdc.exe is left out deliberately: the same file name is
+                    // both the Azure Virtual Desktop client and the WSL client
+                    // that hosts WSLg Linux windows, so it would claim windows
+                    // that are not remote sessions.
+                    //
+                    // The packaged clients (the Store "Remote Desktop" app and
+                    // "Windows App") are left out because their package family
+                    // names could not be confirmed against an installed
+                    // package, and an unverified identity is dead configuration.
                     ["mstsc.exe"]),
             ],
             new BehaviorSettings(
@@ -75,7 +97,9 @@ public static class ConfigurationDefaults
         string targetDesktopKey,
         ImmutableArray<string> processNames,
         ImmutableArray<string> packageFamilyNames = default,
-        ImmutableArray<string> appUserModelIds = default)
+        ImmutableArray<string> appUserModelIds = default,
+        ImmutableArray<string> executablePaths = default,
+        ImmutableArray<string> windowClasses = default)
     {
         return new ApplicationRule(
             id,
@@ -86,6 +110,8 @@ public static class ConfigurationDefaults
             DefaultTriggers,
             DesktopSwitchPolicy.OnForegroundActivation,
             packageFamilyNames,
-            appUserModelIds);
+            appUserModelIds,
+            executablePaths,
+            windowClasses);
     }
 }

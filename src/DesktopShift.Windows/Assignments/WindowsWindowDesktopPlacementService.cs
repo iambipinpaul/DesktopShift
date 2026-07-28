@@ -10,6 +10,8 @@ public sealed class WindowsWindowDesktopPlacementService :
 {
     private const int UnexpectedResultHResult =
         unchecked((int)0x8000FFFF);
+    private const int AccessDeniedHResult = unchecked((int)0x80070005);
+    private const string ManagerActivationStage = "ManagerActivation";
 
     private readonly IWindowHandleApi windowApi;
     private readonly IDocumentedVirtualDesktopManagerApi desktopManager;
@@ -95,15 +97,16 @@ public sealed class WindowsWindowDesktopPlacementService :
             return ValueTask.FromResult(invalidResult);
         }
 
+        // One attempt, then a structured refusal. Windows, not DesktopShift,
+        // decides whether a window may leave its desktop, and re-issuing the
+        // identical call cannot change that answer, so a refusal is reported
+        // rather than retried.
         DocumentedDesktopOperationResult result =
             desktopManager.MoveWindowToDesktop(windowHandle, desktopId);
-        return result.IsSuccess
-            ? ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded())
-            : ValueTask.FromResult(
-                DesktopTopologyProviderResult.Failed(
-                    GetFailureCode(result.Stage, "move_failed"),
-                    "Windows could not move the window to the requested virtual desktop.",
-                    result.HResult));
+        return ValueTask.FromResult(
+            result.IsSuccess
+                ? DesktopTopologyProviderResult.Succeeded()
+                : ClassifyMoveFailure(windowHandle, result));
     }
 
     public void Dispose()
@@ -180,8 +183,63 @@ public sealed class WindowsWindowDesktopPlacementService :
         return null;
     }
 
+    /// <summary>
+    /// Turns a refused move into a failure a reader of Activity can act on.
+    /// </summary>
+    /// <remarks>
+    /// Only distinctions Windows actually states are drawn. An access denial is
+    /// a defined <c>HRESULT</c>, and a window that stopped existing can be
+    /// observed directly. Every other refusal keeps the generic code and
+    /// carries the exact <c>HRESULT</c> the manager returned, because no other
+    /// mapping from a refusal to a cause is contractual. A full-screen remote
+    /// session lands here: it is a window Windows is managing itself, and the
+    /// honest report is that the move was refused, with the code Windows gave.
+    /// </remarks>
+    /// <param name="windowHandle">The window whose move was refused.</param>
+    /// <param name="result">The refusal the documented manager returned.</param>
+    /// <returns>A failed result naming the most specific known cause.</returns>
+    private DesktopTopologyProviderResult ClassifyMoveFailure(
+        nint windowHandle,
+        DocumentedDesktopOperationResult result)
+    {
+        if (string.Equals(
+            result.Stage,
+            ManagerActivationStage,
+            StringComparison.Ordinal))
+        {
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.manager_activation_failed",
+                "The virtual desktop manager could not be activated, so the window was not moved.",
+                result.HResult);
+        }
+
+        if (result.HResult == AccessDeniedHResult)
+        {
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.move_access_denied",
+                "Windows denied access to the window, so it was not moved to the requested virtual desktop.",
+                result.HResult);
+        }
+
+        if (!windowApi.IsWindow(windowHandle))
+        {
+            // The window closed underneath the move. An owned reconnection or
+            // credential dialog dismissing itself does exactly this, and it is
+            // not a failure the user can act on.
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.stale_window_handle",
+                "The window closed before it could be moved to the requested virtual desktop.",
+                result.HResult);
+        }
+
+        return DesktopTopologyProviderResult.Failed(
+            "window_placement.move_failed",
+            "Windows refused to move the window to the requested virtual desktop. A window can be refused while it is in a state Windows manages itself, such as a full-screen remote session.",
+            result.HResult);
+    }
+
     private static string GetFailureCode(string stage, string operation) =>
-        string.Equals(stage, "ManagerActivation", StringComparison.Ordinal)
+        string.Equals(stage, ManagerActivationStage, StringComparison.Ordinal)
             ? "window_placement.manager_activation_failed"
             : $"window_placement.{operation}";
 }

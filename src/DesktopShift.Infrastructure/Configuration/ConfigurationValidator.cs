@@ -102,15 +102,21 @@ internal static class ConfigurationValidator
                     rule.Id));
             }
 
-            // A rule may be identified by packaged identity alone, so no single
-            // list is required. At least one of them must carry a usable value.
+            // A rule may be identified by packaged identity or by executable
+            // path alone, so no single list is required. At least one of them
+            // must carry a usable value. Window classes are deliberately absent
+            // from this test: a class names a window shape inside an
+            // application and never says which application it is, so a rule
+            // carrying only classes would claim that shape from every process
+            // that draws it.
             if (!HasIdentity(rule.ProcessNames) &&
                 !HasIdentity(rule.PackageFamilyNames) &&
-                !HasIdentity(rule.AppUserModelIds))
+                !HasIdentity(rule.AppUserModelIds) &&
+                !HasIdentity(rule.ExecutablePaths))
             {
                 issues.Add(new ConfigurationValidationIssue(
                     ConfigurationValidationCode.MissingApplicationIdentity,
-                    $"Application Rule '{rule.Id}' must contain at least one process name, package family name, or AppUserModelId.",
+                    $"Application Rule '{rule.Id}' must contain at least one process name, package family name, AppUserModelId, or executable path.",
                     path,
                     ConfigurationEntryKind.ApplicationRule,
                     rule.Id));
@@ -130,6 +136,16 @@ internal static class ConfigurationValidator
                 issues,
                 rule.AppUserModelIds,
                 $"{path}.appUserModelIds",
+                rule.Id);
+            AddBlankIdentityIssue(
+                issues,
+                rule.ExecutablePaths,
+                $"{path}.executablePaths",
+                rule.Id);
+            AddBlankIdentityIssue(
+                issues,
+                rule.WindowClasses,
+                $"{path}.windowClasses",
                 rule.Id);
 
             if (rule.Triggers.IsDefaultOrEmpty)

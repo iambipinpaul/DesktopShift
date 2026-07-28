@@ -8,8 +8,9 @@ namespace DesktopShift.Core.Tests.Configuration;
 [TestClass]
 public sealed class ConfigurationAcceptanceTests
 {
-    // A schema version 1 document written before packageFamilyNames and
-    // appUserModelIds existed. Both members are absent on purpose.
+    // A schema version 1 document written before packageFamilyNames,
+    // appUserModelIds, executablePaths and windowClasses existed. Every one of
+    // them is absent on purpose.
     private const string LegacyDocumentJson = """
         {
           "schemaVersion": 1,
@@ -192,11 +193,159 @@ public sealed class ConfigurationAcceptanceTests
             rule.ProcessNames.ToArray());
         Assert.IsEmpty(rule.PackageFamilyNames);
         Assert.IsEmpty(rule.AppUserModelIds);
+        Assert.IsEmpty(rule.ExecutablePaths);
+        Assert.IsEmpty(rule.WindowClasses);
 
         // The absent collections must read as empty, not as default arrays: a
         // default array cannot be enumerated and would fail to serialize.
         Assert.IsTrue(
             (await service.SaveCandidateAsync(state.Candidate)).Accepted);
+    }
+
+    [TestMethod]
+    public void DefaultRemoteDesktopRule_IsIdentifiedByTheClassicClientOnly()
+    {
+        ApplicationRule rule = GetDefaultRule("remote-desktop");
+
+        Assert.AreEqual("remote", rule.TargetDesktopKey);
+        CollectionAssert.AreEqual(
+            new[] { "mstsc.exe" },
+            rule.ProcessNames.ToArray());
+
+        // msrdc.exe is both the Azure Virtual Desktop client and the WSL client
+        // that hosts every WSLg Linux window, so naming it would claim windows
+        // that are not remote sessions.
+        Assert.DoesNotContain("msrdc.exe", rule.ProcessNames);
+
+        // No window class is declared, so every surface mstsc.exe shows — the
+        // connection dialog, the session frame, the connection bar — is claimed
+        // rather than only the one shape a class would name.
+        Assert.IsEmpty(rule.WindowClasses);
+
+        // No packaged identity is claimed for the Store or Windows App clients:
+        // an unverified package family name is dead configuration.
+        Assert.IsEmpty(rule.PackageFamilyNames);
+        Assert.IsEmpty(rule.AppUserModelIds);
+        Assert.IsEmpty(rule.ExecutablePaths);
+    }
+
+    [TestMethod]
+    public async Task WindowClassAndExecutablePathRefinements_SurviveARoundTrip()
+    {
+        // Before these members existed a document could not narrow a rule to a
+        // window shape at all. The narrowing has to survive being written and
+        // read back, or the rule silently widens on the next launch.
+        using ConfigurationTestDirectory storage = new();
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
+            static rule => rule.Id == "remote-desktop");
+        ConfigurationDocument refined = defaults with
+        {
+            ApplicationRules = defaults.ApplicationRules.Replace(
+                remoteDesktop,
+                remoteDesktop with
+                {
+                    WindowClasses = ["TscShellContainerClass"],
+                    ExecutablePaths = [@"C:\Windows\System32\mstsc.exe"],
+                }),
+        };
+
+        await using (ServiceProvider provider = CreateProvider(storage))
+        {
+            Assert.IsTrue((await provider
+                .GetRequiredService<IConfigurationService>()
+                .SaveCandidateAsync(refined)).Accepted);
+        }
+
+        string json = await File.ReadAllTextAsync(
+            Path.Combine(storage.DirectoryPath, "configuration.json"));
+        Assert.Contains("\"windowClasses\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"executablePaths\"", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "TscShellContainerClass",
+            json,
+            StringComparison.Ordinal);
+
+        await using ServiceProvider reloadedProvider = CreateProvider(storage);
+        ConfigurationState reloaded = await reloadedProvider
+            .GetRequiredService<IConfigurationService>()
+            .LoadAsync();
+
+        Assert.IsEmpty(reloaded.Issues);
+        ApplicationRule reloadedRule = reloaded.Active!.ApplicationRules.Single(
+            static rule => rule.Id == "remote-desktop");
+        CollectionAssert.AreEqual(
+            new[] { "TscShellContainerClass" },
+            reloadedRule.WindowClasses.ToArray());
+        CollectionAssert.AreEqual(
+            new[] { @"C:\Windows\System32\mstsc.exe" },
+            reloadedRule.ExecutablePaths.ToArray());
+
+        // A rule that declares neither still reads as empty, not as a default
+        // array that cannot be enumerated.
+        ApplicationRule vscode = reloaded.Active.ApplicationRules.Single(
+            static rule => rule.Id == "vscode");
+        Assert.IsEmpty(vscode.WindowClasses);
+        Assert.IsEmpty(vscode.ExecutablePaths);
+    }
+
+    [TestMethod]
+    public async Task RuleIdentifiedOnlyByExecutablePath_IsAccepted()
+    {
+        // A path is a primary identity: it says which application the window
+        // belongs to, and it distinguishes two installations that share a name.
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
+            static rule => rule.Id == "remote-desktop");
+
+        ConfigurationSaveResult result = await provider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults with
+            {
+                ApplicationRules = defaults.ApplicationRules.Replace(
+                    remoteDesktop,
+                    remoteDesktop with
+                    {
+                        ProcessNames = [],
+                        ExecutablePaths = [@"C:\Windows\System32\mstsc.exe"],
+                    }),
+            });
+
+        Assert.IsTrue(result.Accepted);
+        Assert.IsEmpty(result.State.Issues);
+    }
+
+    [TestMethod]
+    public async Task RuleIdentifiedOnlyByWindowClass_IsRejected()
+    {
+        // A window class names a shape, never an application. A rule carrying
+        // only classes would claim that shape from every process that draws it.
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
+            static rule => rule.Id == "remote-desktop");
+
+        ConfigurationSaveResult result = await provider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults with
+            {
+                ApplicationRules = defaults.ApplicationRules.Replace(
+                    remoteDesktop,
+                    remoteDesktop with
+                    {
+                        ProcessNames = [],
+                        WindowClasses = ["TscShellContainerClass"],
+                    }),
+            });
+
+        Assert.IsFalse(result.Accepted);
+        AssertHasIssue(
+            result.State.Issues,
+            ConfigurationValidationCode.MissingApplicationIdentity,
+            "remote-desktop");
     }
 
     [TestMethod]
@@ -266,6 +415,8 @@ public sealed class ConfigurationAcceptanceTests
     [DataRow("processNames")]
     [DataRow("packageFamilyNames")]
     [DataRow("appUserModelIds")]
+    [DataRow("executablePaths")]
+    [DataRow("windowClasses")]
     public async Task RuleWithABlankIdentityEntry_IsRejectedAtThatList(
         string listName)
     {
@@ -284,6 +435,14 @@ public sealed class ConfigurationAcceptanceTests
             "packageFamilyNames" => original with
             {
                 PackageFamilyNames = original.PackageFamilyNames.Add("   "),
+            },
+            "executablePaths" => original with
+            {
+                ExecutablePaths = original.ExecutablePaths.Add("   "),
+            },
+            "windowClasses" => original with
+            {
+                WindowClasses = original.WindowClasses.Add("   "),
             },
             _ => original with
             {

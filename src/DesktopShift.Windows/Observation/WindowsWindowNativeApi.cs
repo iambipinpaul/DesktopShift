@@ -11,6 +11,8 @@ public interface IWindowsWindowNativeApi
 
     nint GetRootOwner(nint windowHandle);
 
+    nint GetOwner(nint windowHandle);
+
     long GetWindowStyle(nint windowHandle);
 
     long GetWindowExtendedStyle(nint windowHandle);
@@ -31,6 +33,7 @@ public interface IWindowsWindowNativeApi
 public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
 {
     private const uint GetAncestorRootOwner = 3;
+    private const uint GetWindowOwner = 4;
     private const int WindowStyle = -16;
     private const int WindowExtendedStyle = -20;
     private const uint DwmWindowAttributeCloaked = 14;
@@ -43,6 +46,17 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
 
     public nint GetRootOwner(nint windowHandle) =>
         NativeMethods.GetAncestor(windowHandle, GetAncestorRootOwner);
+
+    /// <summary>
+    /// Reads a window's owner through <c>GetWindow(GW_OWNER)</c>, which Windows
+    /// documents as the way to obtain an owner. <c>GetAncestor(GA_ROOTOWNER)</c>
+    /// walks the chain <c>GetParent</c> returns, and <c>GetParent</c> reports an
+    /// owner only for a <c>WS_POPUP</c> window, so it cannot be relied on alone.
+    /// </summary>
+    /// <param name="windowHandle">The window whose owner is read.</param>
+    /// <returns>The owner window, or zero when the window has none.</returns>
+    public nint GetOwner(nint windowHandle) =>
+        NativeMethods.GetWindow(windowHandle, GetWindowOwner);
 
     public long GetWindowStyle(nint windowHandle) =>
         NativeMethods.GetWindowLongPtr(windowHandle, WindowStyle).ToInt64();
@@ -112,6 +126,11 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
         internal static extern nint GetAncestor(
             nint windowHandle,
             uint flags);
+
+        [DllImport("user32.dll")]
+        internal static extern nint GetWindow(
+            nint windowHandle,
+            uint command);
 
         [DllImport(
             "user32.dll",

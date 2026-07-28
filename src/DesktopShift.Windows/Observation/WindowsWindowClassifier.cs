@@ -7,6 +7,11 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
     private const long ChildWindowStyle = 0x40000000L;
     private const long ToolWindowExtendedStyle = 0x00000080L;
 
+    // An owner chain is a handful of links deep in practice. The bound exists so
+    // a malformed or racing chain can never spin, not because deep chains are
+    // expected.
+    private const int MaximumOwnerChainDepth = 16;
+
     private static readonly HashSet<string> TransientClasses =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -77,12 +82,7 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
             return WindowQualification.Skipped(WindowSkipReason.ChildWindow);
         }
 
-        nint rootOwner = nativeApi.GetRootOwner(windowHandle);
-        if (rootOwner == 0)
-        {
-            rootOwner = windowHandle;
-        }
-
+        nint rootOwner = ResolveRootOwner(windowHandle);
         if (!nativeApi.IsWindow(rootOwner))
         {
             return WindowQualification.Skipped(WindowSkipReason.StaleWindow);
@@ -165,5 +165,53 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
         return SystemUiProcesses.Contains(identity.ProcessName)
             ? WindowSkipReason.SystemWindow
             : WindowSkipReason.None;
+    }
+
+    /// <summary>
+    /// Resolves the window that owns <paramref name="windowHandle"/>, so an
+    /// owned dialog is never classified, matched, or assigned on its own
+    /// identity.
+    /// </summary>
+    /// <remarks>
+    /// Windows exposes two views of ownership and they do not agree.
+    /// <c>GetAncestor(GA_ROOTOWNER)</c> walks the chain <c>GetParent</c>
+    /// returns, and <c>GetParent</c> reports an owner only for a
+    /// <c>WS_POPUP</c> window, so an owned window created without that style
+    /// reports itself as its own root. <c>GetWindow(GW_OWNER)</c> is the
+    /// documented reader for any owner. The ancestor result is therefore
+    /// continued along the owner chain instead of being trusted alone.
+    /// <para>
+    /// This is what makes a Remote Desktop reconnection or credential dialog
+    /// follow its session frame. The dialog may even belong to another process
+    /// — a credential prompt is often hosted by <c>CredentialUIBroker.exe</c> —
+    /// and ownership still resolves to the frame, so the session's identity and
+    /// its desktop are the ones that decide where the dialog goes.
+    /// </para>
+    /// </remarks>
+    /// <param name="windowHandle">The window an event described.</param>
+    /// <returns>
+    /// The topmost owner, or <paramref name="windowHandle"/> when it owns
+    /// itself.
+    /// </returns>
+    private nint ResolveRootOwner(nint windowHandle)
+    {
+        nint rootOwner = nativeApi.GetRootOwner(windowHandle);
+        if (rootOwner == 0)
+        {
+            rootOwner = windowHandle;
+        }
+
+        for (int depth = 0; depth < MaximumOwnerChainDepth; depth++)
+        {
+            nint owner = nativeApi.GetOwner(rootOwner);
+            if (owner == 0 || owner == rootOwner)
+            {
+                return rootOwner;
+            }
+
+            rootOwner = owner;
+        }
+
+        return rootOwner;
     }
 }

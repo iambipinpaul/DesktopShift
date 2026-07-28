@@ -7,19 +7,60 @@ internal sealed class TestTopLevelWindow : IDisposable
 {
     private const uint OverlappedWindowStyle = 0x00CF0000;
     private const uint VisibleWindowStyle = 0x10000000;
+    private const uint PopupWindowStyle = 0x80000000;
+
+    // Keeps a controlled window out of the user's way: it is never activated
+    // and never appears in the task switcher, while still being a plain visible
+    // top-level window as far as ownership and classification are concerned.
+    private const uint NoActivateExtendedStyle = 0x08000000;
+
     private const uint CloseMessage = 0x0010;
     private const uint DestroyMessage = 0x0002;
 
     private readonly ManualResetEventSlim ready = new();
     private readonly Thread thread;
     private readonly WindowProcedure windowProcedure;
-    private readonly string className = $"DesktopShift.Contract.{Guid.NewGuid():N}";
+    private readonly string className;
+    private readonly nint ownerHandle;
+    private readonly uint style;
+    private readonly uint extendedStyle;
     private Exception? startupException;
     private nint windowHandle;
     private bool disposed;
 
-    public TestTopLevelWindow()
+    /// <summary>
+    /// Creates a controlled top-level window.
+    /// </summary>
+    /// <param name="windowClassName">
+    /// The window class to register, so a test can reproduce the class a real
+    /// application reports. Defaults to a unique per-instance class.
+    /// </param>
+    /// <param name="owner">
+    /// The window that owns this one. A nonzero owner makes this an owned
+    /// window rather than a child, which is the shape a dialog takes.
+    /// </param>
+    /// <param name="preventActivation">
+    /// Keeps the window from taking focus from whatever the machine running the
+    /// test is doing. Left off by default so the existing native placement
+    /// contract keeps testing an ordinary window.
+    /// </param>
+    /// <param name="ownedAsPopup">
+    /// Whether an owned window carries <c>WS_POPUP</c>. The two shapes are read
+    /// differently by the ancestor API, so both have to be reproducible.
+    /// </param>
+    public TestTopLevelWindow(
+        string? windowClassName = null,
+        nint owner = 0,
+        bool preventActivation = false,
+        bool ownedAsPopup = true)
     {
+        className = windowClassName ??
+            $"DesktopShift.Contract.{Guid.NewGuid():N}";
+        ownerHandle = owner;
+        style = owner != 0 && ownedAsPopup
+            ? PopupWindowStyle | OverlappedWindowStyle | VisibleWindowStyle
+            : OverlappedWindowStyle | VisibleWindowStyle;
+        extendedStyle = preventActivation ? NoActivateExtendedStyle : 0;
         windowProcedure = OnWindowMessage;
         thread = new Thread(ThreadMain)
         {
@@ -82,15 +123,15 @@ internal sealed class TestTopLevelWindow : IDisposable
             }
 
             windowHandle = NativeMethods.CreateWindowEx(
-                0,
+                extendedStyle,
                 className,
                 "DesktopShift assignment contract",
-                OverlappedWindowStyle | VisibleWindowStyle,
+                style,
                 100,
                 100,
                 160,
                 90,
-                0,
+                ownerHandle,
                 0,
                 module,
                 0);

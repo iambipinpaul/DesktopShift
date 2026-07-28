@@ -32,10 +32,29 @@ public sealed record ManagedDesktopDefinition(
 /// of <see cref="ProcessNames"/>.
 /// </para>
 /// <para>
-/// Both packaged identity collections are optional and trail the required
-/// members, so every existing construction site and every schema version 1
-/// document written before they existed keeps working. An absent collection
-/// reads as empty, never as a default array.
+/// A process name is also shared by unrelated hosts. <c>msrdc.exe</c> is both
+/// the Azure Virtual Desktop client and the WSL client that hosts every WSLg
+/// Linux window, so naming it would claim windows that are not remote sessions.
+/// </para>
+/// <para>
+/// <see cref="WindowClasses"/> is a refinement, not an identity. A class names
+/// a window shape inside an application, so a rule that declares one still
+/// needs a process name, packaged identity, or executable path to say which
+/// application the shape belongs to. Declaring a class narrows a rule to the
+/// windows that carry it and excludes every other surface the same process
+/// creates.
+/// </para>
+/// <para>
+/// Only the signals the identity resolver always collects are configurable
+/// here. A window title and a command line are collected only when they are
+/// explicitly opted into, so exposing them would let a document express a
+/// refinement that could never match.
+/// </para>
+/// <para>
+/// Every optional collection trails the required members, so every existing
+/// construction site and every schema version 1 document written before they
+/// existed keeps working. An absent collection reads as empty, never as a
+/// default array.
 /// </para>
 /// </remarks>
 /// <param name="Id">The stable rule identifier.</param>
@@ -58,6 +77,14 @@ public sealed record ManagedDesktopDefinition(
 /// <param name="AppUserModelIds">
 /// Optional shell application identities.
 /// </param>
+/// <param name="ExecutablePaths">
+/// Optional full executable paths. Stronger than a process name because a path
+/// distinguishes two installations that share a file name.
+/// </param>
+/// <param name="WindowClasses">
+/// Optional exact window class refinement. A rule that declares one matches
+/// only windows carrying that class.
+/// </param>
 public sealed record ApplicationRule(
     string Id,
     string DisplayName,
@@ -67,7 +94,9 @@ public sealed record ApplicationRule(
     ImmutableArray<ApplicationRuleTrigger> Triggers,
     DesktopSwitchPolicy SwitchPolicy,
     ImmutableArray<string> PackageFamilyNames = default,
-    ImmutableArray<string> AppUserModelIds = default)
+    ImmutableArray<string> AppUserModelIds = default,
+    ImmutableArray<string> ExecutablePaths = default,
+    ImmutableArray<string> WindowClasses = default)
 {
     /// <summary>
     /// Packaged application identities, normalized so an omitted collection is
@@ -83,6 +112,20 @@ public sealed record ApplicationRule(
     /// </summary>
     public ImmutableArray<string> AppUserModelIds { get; init; } =
         AppUserModelIds.IsDefault ? [] : AppUserModelIds;
+
+    /// <summary>
+    /// Full executable paths, normalized the same way as
+    /// <see cref="PackageFamilyNames"/>.
+    /// </summary>
+    public ImmutableArray<string> ExecutablePaths { get; init; } =
+        ExecutablePaths.IsDefault ? [] : ExecutablePaths;
+
+    /// <summary>
+    /// Exact window classes, normalized the same way as
+    /// <see cref="PackageFamilyNames"/>.
+    /// </summary>
+    public ImmutableArray<string> WindowClasses { get; init; } =
+        WindowClasses.IsDefault ? [] : WindowClasses;
 }
 
 public sealed record BehaviorSettings(

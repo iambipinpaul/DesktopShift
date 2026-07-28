@@ -193,6 +193,114 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
     }
 
     [TestMethod]
+    public async Task Move_ReportsAnAccessDenialAsItsOwnFailure()
+    {
+        // E_ACCESSDENIED is a stated answer, not a guess, so Activity can say
+        // access was denied rather than only that a move failed.
+        int hResult = unchecked((int)0x80070005);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            MoveResult = new DocumentedDesktopOperationResult(
+                hResult,
+                "MoveWindowToDesktop"),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi(),
+            desktopManager);
+
+        DesktopTopologyProviderResult result =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(
+            "window_placement.move_access_denied",
+            result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+        Assert.AreEqual(1, desktopManager.MoveCount);
+    }
+
+    [TestMethod]
+    public async Task Move_ReportsAWindowThatClosedUnderneathTheMoveAsStale()
+    {
+        // An owned reconnection or credential dialog dismisses itself while the
+        // move is in flight. That is a race, not something the user can fix, so
+        // it must not be reported as a refused move.
+        int hResult = unchecked((int)0x80070006);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            MoveResult = new DocumentedDesktopOperationResult(
+                hResult,
+                "MoveWindowToDesktop"),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi { LiveUntilCall = 2 },
+            desktopManager);
+
+        DesktopTopologyProviderResult result =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+
+        Assert.AreEqual(
+            "window_placement.stale_window_handle",
+            result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+        Assert.AreEqual(1, desktopManager.MoveCount);
+    }
+
+    [TestMethod]
+    public async Task Move_RefusedForALiveWindow_IsReportedOnceWithItsHResult()
+    {
+        // A full-screen remote session frame lands here: Windows is managing the
+        // window itself and refuses the move. Repeating the identical call
+        // cannot change that answer, so exactly one attempt is made and the
+        // HRESULT Windows gave is carried through unaltered.
+        int hResult = unchecked((int)0x8002802B);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            MoveResult = new DocumentedDesktopOperationResult(
+                hResult,
+                "MoveWindowToDesktop"),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi(),
+            desktopManager);
+
+        DesktopTopologyProviderResult first =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+        DesktopTopologyProviderResult second =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+
+        Assert.AreEqual("window_placement.move_failed", first.Error?.Code);
+        Assert.AreEqual(hResult, first.Error?.HResult);
+        Assert.AreEqual(first.Error?.Code, second.Error?.Code);
+
+        // Two callers, two attempts. Neither call retried on its own.
+        Assert.AreEqual(2, desktopManager.MoveCount);
+    }
+
+    [TestMethod]
+    public async Task Move_PreservesTheManagerActivationStage()
+    {
+        int hResult = unchecked((int)0x80040154);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            MoveResult = new DocumentedDesktopOperationResult(
+                hResult,
+                "ManagerActivation"),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi(),
+            desktopManager);
+
+        DesktopTopologyProviderResult result =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+
+        Assert.AreEqual(
+            "window_placement.manager_activation_failed",
+            result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+    }
+
+    [TestMethod]
     public async Task CancelledCall_DoesNotReachValidationOrCom()
     {
         FakeWindowHandleApi windowApi = new();
@@ -221,7 +329,16 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
 
     private sealed class FakeWindowHandleApi : IWindowHandleApi
     {
+        private int liveChecks;
+
         public bool IsLive { get; init; } = true;
+
+        /// <summary>
+        /// The number of liveness checks that see a live window before it
+        /// reports as closed, so a window can be made to disappear between
+        /// validation and the check that follows a refused move.
+        /// </summary>
+        public int LiveUntilCall { get; init; } = int.MaxValue;
 
         public nint RootWindow { get; init; } = WindowHandle;
 
@@ -231,7 +348,8 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
         {
             Assert.AreEqual(WindowHandle, windowHandle);
             ValidationCount++;
-            return IsLive;
+            liveChecks++;
+            return IsLive && liveChecks <= LiveUntilCall;
         }
 
         public nint GetRootWindow(nint windowHandle)

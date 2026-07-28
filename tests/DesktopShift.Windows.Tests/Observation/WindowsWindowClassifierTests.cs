@@ -36,6 +36,72 @@ public sealed class WindowsWindowClassifierTests
     }
 
     [TestMethod]
+    public void Qualify_OwnedDialogTheAncestorApiMisses_FollowsTheOwnerChain()
+    {
+        // GetAncestor(GA_ROOTOWNER) walks what GetParent returns, and GetParent
+        // reports an owner only for a WS_POPUP window. A dialog created without
+        // that style therefore reports itself as its own root even though it is
+        // owned, which is the shape a Remote Desktop reconnection prompt takes.
+        // GetWindow(GW_OWNER) is the documented reader and must decide.
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.RootOwner = (nint)70;
+        api.Owners[(nint)70] = (nint)60;
+        WindowsWindowClassifier classifier = new(api, currentProcessId: 99);
+
+        WindowQualification result = classifier.Qualify((nint)70);
+
+        Assert.IsTrue(result.IsQualified);
+        Assert.AreEqual((nint)70, result.Window!.OriginalWindowHandle);
+        Assert.AreEqual((nint)60, result.Window.RootWindowHandle);
+    }
+
+    [TestMethod]
+    public void Qualify_NestedOwnerChain_ResolvesToTheOutermostOwner()
+    {
+        // A credential prompt owned by a reconnection dialog owned by the
+        // session frame must reach the frame, not stop at the middle link.
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.RootOwner = (nint)72;
+        api.Owners[(nint)72] = (nint)71;
+        api.Owners[(nint)71] = (nint)60;
+        WindowsWindowClassifier classifier = new(api, currentProcessId: 99);
+
+        WindowQualification result = classifier.Qualify((nint)72);
+
+        Assert.AreEqual((nint)60, result.Window!.RootWindowHandle);
+    }
+
+    [TestMethod]
+    public void Qualify_CircularOwnerChain_TerminatesWithoutSpinning()
+    {
+        // A racing or malformed chain must not hang the observation pipeline.
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.RootOwner = (nint)80;
+        api.Owners[(nint)80] = (nint)81;
+        api.Owners[(nint)81] = (nint)80;
+        WindowsWindowClassifier classifier = new(api, currentProcessId: 99);
+
+        WindowQualification result = classifier.Qualify((nint)80);
+
+        Assert.IsTrue(result.IsQualified);
+        Assert.IsTrue(
+            result.Window!.RootWindowHandle == (nint)80 ||
+            result.Window.RootWindowHandle == (nint)81);
+    }
+
+    [TestMethod]
+    public void Qualify_UnownedWindow_IsItsOwnRoot()
+    {
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.RootOwner = (nint)90;
+        WindowsWindowClassifier classifier = new(api, currentProcessId: 99);
+
+        WindowQualification result = classifier.Qualify((nint)90);
+
+        Assert.AreEqual((nint)90, result.Window!.RootWindowHandle);
+    }
+
+    [TestMethod]
     [DataRow(0x40000000L, 0L, false, true, "ApplicationWindow", WindowSkipReason.ChildWindow)]
     [DataRow(0L, 0x80L, false, true, "ApplicationWindow", WindowSkipReason.ToolWindow)]
     [DataRow(0L, 0L, true, true, "ApplicationWindow", WindowSkipReason.CloakedWindow)]
@@ -174,6 +240,8 @@ public sealed class WindowsWindowClassifierTests
 
         public nint RootOwner { get; set; }
 
+        public Dictionary<nint, nint> Owners { get; } = [];
+
         public long Style { get; set; }
 
         public long ExtendedStyle { get; set; }
@@ -210,6 +278,9 @@ public sealed class WindowsWindowClassifierTests
             RootOwnerCalls++;
             return RootOwner;
         }
+
+        public nint GetOwner(nint windowHandle) =>
+            Owners.TryGetValue(windowHandle, out nint owner) ? owner : 0;
 
         public long GetWindowStyle(nint windowHandle) => Style;
 

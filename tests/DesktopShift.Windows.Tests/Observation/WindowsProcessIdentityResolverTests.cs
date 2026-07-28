@@ -98,6 +98,8 @@ public sealed class WindowsProcessIdentityResolverTests
 
         public nint GetRootOwner(nint windowHandle) => windowHandle;
 
+        public nint GetOwner(nint windowHandle) => 0;
+
         public long GetWindowStyle(nint windowHandle) => 0;
 
         public long GetWindowExtendedStyle(nint windowHandle) => 0;
