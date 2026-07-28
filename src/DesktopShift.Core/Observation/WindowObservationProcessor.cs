@@ -218,6 +218,10 @@ public sealed class WindowObservationProcessor : IDisposable
         WindowEvent windowEvent,
         CancellationToken cancellationToken = default)
     {
+        // Minted once, here, and carried through every downstream event this
+        // window event produces.
+        Guid correlationId = Guid.NewGuid();
+
         if (windowEvent.Kind == WindowEventKind.Destroyed)
         {
             activationTracker?.Clear(windowEvent.WindowHandle);
@@ -227,6 +231,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 windowEvent,
                 windowEvent.WindowHandle,
                 WindowSkipReason.CleanupEvent,
+                correlationId,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
@@ -240,6 +245,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 windowEvent,
                 windowEvent.WindowHandle,
                 WindowSkipReason.Coalesced,
+                correlationId,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
@@ -251,6 +257,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 windowEvent,
                 windowEvent.WindowHandle,
                 qualification.SkipReason,
+                correlationId,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
@@ -275,6 +282,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 windowEvent,
                 window.RootWindowHandle,
                 reason,
+                correlationId,
                 nativeErrorCode: resolution.NativeErrorCode,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -288,6 +296,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 windowEvent,
                 window.RootWindowHandle,
                 identitySkip,
+                correlationId,
                 identity.ToSafeIdentity(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -302,6 +311,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 rules.Any(static rule => rule.IsEnabled)
                     ? WindowSkipReason.NoMatchingRule
                     : WindowSkipReason.NoEnabledRules,
+                correlationId,
                 identity.ToSafeIdentity(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -319,7 +329,8 @@ public sealed class WindowObservationProcessor : IDisposable
                     windowEvent.Kind,
                     window.RootWindowHandle,
                     match.Rule,
-                    identity.ToSafeIdentity()),
+                    identity.ToSafeIdentity(),
+                    correlationId),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -339,7 +350,8 @@ public sealed class WindowObservationProcessor : IDisposable
             TargetRuntimeDesktopId: assignment?.TargetDesktopId,
             AssignmentError: assignment?.Error,
             Assignment: assignment,
-            MatchedOn: match.Strength);
+            MatchedOn: match.Strength,
+            CorrelationId: correlationId);
         await activitySink
             .RecordAsync(activity, cancellationToken)
             .ConfigureAwait(false);
@@ -364,6 +376,7 @@ public sealed class WindowObservationProcessor : IDisposable
         WindowEvent windowEvent,
         nint windowHandle,
         WindowSkipReason reason,
+        Guid correlationId,
         WindowSafeIdentity? identity = null,
         int? nativeErrorCode = null,
         CancellationToken cancellationToken = default)
@@ -378,7 +391,8 @@ public sealed class WindowObservationProcessor : IDisposable
             null,
             null,
             identity,
-            nativeErrorCode);
+            nativeErrorCode,
+            CorrelationId: correlationId);
         await activitySink
             .RecordAsync(activity, cancellationToken)
             .ConfigureAwait(false);

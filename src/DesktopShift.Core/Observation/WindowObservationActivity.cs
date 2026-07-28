@@ -52,6 +52,12 @@ public enum WindowObservationOutcome
 /// for skipped windows, which never selected a rule, and for matches recorded
 /// before this field existed.
 /// </param>
+/// <param name="CorrelationId">
+/// The identifier every event produced for this window event shares. It is
+/// minted once, when the event is taken off the queue, and travels forward into
+/// the assignment so the decision, the move, the switch, and the result can be
+/// read as one story rather than stitched together by timestamp.
+/// </param>
 public sealed record WindowObservationActivity(
     DateTimeOffset OccurredAt,
     long EventSequence,
@@ -69,7 +75,8 @@ public sealed record WindowObservationActivity(
     Guid? TargetRuntimeDesktopId = null,
     WindowAssignmentError? AssignmentError = null,
     WindowAssignmentActivity? Assignment = null,
-    WindowMatchStrength? MatchedOn = null);
+    WindowMatchStrength? MatchedOn = null,
+    Guid CorrelationId = default);
 
 public interface IWindowObservationActivitySink
 {

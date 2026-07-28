@@ -103,11 +103,22 @@ public interface IWindowAssignmentActivityProjection
         ActivityRecorded;
 }
 
+/// <param name="Trigger">The window event kind that started the assignment.</param>
+/// <param name="WindowHandle">The root window handle to assign.</param>
+/// <param name="Rule">The rule that selected the target desktop.</param>
+/// <param name="Identity">The privacy-safe identity of the window.</param>
+/// <param name="CorrelationId">
+/// The identifier the observation already minted for this window event. It is
+/// carried forward so the decision, the move, the switch, and the result all
+/// report the same correlation. A default value means the caller had no
+/// correlation to hand and the assignment mints its own.
+/// </param>
 public sealed record WindowAssignmentRequest(
     WindowEventKind Trigger,
     nint WindowHandle,
     WindowObservationRule Rule,
-    WindowSafeIdentity Identity);
+    WindowSafeIdentity Identity,
+    Guid CorrelationId = default);
 
 public interface IWindowAssignmentService
 {

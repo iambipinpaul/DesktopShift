@@ -1,41 +1,103 @@
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
-using DesktopShift.App.ViewModels;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace DesktopShift.App.Pages;
 
+/// <summary>
+/// The Activity view: a bounded, virtualized, privacy-safe window onto what
+/// DesktopShift decided and did.
+/// </summary>
+/// <remarks>
+/// The code-behind holds no logic worth proving. Filtering, projection to
+/// display strings, redaction, log rotation, and bundle assembly all live in
+/// <see cref="DesktopShift.Core.Diagnostics"/>, which is testable without a
+/// XAML host; this file only binds them to controls.
+/// </remarks>
 public sealed partial class ActivityPage : Page
 {
-    private const int MaximumDisplayedActivities = 500;
-    private readonly ObservableCollection<ObservationActivityPresentation> activities = [];
-    private readonly ObservableCollection<AssignmentActivityPresentation> assignments = [];
-    private IWindowObservationActivityProjection? projection;
+    private const int MaximumDisplayedActivities = 2000;
+    private const string AllApplicationsTag = "all";
+    private const string AllRulesTag = "all";
+
+    private readonly ObservableCollection<ActivityRecordDisplay> visible = [];
+    private readonly List<ActivityRecord> records = [];
+
+    private IWindowObservationActivityProjection? observationProjection;
     private IWindowAssignmentActivityProjection? assignmentProjection;
+    private IDiagnosticsCoordinator? diagnostics;
+    private IActivityJournalProjection? journal;
+    private CancellationToken lifetimeToken = CancellationToken.None;
+    private ImmutableArray<string> applicationOptions = [];
+    private ImmutableArray<string> ruleOptions = [];
+    private bool isApplyingFilterOptions;
 
     public ActivityPage()
     {
         InitializeComponent();
-        ActivityList.ItemsSource = activities;
-        AssignmentList.ItemsSource = assignments;
+        ActivityList.ItemsSource = visible;
+        ResultFilter.SelectedIndex = 0;
+        DateFilter.SelectedIndex = 0;
+        RefreshFilterOptions(force: true);
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        UpdateState();
+    }
+
+    /// <summary>
+    /// Points the view at the diagnostics services.
+    /// </summary>
+    /// <remarks>
+    /// This is the wiring the shell supplies. Without it the view still works,
+    /// falling back to the observation and assignment projections, but the log
+    /// location and bundle export have nothing to act on and stay disabled.
+    /// </remarks>
+    /// <param name="coordinator">The diagnostics services to bind to.</param>
+    /// <param name="cancellationToken">The shell's lifetime token.</param>
+    public void UpdateDiagnostics(
+        IDiagnosticsCoordinator coordinator,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+
+        lifetimeToken = cancellationToken;
+
+        if (!ReferenceEquals(diagnostics, coordinator))
+        {
+            UnsubscribeJournal();
+            diagnostics = coordinator;
+            journal = coordinator.Activity;
+
+            if (IsLoaded)
+            {
+                SubscribeJournal();
+            }
+        }
+
+        RefreshSnapshot();
     }
 
     public void Update(IWindowObservationActivityProjection activityProjection)
     {
         ArgumentNullException.ThrowIfNull(activityProjection);
 
-        if (!ReferenceEquals(projection, activityProjection))
+        if (!ReferenceEquals(observationProjection, activityProjection))
         {
-            Unsubscribe();
-            projection = activityProjection;
+            UnsubscribeObservations();
+            observationProjection = activityProjection;
 
             if (IsLoaded)
             {
-                Subscribe();
+                SubscribeObservations();
             }
         }
 
@@ -58,37 +120,58 @@ public sealed partial class ActivityPage : Page
             }
         }
 
-        RefreshAssignmentSnapshot();
+        RefreshSnapshot();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
-        Subscribe();
+        SubscribeJournal();
+        SubscribeObservations();
         SubscribeAssignments();
         RefreshSnapshot();
-        RefreshAssignmentSnapshot();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
-        Unsubscribe();
+        UnsubscribeJournal();
+        UnsubscribeObservations();
         UnsubscribeAssignments();
     }
 
-    private void Subscribe()
+    private void SubscribeJournal()
     {
-        if (projection is not null)
+        if (journal is not null)
         {
-            projection.ActivityRecorded -= OnActivityRecorded;
-            projection.ActivityRecorded += OnActivityRecorded;
+            journal.RecordAdded -= OnRecordAdded;
+            journal.RecordAdded += OnRecordAdded;
+            journal.Cleared -= OnJournalCleared;
+            journal.Cleared += OnJournalCleared;
         }
     }
 
-    private void Unsubscribe()
+    private void UnsubscribeJournal()
     {
-        if (projection is not null)
+        if (journal is not null)
         {
-            projection.ActivityRecorded -= OnActivityRecorded;
+            journal.RecordAdded -= OnRecordAdded;
+            journal.Cleared -= OnJournalCleared;
+        }
+    }
+
+    private void SubscribeObservations()
+    {
+        if (observationProjection is not null)
+        {
+            observationProjection.ActivityRecorded -= OnObservationRecorded;
+            observationProjection.ActivityRecorded += OnObservationRecorded;
+        }
+    }
+
+    private void UnsubscribeObservations()
+    {
+        if (observationProjection is not null)
+        {
+            observationProjection.ActivityRecorded -= OnObservationRecorded;
         }
     }
 
@@ -96,8 +179,8 @@ public sealed partial class ActivityPage : Page
     {
         if (assignmentProjection is not null)
         {
-            assignmentProjection.ActivityRecorded -= OnAssignmentActivityRecorded;
-            assignmentProjection.ActivityRecorded += OnAssignmentActivityRecorded;
+            assignmentProjection.ActivityRecorded -= OnAssignmentRecorded;
+            assignmentProjection.ActivityRecorded += OnAssignmentRecorded;
         }
     }
 
@@ -105,17 +188,31 @@ public sealed partial class ActivityPage : Page
     {
         if (assignmentProjection is not null)
         {
-            assignmentProjection.ActivityRecorded -= OnAssignmentActivityRecorded;
+            assignmentProjection.ActivityRecorded -= OnAssignmentRecorded;
         }
     }
 
-    private void OnActivityRecorded(
+    private void OnRecordAdded(object? sender, ActivityRecordedEventArgs args) =>
+        RunOnDispatcher(RefreshSnapshot);
+
+    private void OnJournalCleared(object? sender, EventArgs args) =>
+        RunOnDispatcher(RefreshSnapshot);
+
+    private void OnObservationRecorded(
         object? sender,
-        WindowObservationActivityRecordedEventArgs args)
+        WindowObservationActivityRecordedEventArgs args) =>
+        RunOnDispatcher(RefreshSnapshot);
+
+    private void OnAssignmentRecorded(
+        object? sender,
+        WindowAssignmentActivityRecordedEventArgs args) =>
+        RunOnDispatcher(RefreshSnapshot);
+
+    private void RunOnDispatcher(Action action)
     {
         if (DispatcherQueue.HasThreadAccess)
         {
-            AddActivity(args.Activity);
+            action();
             return;
         }
 
@@ -123,156 +220,311 @@ public sealed partial class ActivityPage : Page
         {
             if (IsLoaded)
             {
-                AddActivity(args.Activity);
-            }
-        });
-    }
-
-    private void OnAssignmentActivityRecorded(
-        object? sender,
-        WindowAssignmentActivityRecordedEventArgs args)
-    {
-        if (DispatcherQueue.HasThreadAccess)
-        {
-            AddAssignment(args.Activity);
-            return;
-        }
-
-        _ = DispatcherQueue.TryEnqueue(() =>
-        {
-            if (IsLoaded)
-            {
-                AddAssignment(args.Activity);
+                action();
             }
         });
     }
 
     private void RefreshSnapshot()
     {
-        IWindowObservationActivityProjection? currentProjection = projection;
-        if (currentProjection is null)
-        {
-            activities.Clear();
-            UpdateState();
-            return;
-        }
-
-        IReadOnlyList<WindowObservationActivity> snapshot =
-            currentProjection.Snapshot;
-        activities.Clear();
-
-        foreach (WindowObservationActivity activity in snapshot
-            .TakeLast(MaximumDisplayedActivities)
-            .Reverse())
-        {
-            activities.Add(ObservationActivityPresentation.Create(activity));
-        }
-
-        UpdateState();
+        records.Clear();
+        records.AddRange(CollectRecords());
+        RefreshFilterOptions(force: false);
+        ApplyFilter();
     }
 
-    private void RefreshAssignmentSnapshot()
+    /// <summary>
+    /// Reads the journal when the shell has wired it, and otherwise projects
+    /// the observation and assignment stores so the view is never blank merely
+    /// because diagnostics have not been supplied.
+    /// </summary>
+    private IEnumerable<ActivityRecord> CollectRecords()
     {
-        IWindowAssignmentActivityProjection? currentProjection =
-            assignmentProjection;
-        if (currentProjection is null)
+        if (journal is not null)
         {
-            assignments.Clear();
-            UpdateState();
-            return;
+            return journal.Snapshot.TakeLast(MaximumDisplayedActivities);
         }
 
-        IReadOnlyList<WindowAssignmentActivity> snapshot =
-            currentProjection.Snapshot;
-        assignments.Clear();
+        Guid sessionId = Guid.Empty;
+        List<ActivityRecord> projected = [];
 
-        foreach (WindowAssignmentActivity activity in snapshot
-            .TakeLast(MaximumDisplayedActivities)
-            .Reverse())
+        if (observationProjection is not null)
         {
-            assignments.Add(AssignmentActivityPresentation.Create(activity));
+            projected.AddRange(
+                observationProjection.Snapshot.Select(
+                    activity => ActivityRecordFactory.FromObservation(
+                        activity,
+                        sessionId)));
         }
 
-        UpdateState();
-    }
-
-    private void AddActivity(WindowObservationActivity activity)
-    {
-        int existingIndex = FindActivityIndex(activity.EventSequence);
-        if (existingIndex >= 0)
+        if (assignmentProjection is not null)
         {
-            activities.RemoveAt(existingIndex);
-        }
-
-        activities.Insert(0, ObservationActivityPresentation.Create(activity));
-        while (activities.Count > MaximumDisplayedActivities)
-        {
-            activities.RemoveAt(activities.Count - 1);
-        }
-
-        UpdateState();
-    }
-
-    private void AddAssignment(WindowAssignmentActivity activity)
-    {
-        int existingIndex = FindAssignmentIndex(
-            activity.CorrelationId,
-            activity.WindowHandle);
-        if (existingIndex >= 0)
-        {
-            assignments.RemoveAt(existingIndex);
-        }
-
-        assignments.Insert(0, AssignmentActivityPresentation.Create(activity));
-        while (assignments.Count > MaximumDisplayedActivities)
-        {
-            assignments.RemoveAt(assignments.Count - 1);
-        }
-
-        UpdateState();
-    }
-
-    private int FindActivityIndex(long eventSequence)
-    {
-        for (int index = 0; index < activities.Count; index++)
-        {
-            if (activities[index].EventSequence == eventSequence)
+            foreach (WindowAssignmentActivity activity in
+                assignmentProjection.Snapshot)
             {
-                return index;
+                projected.AddRange(
+                    ActivityRecordFactory.FromAssignment(activity, sessionId));
             }
         }
 
-        return -1;
+        return projected
+            .OrderBy(static record => record.OccurredAt)
+            .TakeLast(MaximumDisplayedActivities);
     }
 
-    private int FindAssignmentIndex(Guid correlationId, nint windowHandle)
+    private void RefreshFilterOptions(bool force)
     {
-        for (int index = 0; index < assignments.Count; index++)
+        ActivityFilterOptions options = ActivityFilterOptions.From(records);
+        bool applicationsChanged =
+            force || !options.Applications.SequenceEqual(applicationOptions);
+        bool rulesChanged = force || !options.RuleIds.SequenceEqual(ruleOptions);
+
+        if (!applicationsChanged && !rulesChanged)
         {
-            AssignmentActivityPresentation candidate = assignments[index];
-            if (candidate.CorrelationId == correlationId &&
-                candidate.WindowHandle == windowHandle)
+            return;
+        }
+
+        isApplyingFilterOptions = true;
+        try
+        {
+            if (applicationsChanged)
             {
-                return index;
+                applicationOptions = options.Applications;
+                Repopulate(
+                    ApplicationFilter,
+                    "All applications",
+                    AllApplicationsTag,
+                    applicationOptions);
+            }
+
+            if (rulesChanged)
+            {
+                ruleOptions = options.RuleIds;
+                Repopulate(RuleFilter, "All rules", AllRulesTag, ruleOptions);
+            }
+        }
+        finally
+        {
+            isApplyingFilterOptions = false;
+        }
+    }
+
+    private static void Repopulate(
+        ComboBox target,
+        string allLabel,
+        string allTag,
+        ImmutableArray<string> values)
+    {
+        string? selectedTag = (target.SelectedItem as ComboBoxItem)?.Tag as string;
+        target.Items.Clear();
+        target.Items.Add(new ComboBoxItem { Content = allLabel, Tag = allTag });
+
+        foreach (string value in values)
+        {
+            target.Items.Add(new ComboBoxItem { Content = value, Tag = value });
+        }
+
+        int selectedIndex = 0;
+        if (selectedTag is not null)
+        {
+            for (int index = 0; index < target.Items.Count; index++)
+            {
+                if (target.Items[index] is ComboBoxItem item &&
+                    string.Equals(
+                        item.Tag as string,
+                        selectedTag,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedIndex = index;
+                    break;
+                }
             }
         }
 
-        return -1;
+        target.SelectedIndex = selectedIndex;
+    }
+
+    private ActivityFilter BuildFilter() =>
+        new()
+        {
+            Results = ReadResultFilter(),
+            Application = ReadTag(ApplicationFilter, AllApplicationsTag),
+            RuleId = ReadTag(RuleFilter, AllRulesTag),
+            Date = ReadDateFilter(),
+            SessionId = journal?.SessionId,
+        };
+
+    private ImmutableArray<ActivityResult> ReadResultFilter() =>
+        ReadTag(ResultFilter, "all") switch
+        {
+            "succeeded" => [ActivityResult.Succeeded],
+            "skipped" => [ActivityResult.Skipped],
+            "failed" => [ActivityResult.Failed],
+            _ => [],
+        };
+
+    private ActivityDateFilter ReadDateFilter() =>
+        ReadTag(DateFilter, "all") switch
+        {
+            "session" => ActivityDateFilter.CurrentSession,
+            "hour" => ActivityDateFilter.LastHour,
+            "today" => ActivityDateFilter.Today,
+            "week" => ActivityDateFilter.LastSevenDays,
+            _ => ActivityDateFilter.AllTime,
+        };
+
+    private static string? ReadTag(ComboBox source, string allTag)
+    {
+        string? tag = (source.SelectedItem as ComboBoxItem)?.Tag as string;
+        return string.Equals(tag, allTag, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : tag;
+    }
+
+    private void ApplyFilter()
+    {
+        ActivityFilter filter = BuildFilter();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        visible.Clear();
+        foreach (ActivityRecord record in filter
+            .Apply(records, now)
+            .Reverse())
+        {
+            visible.Add(ActivityRecordDisplay.Create(record));
+        }
+
+        UpdateState();
+    }
+
+    private void OnFilterChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (isApplyingFilterOptions || !IsLoaded)
+        {
+            return;
+        }
+
+        ApplyFilter();
+    }
+
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs args) =>
+        CopyEventButton.IsEnabled = ActivityList.SelectedItem is not null;
+
+    private void OnCopyEventClick(object sender, RoutedEventArgs args)
+    {
+        if (ActivityList.SelectedItem is not ActivityRecordDisplay selected)
+        {
+            return;
+        }
+
+        DataPackage package = new()
+        {
+            RequestedOperation = DataPackageOperation.Copy,
+        };
+        package.SetText(selected.CopyText);
+        Clipboard.SetContent(package);
+        ReportStatus(
+            InfoBarSeverity.Success,
+            "Event copied",
+            "The selected event was copied to the clipboard.");
+    }
+
+    private void OnClearActivityClick(object sender, RoutedEventArgs args)
+    {
+        // Only the application's own journal and rolling log files are removed.
+        diagnostics?.ClearLocalActivity();
+        records.Clear();
+        visible.Clear();
+        RefreshFilterOptions(force: true);
+        UpdateState();
+        ReportStatus(
+            InfoBarSeverity.Success,
+            "Local activity cleared",
+            "The recorded activity and DesktopShift's own log files were removed.");
+    }
+
+    private void OnOpenLogLocationClick(object sender, RoutedEventArgs args)
+    {
+        if (diagnostics is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string path = diagnostics.LogLocation.DirectoryPath;
+            _ = Directory.CreateDirectory(path);
+            using Process? shell = Process.Start(
+                new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            ReportStatus(
+                InfoBarSeverity.Error,
+                "The log location could not be opened",
+                exception.Message);
+        }
+    }
+
+    private async void OnExportBundleClick(object sender, RoutedEventArgs args)
+    {
+        if (diagnostics is null)
+        {
+            return;
+        }
+
+        ExportBundleButton.IsEnabled = false;
+        try
+        {
+            // The bundle is written and nothing more. It is not opened, sent,
+            // or shared; what happens to it next is the user's decision.
+            DiagnosticBundleSummary summary = await diagnostics
+                .ExportBundleToDefaultLocationAsync(lifetimeToken);
+            ReportStatus(
+                InfoBarSeverity.Success,
+                "Diagnostic bundle exported",
+                $"{summary.ActivityRecordCount} events and {summary.LogFileCount} log files were written to {summary.DisplayPath}.");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            ReportStatus(
+                InfoBarSeverity.Error,
+                "The diagnostic bundle could not be exported",
+                exception.Message);
+        }
+        finally
+        {
+            ExportBundleButton.IsEnabled = diagnostics is not null;
+        }
+    }
+
+    private void ReportStatus(
+        InfoBarSeverity severity,
+        string title,
+        string message)
+    {
+        StatusBar.Severity = severity;
+        StatusBar.Title = title;
+        StatusBar.Message = message;
+        StatusBar.IsOpen = true;
     }
 
     private void UpdateState()
     {
-        bool hasActivity = activities.Count > 0 || assignments.Count > 0;
-        EmptyState.Visibility = hasActivity ? Visibility.Collapsed : Visibility.Visible;
-        ActivityPanel.Visibility =
-            activities.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        AssignmentPanel.Visibility =
-            assignments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ActivityCount.Text = activities.Count == 1
-            ? "1 observation"
-            : $"{activities.Count} observations";
-        AssignmentCount.Text = assignments.Count == 1
-            ? "1 assignment"
-            : $"{assignments.Count} assignments";
+        bool hasVisible = visible.Count > 0;
+        EmptyState.Visibility = hasVisible ? Visibility.Collapsed : Visibility.Visible;
+        ActivityList.Visibility = hasVisible ? Visibility.Visible : Visibility.Collapsed;
+        EmptyStateMessage.Text = records.Count > 0
+            ? "No events match the current filters."
+            : "Decisions, moves, switches, and assignment results will appear here with privacy-safe window identity.";
+        ActivityCount.Text = visible.Count == 1
+            ? $"1 of {records.Count} events"
+            : $"{visible.Count} of {records.Count} events";
+        CopyEventButton.IsEnabled = ActivityList.SelectedItem is not null;
+        OpenLogLocationButton.IsEnabled = diagnostics is not null;
+        ExportBundleButton.IsEnabled = diagnostics is not null;
     }
 }

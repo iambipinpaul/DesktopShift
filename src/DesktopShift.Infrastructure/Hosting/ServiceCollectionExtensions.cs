@@ -2,12 +2,14 @@ using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Infrastructure.Appearance;
 using DesktopShift.Infrastructure.Assignments;
 using DesktopShift.Infrastructure.Configuration;
+using DesktopShift.Infrastructure.Diagnostics;
 using DesktopShift.Infrastructure.ManagedDesktops;
 using DesktopShift.Infrastructure.Observation;
 using Microsoft.Extensions.DependencyInjection;
@@ -142,6 +144,74 @@ public static class ServiceCollectionExtensions
             ServiceDescriptor.Singleton<
                 IHostedService,
                 WindowAssignmentReadinessHostedService>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the bounded activity journal, the rolling log, and the
+    /// user-initiated diagnostic actions the Activity view offers.
+    /// </summary>
+    /// <remarks>
+    /// The in-memory log store is the safe default, for the same reason the
+    /// in-memory startup registration is: it is what every test host gets, so
+    /// no test can write to the machine's real log directory. The packaged
+    /// application asks for the file-system store explicitly.
+    /// </remarks>
+    /// <param name="services">The collection to register into.</param>
+    /// <param name="useFileSystemLogStore">
+    /// <c>true</c> to write rolling logs to the application's own folder under
+    /// local application data.
+    /// </param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddDesktopShiftDiagnostics(
+        this IServiceCollection services,
+        bool useFileSystemLogStore = false)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<
+            IDiagnosticLogLocation,
+            LocalAppDataDiagnosticLogLocation>();
+        if (useFileSystemLogStore)
+        {
+            services.TryAddSingleton<
+                IDiagnosticLogStore,
+                FileSystemDiagnosticLogStore>();
+        }
+        else
+        {
+            services.TryAddSingleton<IDiagnosticLogStore>(
+                static _ => new InMemoryDiagnosticLogStore());
+        }
+
+        services.TryAddSingleton(
+            static _ => RollingDiagnosticLogOptions.Default);
+        services.TryAddSingleton(
+            static serviceProvider => new RollingDiagnosticLog(
+                serviceProvider.GetRequiredService<IDiagnosticLogStore>(),
+                serviceProvider.GetRequiredService<RollingDiagnosticLogOptions>()));
+        services.TryAddSingleton<IDiagnosticLogWriter>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<RollingDiagnosticLog>());
+        services.TryAddSingleton(
+            static serviceProvider => new BoundedActivityJournal(
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<IActivityJournal>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<BoundedActivityJournal>());
+        services.TryAddSingleton<IActivityJournalProjection>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<BoundedActivityJournal>());
+        services.TryAddSingleton<ActivityDiagnosticsRecorder>();
+        services.TryAddSingleton<DiagnosticsCoordinator>();
+        services.TryAddSingleton<IDiagnosticsCoordinator>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<DiagnosticsCoordinator>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                IHostedService,
+                DiagnosticActivityHostedService>());
 
         return services;
     }

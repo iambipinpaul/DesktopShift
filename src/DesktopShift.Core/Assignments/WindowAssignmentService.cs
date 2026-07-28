@@ -22,7 +22,12 @@ public sealed class WindowAssignmentService(
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        Guid correlationId = Guid.NewGuid();
+        // The observation already minted a correlation for this window event.
+        // Reusing it is what makes the decision, the move, the switch, and the
+        // result one readable story instead of four unrelated rows.
+        Guid correlationId = request.CorrelationId == Guid.Empty
+            ? Guid.NewGuid()
+            : request.CorrelationId;
         DateTimeOffset startedAtUtc = timeProvider.GetUtcNow();
         long startedTimestamp = timeProvider.GetTimestamp();
         bool isFirstForegroundActivation = false;
