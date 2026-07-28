@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DesktopShift.Core\DesktopShift.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\ManagedDesktopMappingPresentation.cs"
+      Link="Production\ManagedDesktopMappingPresentation.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\ManagedDesktopMappingPresentationProjection.cs"
+      Link="Production\ManagedDesktopMappingPresentationProjection.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="DesktopShift.App.Pages.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.Name="Overview page"
+    Background="Transparent">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="960"
+            Margin="32,28"
+            HorizontalAlignment="Left"
+            Spacing="20">
+            <StackPanel Spacing="5">
+                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Overview" />
+                <TextBlock Style="{StaticResource DesktopShift.PageSubtitleStyle}" Text="A calm home for your automatic desktop assignments." />
+            </StackPanel>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Your workspace, automatically organized" />
+                        <TextBlock
+                            x:Name="WorkspaceSummary"
+                            MaxWidth="600"
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
+                    </StackPanel>
+                    <Border
+                        Grid.Column="1"
+                        Padding="11,5"
+                        VerticalAlignment="Top"
+                        AutomationProperties.Name="Compatibility mode"
+                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                        CornerRadius="999">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Ellipse
+                                Width="7"
+                                Height="7"
+                                VerticalAlignment="Center"
+                                Fill="{ThemeResource DesktopShift.WarningBrush}" />
+                            <TextBlock
+                                x:Name="ModeStatus"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource DesktopShift.CardStyle}">
+                    <Grid ColumnSpacing="15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="EnabledRuleCount"
+                            MinWidth="42"
+                            AutomationProperties.Name="Enabled application rule count"
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="32"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Enabled rules" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Persisted application mappings" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource DesktopShift.CardStyle}">
+                    <Grid ColumnSpacing="15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ManagedDesktopCount"
+                            MinWidth="42"
+                            AutomationProperties.Name="Managed desktop count"
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="32"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Managed desktops" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Semantic workspace destinations" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border
+                x:Name="ManagedMappingCard"
+                AutomationProperties.LiveSetting="Polite"
+                Style="{StaticResource DesktopShift.CardStyle}"
+                Visibility="Collapsed">
+                <StackPanel Spacing="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Width="38"
+                            Height="38"
+                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                            CornerRadius="10">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                Glyph="&#xE7F4;" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock
+                                Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                Text="Managed desktop mapping" />
+                            <TextBlock
+                                x:Name="ManagedMappingSummary"
+                                TextWrapping="Wrap"
+                                Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="ManagedMappingOutcome"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}" />
+                    </Grid>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Padding="12,10"
+                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                            CornerRadius="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock
+                                    x:Name="MappedDesktopCount"
+                                    AutomationProperties.Name="Mapped managed desktop count"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource DesktopShift.AccentStrongBrush}" />
+                                <TextBlock
+                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                    Text="mapped" />
+                            </StackPanel>
+                        </Border>
+                        <Border
+                            Grid.Column="1"
+                            Padding="12,10"
+                            Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                            CornerRadius="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock
+                                    x:Name="MappingAttentionCount"
+                                    AutomationProperties.Name="Managed desktop mappings needing attention"
+                                    FontWeight="SemiBold" />
+                                <TextBlock
+                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                    Text="need attention" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <TextBlock
+                        x:Name="ManagedMappingProvider"
+                        Style="{StaticResource DesktopShift.CaptionStyle}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="13">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon
+                            FontSize="20"
+                            Foreground="{ThemeResource DesktopShift.WarningBrush}"
+                            Glyph="&#xE7BA;" />
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock x:Name="ProviderName" Style="{StaticResource DesktopShift.SectionTitleStyle}" />
+                            <TextBlock x:Name="BuildInfo" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="TestOutcome"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource DesktopShift.CaptionStyle}" />
+                    </Grid>
+                    <TextBlock x:Name="CompatibilityExplanation" Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
+                    <TextBlock x:Name="CapabilitySummary" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel HorizontalAlignment="Center" Spacing="8">
+                    <FontIcon Style="{StaticResource DesktopShift.EmptyStateIconStyle}" Glyph="&#xE9D9;" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                        Text="No assignment activity yet" />
+                    <TextBlock
+                        MaxWidth="520"
+                        HorizontalAlignment="Center"
+                        TextAlignment="Center"
+                        Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                        Text="Once window observation is available, assignment decisions and recoverable errors will be summarized here." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

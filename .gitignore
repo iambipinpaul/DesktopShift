@@ -1,0 +1,18 @@
+bin/
+obj/
+.vs/
+AppPackages/
+BundleArtifacts/
+Generated Files/
+TestResults/
+*.user
+*.suo
+*.pfx
+*.cer
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.msixupload
+*.wapproj.user
+

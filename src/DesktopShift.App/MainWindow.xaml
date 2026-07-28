@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="DesktopShift.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="DesktopShift">
+
+    <Grid x:Name="RootLayout" Background="{ThemeResource DesktopShift.WindowBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Grid.Row="0"
+            Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
+            AutomationProperties.Name="DesktopShift title bar">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="138" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel
+                Grid.Column="0"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="10">
+                <Border
+                    Width="24"
+                    Height="24"
+                    Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                    CornerRadius="7">
+                    <FontIcon
+                        FontSize="12"
+                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                        Glyph="&#xE8B7;" />
+                </Border>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontFamily="Segoe UI Variable Display"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                    Text="DesktopShift" />
+            </StackPanel>
+
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                FontFamily="Segoe UI Variable Text"
+                FontSize="11"
+                Foreground="{ThemeResource DesktopShift.TextSecondaryBrush}"
+                Text="WINDOW WORKSPACE COMPANION" />
+        </Grid>
+
+        <NavigationView
+            x:Name="ShellNavigation"
+            Grid.Row="1"
+            AlwaysShowHeader="False"
+            AutomationProperties.Name="Primary navigation"
+            Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
+            CompactModeThresholdWidth="720"
+            ExpandedModeThresholdWidth="1000"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="True"
+            IsSettingsVisible="False"
+            IsTitleBarAutoPaddingEnabled="False"
+            PaneDisplayMode="Left"
+            PaneTitle="Workspace"
+            SelectionChanged="OnNavigationSelectionChanged">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    x:Name="OverviewNavigationItem"
+                    AutomationProperties.Name="Overview"
+                    Content="Overview"
+                    IsSelected="True"
+                    Tag="overview">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.Name="Application Rules" Content="Rules" Tag="rules">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8EF;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.Name="Managed Desktops" Content="Desktops" Tag="desktops">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.Name="Assignment Activity" Content="Activity" Tag="activity">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem AutomationProperties.Name="Settings" Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.Name="About DesktopShift" Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <NavigationView.PaneFooter>
+                <StackPanel Margin="8,12,8,8" Spacing="7">
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="APPEARANCE" />
+                    <ComboBox
+                        x:Name="ThemeSelector"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.HelpText="Choose whether DesktopShift follows Windows or uses a fixed light or dark appearance."
+                        AutomationProperties.Name="Application theme"
+                        SelectionChanged="OnThemeSelectionChanged">
+                        <ComboBoxItem Content="Use system setting" Tag="System" />
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                        <ComboBoxItem Content="Dark" Tag="Dark" />
+                    </ComboBox>
+                </StackPanel>
+            </NavigationView.PaneFooter>
+
+            <Frame
+                x:Name="ContentFrame"
+                AutomationProperties.Name="Page content"
+                Background="{ThemeResource DesktopShift.WindowBackgroundBrush}" />
+        </NavigationView>
+    </Grid>
+</Window>

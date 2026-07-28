@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>DesktopShift.Windows.Tests</RootNamespace>
+    <AssemblyName>DesktopShift.Windows.Tests</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DesktopShift.Core\DesktopShift.Core.csproj" />
+    <ProjectReference Include="..\..\src\DesktopShift.Windows\DesktopShift.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None
+      Include="..\..\src\DesktopShift.NativeBridge\bin\x64\$(Configuration)\DesktopShift.NativeBridge.dll"
+      Link="DesktopShift.NativeBridge.dll"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+</Project>
