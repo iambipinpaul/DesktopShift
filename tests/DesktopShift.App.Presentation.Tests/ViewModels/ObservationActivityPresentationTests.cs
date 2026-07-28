@@ -18,17 +18,111 @@ public sealed class ObservationActivityPresentationTests
                 AppUserModelId: null,
                 "Chrome_WidgetWin_1"),
             ruleId: "browsers",
-            targetDesktopKey: "web");
+            targetDesktopKey: "web",
+            matchedOn: WindowMatchStrength.ProcessName);
 
         ObservationActivityPresentation presentation =
             ObservationActivityPresentation.Create(activity);
 
         Assert.AreEqual("Matched", presentation.Outcome);
-        Assert.AreEqual("Matched browsers to web", presentation.Decision);
+        Assert.AreEqual(
+            "Matched browsers to web by process name",
+            presentation.Decision);
+        Assert.AreEqual("process name", presentation.MatchSignal);
         Assert.AreEqual("msedge.exe", presentation.ProcessName);
         Assert.Contains(
             "Window class: Chrome_WidgetWin_1",
             presentation.IdentityDetails);
+    }
+
+    [TestMethod]
+    public void Create_TerminalMatchedOnPackageFamilyNameNamesTheStableIdentity()
+    {
+        WindowObservationActivity activity = CreateActivity(
+            WindowObservationOutcome.Matched,
+            WindowSkipReason.None,
+            TerminalIdentity,
+            ruleId: "terminals",
+            targetDesktopKey: "Terminal",
+            matchedOn: WindowMatchStrength.PackageFamilyName);
+
+        ObservationActivityPresentation presentation =
+            ObservationActivityPresentation.Create(activity);
+
+        Assert.AreEqual(
+            "Matched terminals to Terminal by package family name",
+            presentation.Decision);
+        Assert.AreEqual("package family name", presentation.MatchSignal);
+        Assert.Contains(
+            "Match signal: package family name",
+            presentation.AutomationName);
+    }
+
+    [TestMethod]
+    public void Create_TerminalMatchedOnProcessNameReadsWeakerThanPackageFamily()
+    {
+        WindowObservationActivity packaged = CreateActivity(
+            WindowObservationOutcome.Matched,
+            WindowSkipReason.None,
+            TerminalIdentity,
+            ruleId: "terminals",
+            targetDesktopKey: "Terminal",
+            matchedOn: WindowMatchStrength.PackageFamilyName);
+        WindowObservationActivity processOnly = CreateActivity(
+            WindowObservationOutcome.Matched,
+            WindowSkipReason.None,
+            TerminalIdentity,
+            ruleId: "terminals",
+            targetDesktopKey: "Terminal",
+            matchedOn: WindowMatchStrength.ProcessName);
+
+        ObservationActivityPresentation packagedPresentation =
+            ObservationActivityPresentation.Create(packaged);
+        ObservationActivityPresentation processPresentation =
+            ObservationActivityPresentation.Create(processOnly);
+
+        Assert.AreEqual("process name", processPresentation.MatchSignal);
+        Assert.AreEqual(
+            "Matched terminals to Terminal by process name",
+            processPresentation.Decision);
+        Assert.AreNotEqual(
+            packagedPresentation.MatchSignal,
+            processPresentation.MatchSignal);
+        Assert.AreNotEqual(
+            packagedPresentation.Decision,
+            processPresentation.Decision);
+    }
+
+    [TestMethod]
+    public void Create_MatchedWithoutRecordedSignalKeepsTheOriginalDecision()
+    {
+        WindowObservationActivity activity = CreateActivity(
+            WindowObservationOutcome.Matched,
+            WindowSkipReason.None,
+            TerminalIdentity,
+            ruleId: "terminals",
+            targetDesktopKey: "Terminal");
+
+        ObservationActivityPresentation presentation =
+            ObservationActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Matched terminals to Terminal", presentation.Decision);
+        Assert.AreEqual("No match signal recorded", presentation.MatchSignal);
+    }
+
+    [TestMethod]
+    public void Create_SkippedSurfaceHasNoMatchSignal()
+    {
+        WindowObservationActivity activity = CreateActivity(
+            WindowObservationOutcome.Skipped,
+            WindowSkipReason.NoMatchingRule,
+            TerminalIdentity);
+
+        ObservationActivityPresentation presentation =
+            ObservationActivityPresentation.Create(activity);
+
+        Assert.AreEqual("No match signal recorded", presentation.MatchSignal);
+        Assert.AreEqual("Skipped: No Matching Rule", presentation.Decision);
     }
 
     [TestMethod]
@@ -79,12 +173,20 @@ public sealed class ObservationActivityPresentationTests
         Assert.AreEqual(string.Empty, presentation.Diagnostic);
     }
 
+    private static WindowSafeIdentity TerminalIdentity =>
+        new(
+            "WindowsTerminal.exe",
+            "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+            "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+            "CASCADIA_HOSTING_WINDOW_CLASS");
+
     private static WindowObservationActivity CreateActivity(
         WindowObservationOutcome outcome,
         WindowSkipReason skipReason,
         WindowSafeIdentity identity,
         string? ruleId = null,
-        string? targetDesktopKey = null) =>
+        string? targetDesktopKey = null,
+        WindowMatchStrength? matchedOn = null) =>
         new(
             DateTimeOffset.UtcNow,
             EventSequence: 7,
@@ -94,5 +196,6 @@ public sealed class ObservationActivityPresentationTests
             skipReason,
             ruleId,
             targetDesktopKey,
-            identity);
+            identity,
+            MatchedOn: matchedOn);
 }

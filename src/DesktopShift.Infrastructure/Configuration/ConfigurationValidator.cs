@@ -102,16 +102,35 @@ internal static class ConfigurationValidator
                     rule.Id));
             }
 
-            if (rule.ProcessNames.IsDefaultOrEmpty ||
-                rule.ProcessNames.Any(string.IsNullOrWhiteSpace))
+            // A rule may be identified by packaged identity alone, so no single
+            // list is required. At least one of them must carry a usable value.
+            if (!HasIdentity(rule.ProcessNames) &&
+                !HasIdentity(rule.PackageFamilyNames) &&
+                !HasIdentity(rule.AppUserModelIds))
             {
                 issues.Add(new ConfigurationValidationIssue(
-                    ConfigurationValidationCode.MissingProcessName,
-                    $"Application Rule '{rule.Id}' must contain at least one non-empty process name.",
-                    $"{path}.processNames",
+                    ConfigurationValidationCode.MissingApplicationIdentity,
+                    $"Application Rule '{rule.Id}' must contain at least one process name, package family name, or AppUserModelId.",
+                    path,
                     ConfigurationEntryKind.ApplicationRule,
                     rule.Id));
             }
+
+            AddBlankIdentityIssue(
+                issues,
+                rule.ProcessNames,
+                $"{path}.processNames",
+                rule.Id);
+            AddBlankIdentityIssue(
+                issues,
+                rule.PackageFamilyNames,
+                $"{path}.packageFamilyNames",
+                rule.Id);
+            AddBlankIdentityIssue(
+                issues,
+                rule.AppUserModelIds,
+                $"{path}.appUserModelIds",
+                rule.Id);
 
             if (rule.Triggers.IsDefaultOrEmpty)
             {
@@ -125,6 +144,33 @@ internal static class ConfigurationValidator
         }
 
         return issues.ToImmutable();
+    }
+
+    private static bool HasIdentity(ImmutableArray<string> identities)
+    {
+        return !identities.IsDefaultOrEmpty &&
+            identities.Any(static identity =>
+                !string.IsNullOrWhiteSpace(identity));
+    }
+
+    private static void AddBlankIdentityIssue(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        ImmutableArray<string> identities,
+        string path,
+        string ruleId)
+    {
+        if (identities.IsDefaultOrEmpty ||
+            !identities.Any(string.IsNullOrWhiteSpace))
+        {
+            return;
+        }
+
+        issues.Add(new ConfigurationValidationIssue(
+            ConfigurationValidationCode.MissingApplicationIdentity,
+            $"Application Rule '{ruleId}' contains an empty identity at '{path}'.",
+            path,
+            ConfigurationEntryKind.ApplicationRule,
+            ruleId));
     }
 
     private static ConfigurationValidationIssue RequiredValue(

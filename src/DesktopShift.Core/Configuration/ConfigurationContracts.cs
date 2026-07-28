@@ -83,7 +83,7 @@ public enum ConfigurationValidationCode
     DuplicateDesktopSemanticKey,
     DuplicateRuleId,
     UnknownDesktopReference,
-    MissingProcessName,
+    MissingApplicationIdentity,
     MissingTrigger,
     CandidateUnreadable,
     ActiveSnapshotUnreadable,

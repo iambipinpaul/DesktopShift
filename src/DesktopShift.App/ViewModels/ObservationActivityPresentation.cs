@@ -12,11 +12,14 @@ public sealed record ObservationActivityPresentation(
     string Trigger,
     string Rule,
     string TargetDesktop,
+    string MatchSignal,
     string ProcessName,
     string IdentityDetails,
     string Diagnostic,
     string AutomationName)
 {
+    private const string NoMatchSignal = "No match signal recorded";
+
     public static ObservationActivityPresentation Create(
         WindowObservationActivity activity)
     {
@@ -28,9 +31,15 @@ public sealed record ObservationActivityPresentation(
         string targetDesktop = ValueOrFallback(
             activity.TargetDesktopKey,
             "No desktop assigned");
+        string? signal = isMatched
+            ? DescribeMatchSignal(activity.MatchedOn)
+            : null;
+        string matchSignal = signal ?? NoMatchSignal;
         string skipReason = FormatEnum(activity.SkipReason);
         string decision = isMatched
-            ? $"Matched {rule} to {targetDesktop}"
+            ? signal is null
+                ? $"Matched {rule} to {targetDesktop}"
+                : $"Matched {rule} to {targetDesktop} by {signal}"
             : $"Skipped: {skipReason}";
         string trigger = FormatEnum(activity.Trigger);
         string occurredAt = activity.OccurredAt
@@ -45,7 +54,8 @@ public sealed record ObservationActivityPresentation(
             : string.Empty;
         string automationName =
             $"{outcome}. {decision}. Trigger: {trigger}. Process: {processName}. " +
-            $"Rule: {rule}. Target desktop: {targetDesktop}. {identityDetails} {diagnostic}";
+            $"Rule: {rule}. Target desktop: {targetDesktop}. " +
+            $"Match signal: {matchSignal}. {identityDetails} {diagnostic}";
 
         return new ObservationActivityPresentation(
             activity.EventSequence,
@@ -55,11 +65,27 @@ public sealed record ObservationActivityPresentation(
             trigger,
             rule,
             targetDesktop,
+            matchSignal,
             processName,
             identityDetails,
             diagnostic,
             automationName.Trim());
     }
+
+    // The generic enum splitter renders AppUserModelId as "App User Model Id",
+    // so the signal names are spelled out explicitly instead.
+    private static string? DescribeMatchSignal(WindowMatchStrength? matchedOn) =>
+        matchedOn switch
+        {
+            WindowMatchStrength.PackageFamilyName => "package family name",
+            WindowMatchStrength.AppUserModelId => "app ID",
+            WindowMatchStrength.ExecutablePath => "executable path",
+            WindowMatchStrength.ProcessName => "process name",
+            WindowMatchStrength.WindowClass => "window class",
+            WindowMatchStrength.Title => "window title",
+            WindowMatchStrength.CommandLine => "command line",
+            _ => null,
+        };
 
     private static string FormatSafeIdentity(WindowSafeIdentity? identity)
     {

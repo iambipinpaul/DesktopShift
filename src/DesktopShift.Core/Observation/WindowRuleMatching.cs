@@ -233,6 +233,9 @@ public sealed class WindowRuleMatcher
         };
 }
 
+/// <summary>
+/// Projects the configured application rules onto observation rules.
+/// </summary>
 public sealed class ConfigurationWindowRuleSource : IWindowRuleSource
 {
     private readonly Func<ConfigurationDocument> getConfiguration;
@@ -244,6 +247,13 @@ public sealed class ConfigurationWindowRuleSource : IWindowRuleSource
         this.getConfiguration = getConfiguration;
     }
 
+    /// <summary>
+    /// Carries every identity a configured rule declares, so a rule that names
+    /// a packaged identity is ranked above one that only names a process. An
+    /// omitted collection is empty, and the matcher treats an empty or default
+    /// collection as "not declared".
+    /// </summary>
+    /// <returns>The configured rules in document order.</returns>
     public IReadOnlyList<WindowObservationRule> GetRules() =>
         getConfiguration()
             .ApplicationRules
@@ -255,7 +265,14 @@ public sealed class ConfigurationWindowRuleSource : IWindowRuleSource
                     rule.TargetDesktopKey,
                     rule.Triggers,
                     rule.SwitchPolicy,
-                    WindowMatchCriteria.ForProcessNames(rule.ProcessNames),
+                    new WindowMatchCriteria(
+                        rule.PackageFamilyNames,
+                        rule.AppUserModelIds,
+                        ExecutablePaths: [],
+                        rule.ProcessNames,
+                        WindowClasses: [],
+                        TitleContains: [],
+                        CommandLineContains: []),
                     index))
             .ToArray();
 }

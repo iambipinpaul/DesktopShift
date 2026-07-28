@@ -338,7 +338,8 @@ public sealed class WindowObservationProcessor : IDisposable
             AssignmentDuration: assignment?.Duration,
             TargetRuntimeDesktopId: assignment?.TargetDesktopId,
             AssignmentError: assignment?.Error,
-            Assignment: assignment);
+            Assignment: assignment,
+            MatchedOn: match.Strength);
         await activitySink
             .RecordAsync(activity, cancellationToken)
             .ConfigureAwait(false);

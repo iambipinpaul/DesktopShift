@@ -8,6 +8,38 @@ namespace DesktopShift.Core.Tests.Configuration;
 [TestClass]
 public sealed class ConfigurationAcceptanceTests
 {
+    // A schema version 1 document written before packageFamilyNames and
+    // appUserModelIds existed. Both members are absent on purpose.
+    private const string LegacyDocumentJson = """
+        {
+          "schemaVersion": 1,
+          "managedDesktops": [
+            {
+              "semanticKey": "terminal",
+              "displayName": "Terminal",
+              "preferredOrder": 1,
+              "recreateWhenMissing": true
+            }
+          ],
+          "applicationRules": [
+            {
+              "id": "windows-terminal",
+              "displayName": "Windows Terminal",
+              "isEnabled": true,
+              "targetDesktopKey": "terminal",
+              "processNames": [ "WindowsTerminal.exe" ],
+              "triggers": [ "windowCreated", "foregroundActivated" ],
+              "switchPolicy": "onForegroundActivation"
+            }
+          ],
+          "behavior": {
+            "startWithWindows": true,
+            "startMinimized": true,
+            "closeToTray": true
+          }
+        }
+        """;
+
     [TestMethod]
     public void Defaults_ContainTheExactInitialMappingsAndBehavior()
     {
@@ -42,7 +74,15 @@ public sealed class ConfigurationAcceptanceTests
             "windows-terminal",
             "Windows Terminal",
             "terminal",
-            ["WindowsTerminal.exe", "wt.exe"]);
+            ["WindowsTerminal.exe"],
+            [
+                "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+                "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
+            ],
+            [
+                "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+                "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
+            ]);
         AssertRule(
             defaults.ApplicationRules[3],
             "remote-desktop",
@@ -53,6 +93,218 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsTrue(defaults.Behavior.StartWithWindows);
         Assert.IsTrue(defaults.Behavior.StartMinimized);
         Assert.IsTrue(defaults.Behavior.CloseToTray);
+    }
+
+    [TestMethod]
+    [DataRow("Microsoft.WindowsTerminal_8wekyb3d8bbwe")]
+    [DataRow("Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe")]
+    public void DefaultTerminalRule_IsIdentifiedByPackagedIdentity(
+        string packageFamilyName)
+    {
+        ApplicationRule rule = GetDefaultRule("windows-terminal");
+
+        Assert.Contains(packageFamilyName, rule.PackageFamilyNames);
+        Assert.Contains($"{packageFamilyName}!App", rule.AppUserModelIds);
+    }
+
+    [TestMethod]
+    public void DefaultTerminalRule_TreatsTheLauncherStubAsALaunchSignalOnly()
+    {
+        ApplicationRule rule = GetDefaultRule("windows-terminal");
+
+        Assert.DoesNotContain("wt.exe", rule.ProcessNames);
+        Assert.HasCount(1, rule.ProcessNames);
+        Assert.Contains("WindowsTerminal.exe", rule.ProcessNames);
+    }
+
+    [TestMethod]
+    public async Task PackagedIdentities_SurviveAPersistAndReloadRoundTrip()
+    {
+        using ConfigurationTestDirectory storage = new();
+
+        await using (ServiceProvider provider = CreateProvider(storage))
+        {
+            IConfigurationService service =
+                provider.GetRequiredService<IConfigurationService>();
+            Assert.IsTrue((await service.SaveCandidateAsync(
+                ConfigurationDefaults.Create())).Accepted);
+        }
+
+        string json = await File.ReadAllTextAsync(
+            Path.Combine(storage.DirectoryPath, "configuration.json"));
+        Assert.Contains(
+            "\"packageFamilyNames\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+            json,
+            StringComparison.Ordinal);
+
+        await using ServiceProvider reloadedProvider = CreateProvider(storage);
+        ConfigurationState reloaded = await reloadedProvider
+            .GetRequiredService<IConfigurationService>()
+            .LoadAsync();
+
+        Assert.IsEmpty(reloaded.Issues);
+        ApplicationRule terminal = reloaded.Active!.ApplicationRules.Single(
+            static rule => rule.Id == "windows-terminal");
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+                "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
+            },
+            terminal.PackageFamilyNames.ToArray());
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+                "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
+            },
+            terminal.AppUserModelIds.ToArray());
+        ApplicationRule vscode = reloaded.Active.ApplicationRules.Single(
+            static rule => rule.Id == "vscode");
+        Assert.IsEmpty(vscode.PackageFamilyNames);
+        Assert.IsEmpty(vscode.AppUserModelIds);
+    }
+
+    [TestMethod]
+    public async Task ExistingDocumentWithoutPackagedIdentities_StillLoads()
+    {
+        using ConfigurationTestDirectory storage = new();
+        Directory.CreateDirectory(storage.DirectoryPath);
+        await File.WriteAllTextAsync(
+            Path.Combine(storage.DirectoryPath, "configuration.json"),
+            LegacyDocumentJson);
+
+        await using ServiceProvider provider = CreateProvider(storage);
+        IConfigurationService service =
+            provider.GetRequiredService<IConfigurationService>();
+        ConfigurationState state = await service.LoadAsync();
+
+        Assert.IsEmpty(state.Issues);
+        Assert.IsNotNull(state.Active);
+        ApplicationRule rule = state.Active.ApplicationRules[0];
+        Assert.AreEqual("windows-terminal", rule.Id);
+        CollectionAssert.AreEqual(
+            new[] { "WindowsTerminal.exe" },
+            rule.ProcessNames.ToArray());
+        Assert.IsEmpty(rule.PackageFamilyNames);
+        Assert.IsEmpty(rule.AppUserModelIds);
+
+        // The absent collections must read as empty, not as default arrays: a
+        // default array cannot be enumerated and would fail to serialize.
+        Assert.IsTrue(
+            (await service.SaveCandidateAsync(state.Candidate)).Accepted);
+    }
+
+    [TestMethod]
+    public async Task RuleIdentifiedOnlyByPackageFamilyName_IsAccepted()
+    {
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        IConfigurationService service =
+            provider.GetRequiredService<IConfigurationService>();
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        ConfigurationDocument packagedOnly = defaults with
+        {
+            ApplicationRules = defaults.ApplicationRules.SetItem(
+                2,
+                defaults.ApplicationRules[2] with
+                {
+                    ProcessNames = [],
+                    AppUserModelIds = [],
+                }),
+        };
+
+        ConfigurationSaveResult result =
+            await service.SaveCandidateAsync(packagedOnly);
+
+        Assert.IsTrue(result.Accepted);
+        Assert.IsEmpty(result.State.Issues);
+        Assert.IsEmpty(result.State.Active!.ApplicationRules[2].ProcessNames);
+        Assert.HasCount(
+            2,
+            result.State.Active.ApplicationRules[2].PackageFamilyNames);
+    }
+
+    [TestMethod]
+    public async Task RuleWithoutAnyIdentity_IsRejected()
+    {
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        IConfigurationService service =
+            provider.GetRequiredService<IConfigurationService>();
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        ConfigurationDocument unidentified = defaults with
+        {
+            ApplicationRules = defaults.ApplicationRules.SetItem(
+                2,
+                defaults.ApplicationRules[2] with
+                {
+                    ProcessNames = [],
+                    PackageFamilyNames = [],
+                    AppUserModelIds = [],
+                }),
+        };
+
+        ConfigurationSaveResult result =
+            await service.SaveCandidateAsync(unidentified);
+
+        Assert.IsFalse(result.Accepted);
+        Assert.IsNull(result.State.Active);
+        AssertHasIssue(
+            result.State.Issues,
+            ConfigurationValidationCode.MissingApplicationIdentity,
+            "windows-terminal");
+    }
+
+    [TestMethod]
+    [DataRow("processNames")]
+    [DataRow("packageFamilyNames")]
+    [DataRow("appUserModelIds")]
+    public async Task RuleWithABlankIdentityEntry_IsRejectedAtThatList(
+        string listName)
+    {
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        IConfigurationService service =
+            provider.GetRequiredService<IConfigurationService>();
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        ApplicationRule original = defaults.ApplicationRules[2];
+        ApplicationRule blanked = listName switch
+        {
+            "processNames" => original with
+            {
+                ProcessNames = original.ProcessNames.Add("   "),
+            },
+            "packageFamilyNames" => original with
+            {
+                PackageFamilyNames = original.PackageFamilyNames.Add("   "),
+            },
+            _ => original with
+            {
+                AppUserModelIds = original.AppUserModelIds.Add("   "),
+            },
+        };
+
+        ConfigurationSaveResult result = await service.SaveCandidateAsync(
+            defaults with
+            {
+                ApplicationRules =
+                    defaults.ApplicationRules.SetItem(2, blanked),
+            });
+
+        Assert.IsFalse(result.Accepted);
+        Assert.IsTrue(
+            result.State.Issues.Any(issue =>
+                issue.Code ==
+                    ConfigurationValidationCode.MissingApplicationIdentity &&
+                issue.Path == $"$.applicationRules[2].{listName}"),
+            $"Expected a missing identity issue at '$.applicationRules[2].{listName}'.");
     }
 
     [TestMethod]
@@ -344,6 +596,12 @@ public sealed class ConfigurationAcceptanceTests
             service.CurrentState.Active!.ManagedDesktops[0].DisplayName);
     }
 
+    private static ApplicationRule GetDefaultRule(string id)
+    {
+        return ConfigurationDefaults.Create().ApplicationRules.Single(
+            rule => rule.Id == id);
+    }
+
     private static ServiceProvider CreateProvider(
         IConfigurationStoragePath storagePath,
         TimeProvider? timeProvider = null)
@@ -364,13 +622,21 @@ public sealed class ConfigurationAcceptanceTests
         string id,
         string displayName,
         string targetDesktopKey,
-        string[] processNames)
+        string[] processNames,
+        string[]? packageFamilyNames = null,
+        string[]? appUserModelIds = null)
     {
         Assert.AreEqual(id, rule.Id);
         Assert.AreEqual(displayName, rule.DisplayName);
         Assert.IsTrue(rule.IsEnabled);
         Assert.AreEqual(targetDesktopKey, rule.TargetDesktopKey);
         CollectionAssert.AreEqual(processNames, rule.ProcessNames.ToArray());
+        CollectionAssert.AreEqual(
+            packageFamilyNames ?? [],
+            rule.PackageFamilyNames.ToArray());
+        CollectionAssert.AreEqual(
+            appUserModelIds ?? [],
+            rule.AppUserModelIds.ToArray());
         CollectionAssert.AreEqual(
             new[]
             {

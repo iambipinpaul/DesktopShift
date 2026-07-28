@@ -4,6 +4,9 @@ namespace DesktopShift.Core.Configuration;
 
 public static class ConfigurationDefaults
 {
+    // Still version 1: packageFamilyNames and appUserModelIds are optional
+    // trailing members, so a document written before they existed deserializes
+    // with them absent and they read as empty.
     public const int CurrentSchemaVersion = 1;
 
     private static readonly ImmutableArray<ApplicationRuleTrigger> DefaultTriggers =
@@ -40,7 +43,20 @@ public static class ConfigurationDefaults
                     "windows-terminal",
                     "Windows Terminal",
                     "terminal",
-                    ["WindowsTerminal.exe", "wt.exe"]),
+                    // wt.exe is a launch signal only. It forwards its command
+                    // line to the already running WindowsTerminal.exe host and
+                    // exits, so it never owns the window it opens.
+                    ["WindowsTerminal.exe"],
+                    packageFamilyNames:
+                    [
+                        "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+                        "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
+                    ],
+                    appUserModelIds:
+                    [
+                        "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+                        "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
+                    ]),
                 CreateRule(
                     "remote-desktop",
                     "Remote Desktop Connection",
@@ -57,7 +73,9 @@ public static class ConfigurationDefaults
         string id,
         string displayName,
         string targetDesktopKey,
-        ImmutableArray<string> processNames)
+        ImmutableArray<string> processNames,
+        ImmutableArray<string> packageFamilyNames = default,
+        ImmutableArray<string> appUserModelIds = default)
     {
         return new ApplicationRule(
             id,
@@ -66,6 +84,8 @@ public static class ConfigurationDefaults
             targetDesktopKey,
             processNames,
             DefaultTriggers,
-            DesktopSwitchPolicy.OnForegroundActivation);
+            DesktopSwitchPolicy.OnForegroundActivation,
+            packageFamilyNames,
+            appUserModelIds);
     }
 }

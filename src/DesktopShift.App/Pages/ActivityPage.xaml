@@ -207,6 +207,7 @@
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <StackPanel Spacing="3">
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Trigger" />
@@ -223,6 +224,10 @@
                                                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
                                                     <TextBlock Text="{Binding TargetDesktop}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="2" Spacing="3">
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Matched on" />
+                                                    <TextBlock Text="{Binding MatchSignal}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Grid>
                                             <TextBlock
