@@ -9,7 +9,7 @@ public static class ConfigurationDefaults
     // they existed deserializes with them absent and they read as empty.
     public const int CurrentSchemaVersion = 1;
 
-    private static readonly ImmutableArray<ApplicationRuleTrigger> DefaultTriggers =
+    private static readonly ImmutableArray<ApplicationRuleTrigger> AllTriggers =
     [
         ApplicationRuleTrigger.WindowCreated,
         ApplicationRuleTrigger.WindowShown,
@@ -17,6 +17,14 @@ public static class ConfigurationDefaults
         ApplicationRuleTrigger.StartupReconciliation,
         ApplicationRuleTrigger.ManualReassignment,
     ];
+
+    /// <summary>
+    /// Every trigger, in the order the editor and the rule summaries list them.
+    /// It is also what the starter rules declare, so a rule created in the UI
+    /// behaves like the ones shipped with the application until it is narrowed.
+    /// </summary>
+    public static ImmutableArray<ApplicationRuleTrigger> DefaultTriggers =>
+        AllTriggers;
 
     public static ConfigurationDocument Create()
     {
@@ -107,7 +115,7 @@ public static class ConfigurationDefaults
             IsEnabled: true,
             targetDesktopKey,
             processNames,
-            DefaultTriggers,
+            AllTriggers,
             DesktopSwitchPolicy.OnForegroundActivation,
             packageFamilyNames,
             appUserModelIds,

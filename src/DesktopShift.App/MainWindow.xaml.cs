@@ -4,12 +4,14 @@ using System.Collections.Immutable;
 using System.Linq;
 using DesktopShift.App.FirstRun;
 using DesktopShift.App.Pages;
+using DesktopShift.App.Rules;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core;
 using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Navigation;
@@ -42,10 +44,13 @@ public sealed partial class MainWindow : Window
     private readonly IWindowObservationActivityProjection _activityProjection;
     private readonly IConfigurationService _configurationService;
     private readonly IManagedDesktopReconciliationService _managedDesktopReconciliationService;
+    private readonly IManagedDesktopMaintenanceService _managedDesktopMaintenanceService;
     private readonly IWindowAssignmentActivityProjection _assignmentActivityProjection;
     private readonly IWindowReassignmentService _windowReassignmentService;
     private readonly BehaviorSettingsCommand _behaviorSettingsCommand;
     private readonly IStartupRegistration _startupRegistration;
+    private readonly IDiagnosticsCoordinator _diagnosticsCoordinator;
+    private readonly RulesPageServices _rulesPageServices;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private FirstRunState? _firstRunState;
     private bool _isApplyingTheme;
@@ -60,9 +65,14 @@ public sealed partial class MainWindow : Window
         IWindowObservationActivityProjection activityProjection,
         IConfigurationService configurationService,
         IManagedDesktopReconciliationService managedDesktopReconciliationService,
+        IManagedDesktopMaintenanceService managedDesktopMaintenanceService,
         IWindowAssignmentActivityProjection assignmentActivityProjection,
         IWindowReassignmentService windowReassignmentService,
-        IStartupRegistration startupRegistration)
+        IStartupRegistration startupRegistration,
+        IDiagnosticsCoordinator diagnosticsCoordinator,
+        IRunningApplicationInventory runningApplicationInventory,
+        IApplicationIconReader applicationIconReader,
+        TimeProvider timeProvider)
     {
         _themePreferenceService = themePreferenceService ?? throw new ArgumentNullException(nameof(themePreferenceService));
         _firstRunService = firstRunService ?? throw new ArgumentNullException(nameof(firstRunService));
@@ -78,6 +88,9 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService =
             managedDesktopReconciliationService ??
             throw new ArgumentNullException(nameof(managedDesktopReconciliationService));
+        _managedDesktopMaintenanceService =
+            managedDesktopMaintenanceService ??
+            throw new ArgumentNullException(nameof(managedDesktopMaintenanceService));
         _assignmentActivityProjection =
             assignmentActivityProjection ??
             throw new ArgumentNullException(nameof(assignmentActivityProjection));
@@ -86,9 +99,21 @@ public sealed partial class MainWindow : Window
             throw new ArgumentNullException(nameof(windowReassignmentService));
         _startupRegistration =
             startupRegistration ?? throw new ArgumentNullException(nameof(startupRegistration));
+        _diagnosticsCoordinator =
+            diagnosticsCoordinator ??
+            throw new ArgumentNullException(nameof(diagnosticsCoordinator));
         _behaviorSettingsCommand = new BehaviorSettingsCommand(
             _configurationService,
             _startupRegistration);
+        _rulesPageServices = new RulesPageServices(
+            _configurationService,
+            _activityProjection,
+            runningApplicationInventory ??
+                throw new ArgumentNullException(nameof(runningApplicationInventory)),
+            applicationIconReader ??
+                throw new ArgumentNullException(nameof(applicationIconReader)),
+            _windowReassignmentService,
+            timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
 
         InitializeComponent();
 
@@ -463,7 +488,7 @@ public sealed partial class MainWindow : Window
         }
         else if (ContentFrame.Content is RulesPage rulesPage)
         {
-            rulesPage.Update(CreateRulePresentations());
+            rulesPage.Update(_rulesPageServices, _lifetimeCancellation.Token);
         }
         else if (ContentFrame.Content is DesktopsPage desktopsPage)
         {
@@ -471,31 +496,21 @@ public sealed partial class MainWindow : Window
                 _desktopTopologyProvider,
                 _compatibilityCoordinator.Current.Provider,
                 _lifetimeCancellation.Token);
+            desktopsPage.UpdateMaintenance(
+                _managedDesktopMaintenanceService,
+                _lifetimeCancellation.Token);
             desktopsPage.UpdateMappings(managedDesktopMappings);
         }
         else if (ContentFrame.Content is ActivityPage activityPage)
         {
+            activityPage.UpdateDiagnostics(
+                _diagnosticsCoordinator,
+                _lifetimeCancellation.Token);
             activityPage.Update(_activityProjection);
             activityPage.UpdateAssignments(_assignmentActivityProjection);
         }
     }
 
-    private IReadOnlyList<RulePresentation> CreateRulePresentations()
-    {
-        if (_firstRunState?.IsCompleted != true)
-        {
-            return [];
-        }
-
-        return _firstRunState.Candidate.ApplicationRules
-            .Select(rule =>
-                new RulePresentation(
-                    rule.DisplayName,
-                    rule.IsEnabled ? "Enabled" : "Disabled",
-                    $"Managed desktop: {rule.TargetDesktopKey}",
-                    $"Executables: {string.Join(", ", rule.ProcessNames)}"))
-            .ToArray();
-    }
 
     private static CompatibilityPresentation CreateCompatibilityPresentation(
         CompatibilityStatus status)

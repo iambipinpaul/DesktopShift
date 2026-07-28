@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="DesktopShift.App.Rules.RuleEditorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:config="using:DesktopShift.Core.Configuration"
+    xmlns:rules="using:DesktopShift.App.Rules"
+    MinWidth="740"
+    MaxWidth="880"
+    AutomationProperties.Name="Application rule editor"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    PrimaryButtonClick="OnPrimaryButtonClick"
+    PrimaryButtonText="Save rule">
+
+    <ScrollViewer MaxHeight="640" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="16">
+            <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="{x:Bind ViewModel.Title}" />
+
+            <InfoBar
+                AutomationProperties.Name="Rule validation issues"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasValidationIssues, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ValidationSummary, Mode=OneWay}"
+                Severity="Error"
+                Title="This rule cannot be saved yet" />
+
+            <InfoBar
+                AutomationProperties.Name="Rule save failure"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasSaveError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.SaveError, Mode=OneWay}"
+                Severity="Error"
+                Title="The rule was not saved" />
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Identify the application" />
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="Choose a running application, browse for its executable, or type the identities by hand below. A packaged identity is stronger than a process name, which any application can share." />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="Running applications"
+                            Header="Running applications"
+                            ItemsSource="{x:Bind ViewModel.RunningApplications}"
+                            SelectedIndex="{x:Bind ViewModel.SelectedRunningApplicationIndex, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="config:RunningApplicationCandidate">
+                                    <StackPanel Padding="0,4" Spacing="2">
+                                        <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{x:Bind DisplayName}" />
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind Summary}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button
+                            Grid.Column="1"
+                            VerticalAlignment="Bottom"
+                            AutomationProperties.Name="Refresh running applications"
+                            Click="OnRefreshRunningApplicationsClick"
+                            Content="Refresh" />
+                        <Button
+                            Grid.Column="2"
+                            VerticalAlignment="Bottom"
+                            AutomationProperties.Name="Use the selected running application"
+                            Click="OnUseRunningApplicationClick"
+                            Content="Use selected"
+                            Style="{StaticResource AccentButtonStyle}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <CheckBox
+                            Content="Also pin to this installation's path"
+                            IsChecked="{x:Bind ViewModel.IncludeExecutablePath, Mode=TwoWay}" />
+                        <CheckBox
+                            Content="Also narrow to its window classes"
+                            IsChecked="{x:Bind ViewModel.IncludeWindowClasses, Mode=TwoWay}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button
+                            AutomationProperties.Name="Browse for an executable"
+                            Click="OnBrowseForExecutableClick"
+                            Content="Browse for executable" />
+                        <ProgressRing
+                            Width="18"
+                            Height="18"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Reading running windows"
+                            IsActive="{x:Bind ViewModel.IsLoadingRunningApplications, Mode=OneWay}" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.RunningApplicationStatus, Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Grid ColumnSpacing="12" RowSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBox
+                        AutomationProperties.Name="Rule name"
+                        Header="Name"
+                        Text="{x:Bind ViewModel.DisplayName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="{x:Bind ViewModel.DisplayNameError, Mode=OneWay}"
+                        Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.DisplayNameError), Mode=OneWay}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Target managed desktop"
+                        DisplayMemberPath="DisplayName"
+                        Header="Managed desktop"
+                        ItemsSource="{x:Bind ViewModel.ManagedDesktops}"
+                        SelectedIndex="{x:Bind ViewModel.SelectedDesktopIndex, Mode=TwoWay}" />
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="{x:Bind ViewModel.TargetDesktopError, Mode=OneWay}"
+                        Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.TargetDesktopError), Mode=OneWay}" />
+                </StackPanel>
+                <ToggleSwitch
+                    Grid.Column="2"
+                    VerticalAlignment="Bottom"
+                    AutomationProperties.Name="Rule enabled"
+                    IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"
+                    OffContent="Disabled"
+                    OnContent="Enabled" />
+                <StackPanel
+                    Grid.Row="1"
+                    Grid.ColumnSpan="3"
+                    Spacing="4">
+                    <TextBox
+                        AcceptsReturn="True"
+                        MinHeight="70"
+                        AutomationProperties.HelpText="One executable file name per line, for example Code.exe."
+                        AutomationProperties.Name="Process names"
+                        Header="Process names"
+                        PlaceholderText="Code.exe"
+                        Text="{x:Bind ViewModel.ProcessNames, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="{x:Bind ViewModel.ProcessNamesError, Mode=OneWay}"
+                        Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.ProcessNamesError), Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="Advanced rule settings"
+                Header="Advanced">
+                <StackPanel Padding="0,10,0,4" Spacing="14">
+                    <StackPanel Spacing="4">
+                        <TextBox
+                            AcceptsReturn="True"
+                            MinHeight="60"
+                            AutomationProperties.HelpText="One package family name per line, in the form Name_PublisherId."
+                            AutomationProperties.Name="Package family names"
+                            Header="Package family names"
+                            PlaceholderText="Microsoft.WindowsTerminal_8wekyb3d8bbwe"
+                            Text="{x:Bind ViewModel.PackageFamilyNames, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.PackageFamilyNamesError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.PackageFamilyNamesError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBox
+                            AcceptsReturn="True"
+                            MinHeight="60"
+                            AutomationProperties.Name="AppUserModelIds"
+                            Header="AppUserModelIds"
+                            PlaceholderText="Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"
+                            Text="{x:Bind ViewModel.AppUserModelIds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.AppUserModelIdsError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.AppUserModelIdsError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBox
+                            AcceptsReturn="True"
+                            MinHeight="60"
+                            AutomationProperties.HelpText="One full path per line. A path pins the rule to a single installation."
+                            AutomationProperties.Name="Executable paths"
+                            Header="Executable paths"
+                            PlaceholderText="C:\Windows\System32\mstsc.exe"
+                            Text="{x:Bind ViewModel.ExecutablePaths, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.ExecutablePathsError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.ExecutablePathsError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBox
+                            AcceptsReturn="True"
+                            MinHeight="60"
+                            AutomationProperties.HelpText="A window class narrows the rule to one window shape. It never identifies an application on its own."
+                            AutomationProperties.Name="Window classes"
+                            Header="Window classes"
+                            PlaceholderText="TscShellContainerClass"
+                            Text="{x:Bind ViewModel.WindowClasses, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.WindowClassesError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.WindowClassesError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBox
+                            AutomationProperties.HelpText="Letters, digits, hyphens, underscores, and periods only."
+                            AutomationProperties.Name="Rule identifier"
+                            Header="Identifier"
+                            Text="{x:Bind ViewModel.Id, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.IdError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.IdError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Triggers" />
+                        <StackPanel AutomationProperties.Name="Rule triggers" Spacing="2">
+                            <CheckBox Content="Window created" IsChecked="{x:Bind ViewModel.TriggerWindowCreated, Mode=TwoWay}" />
+                            <CheckBox Content="Window shown" IsChecked="{x:Bind ViewModel.TriggerWindowShown, Mode=TwoWay}" />
+                            <CheckBox Content="Foreground activated" IsChecked="{x:Bind ViewModel.TriggerForegroundActivated, Mode=TwoWay}" />
+                            <CheckBox Content="Startup reconciliation" IsChecked="{x:Bind ViewModel.TriggerStartupReconciliation, Mode=TwoWay}" />
+                            <CheckBox Content="Manual reassignment" IsChecked="{x:Bind ViewModel.TriggerManualReassignment, Mode=TwoWay}" />
+                        </StackPanel>
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.TriggersError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.TriggersError), Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <ComboBox
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="Desktop switch policy"
+                            Header="Desktop switch policy"
+                            SelectedIndex="{x:Bind ViewModel.SwitchPolicyIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Never switch desktop" />
+                            <ComboBoxItem Content="Switch on foreground activation" />
+                            <ComboBoxItem Content="Switch on a new window's first activation" />
+                        </ComboBox>
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="{x:Bind ViewModel.SwitchPolicyError, Mode=OneWay}"
+                            Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.SwitchPolicyError), Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            <StackPanel Spacing="8">
+                <Button
+                    AutomationProperties.Name="Test this rule against open windows"
+                    Click="OnTestRuleClick"
+                    Content="Test rule against open windows" />
+                <InfoBar
+                    AutomationProperties.Name="Rule test result"
+                    IsClosable="False"
+                    IsOpen="{x:Bind ViewModel.HasTestResult, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.TestDetails, Mode=OneWay}"
+                    Severity="Informational"
+                    Title="{x:Bind ViewModel.TestSummary, Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

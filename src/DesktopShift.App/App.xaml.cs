@@ -6,6 +6,7 @@ using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Hosting;
+using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
@@ -53,10 +54,18 @@ public partial class App : Application
                 WindowsTopLevelWindowEnumerator>();
             services.AddSingleton<IWindowClassifier, WindowsWindowClassifier>();
             services.AddSingleton<IWindowIdentityResolver, WindowsProcessIdentityResolver>();
+            services.AddSingleton<IApplicationIconReader, WindowsApplicationIconReader>();
+            services.AddSingleton<
+                IRunningApplicationInventory,
+                RunningApplicationInventory>();
             services.AddSingleton<IWindowEventSource, WindowsWinEventSource>();
             services.AddDesktopShiftObservation();
             services.AddDesktopShiftManagedDesktopReconciliation();
+            services.AddSingleton<
+                IManagedDesktopMaintenanceService,
+                ManagedDesktopMaintenanceService>();
             services.AddDesktopShiftAssignments();
+            services.AddDesktopShiftDiagnostics(useFileSystemLogStore: true);
             services.AddSingleton<MainWindow>();
         });
 

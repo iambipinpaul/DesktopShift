@@ -88,4 +88,20 @@ public enum ConfigurationValidationCode
     CandidateUnreadable,
     ActiveSnapshotUnreadable,
     RecoveredLastValidSnapshot,
+
+    /// <summary>
+    /// An identity is shaped so that no running window could ever report it —
+    /// a process name carrying a directory separator, a relative executable
+    /// path, a package name without its publisher half. The matcher compares
+    /// every identity verbatim, so such a value is not a narrow rule, it is a
+    /// rule that can never match.
+    /// </summary>
+    InvalidIdentityPattern,
+
+    /// <summary>
+    /// A switch policy cannot be reached by the triggers the rule declares. A
+    /// desktop switch is only ever considered on a foreground activation, so a
+    /// rule that does not observe one can never switch, whatever its policy says.
+    /// </summary>
+    UnreachableSwitchPolicy,
 }

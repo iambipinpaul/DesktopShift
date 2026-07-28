@@ -148,12 +148,63 @@ internal static class ConfigurationValidator
                 $"{path}.windowClasses",
                 rule.Id);
 
+            // The shape tests are shared with the rule editor, so a rule the
+            // editor accepts is a rule this validator accepts. A value that no
+            // running window could ever report is dead configuration and has to
+            // be reported where it was written rather than silently kept.
+            AddShapeIssues(
+                issues,
+                rule.ProcessNames,
+                ApplicationRuleShape.IsValidProcessName,
+                $"{path}.processNames",
+                "an executable file name",
+                rule.Id);
+            AddShapeIssues(
+                issues,
+                rule.PackageFamilyNames,
+                ApplicationRuleShape.IsValidPackageFamilyName,
+                $"{path}.packageFamilyNames",
+                "a package family name in the form Name_PublisherId",
+                rule.Id);
+            AddShapeIssues(
+                issues,
+                rule.AppUserModelIds,
+                ApplicationRuleShape.IsValidAppUserModelId,
+                $"{path}.appUserModelIds",
+                "an AppUserModelId",
+                rule.Id);
+            AddShapeIssues(
+                issues,
+                rule.ExecutablePaths,
+                ApplicationRuleShape.IsValidExecutablePath,
+                $"{path}.executablePaths",
+                "a full executable path",
+                rule.Id);
+            AddShapeIssues(
+                issues,
+                rule.WindowClasses,
+                ApplicationRuleShape.IsValidWindowClass,
+                $"{path}.windowClasses",
+                "a window class",
+                rule.Id);
+
             if (rule.Triggers.IsDefaultOrEmpty)
             {
                 issues.Add(new ConfigurationValidationIssue(
                     ConfigurationValidationCode.MissingTrigger,
                     $"Application Rule '{rule.Id}' must contain at least one trigger.",
                     $"{path}.triggers",
+                    ConfigurationEntryKind.ApplicationRule,
+                    rule.Id));
+            }
+            else if (!ApplicationRuleShape.IsSwitchPolicyReachable(
+                rule.SwitchPolicy,
+                rule.Triggers))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.UnreachableSwitchPolicy,
+                    $"Application Rule '{rule.Id}' declares switch policy '{rule.SwitchPolicy}', which its triggers can never reach. {ApplicationRuleShape.DescribeUnreachableSwitchPolicy(rule.SwitchPolicy)}",
+                    $"{path}.switchPolicy",
                     ConfigurationEntryKind.ApplicationRule,
                     rule.Id));
             }
@@ -187,6 +238,36 @@ internal static class ConfigurationValidator
             path,
             ConfigurationEntryKind.ApplicationRule,
             ruleId));
+    }
+
+    private static void AddShapeIssues(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        ImmutableArray<string> identities,
+        Func<string?, bool> isValid,
+        string path,
+        string expectation,
+        string ruleId)
+    {
+        if (identities.IsDefaultOrEmpty)
+        {
+            return;
+        }
+
+        foreach (string identity in identities)
+        {
+            // A blank entry is already reported as a missing identity, so
+            // reporting it a second time as a malformed one would only make the
+            // same mistake look like two.
+            if (!string.IsNullOrWhiteSpace(identity) && !isValid(identity))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.InvalidIdentityPattern,
+                    $"Application Rule '{ruleId}' declares '{identity}' at '{path}', which is not {expectation}.",
+                    path,
+                    ConfigurationEntryKind.ApplicationRule,
+                    ruleId));
+            }
+        }
     }
 
     private static ConfigurationValidationIssue RequiredValue(
