@@ -13,6 +13,7 @@ public enum WindowSkipReason
     ShellWindow,
     SystemWindow,
     TransientWindow,
+    BrowserHelperWindow,
     DesktopShiftWindow,
     IdentityAccessDenied,
     IdentityUnavailable,

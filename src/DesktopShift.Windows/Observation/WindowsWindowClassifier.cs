@@ -11,10 +11,25 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
         new(StringComparer.OrdinalIgnoreCase)
         {
             "#32768",
+            "CicMarshalWndClass",
+            "IME",
+            "MSCTFIME UI",
             "SysShadow",
             "TaskListThumbnailWnd",
             "tooltips_class32",
             "Xaml_WindowedPopupClass",
+        };
+
+    // Chromium's hidden message-only, renderer compositing, and GPU
+    // intermediate surfaces. Created by the browser process and by every
+    // renderer / GPU / utility / crash-handler subprocess, and shared by all
+    // Chromium-based shells rather than being Edge- or Chrome-specific.
+    private static readonly HashSet<string> BrowserHelperClasses =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Chrome_MessageWindow",
+            "Chrome_RenderWidgetHostHWND",
+            "Intermediate D3D Window",
         };
 
     private static readonly HashSet<string> ShellClasses =
@@ -83,6 +98,12 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
         if (ShellClasses.Contains(windowClass))
         {
             return WindowQualification.Skipped(WindowSkipReason.ShellWindow);
+        }
+
+        if (BrowserHelperClasses.Contains(windowClass))
+        {
+            return WindowQualification.Skipped(
+                WindowSkipReason.BrowserHelperWindow);
         }
 
         if (TransientClasses.Contains(windowClass))

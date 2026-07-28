@@ -65,6 +65,72 @@ public sealed class WindowsWindowClassifierTests
     }
 
     [TestMethod]
+    [DataRow("Chrome_MessageWindow")]
+    [DataRow("Chrome_RenderWidgetHostHWND")]
+    [DataRow("Intermediate D3D Window")]
+    public void Qualify_ChromiumHelperSurface_IsSkipped(string windowClass)
+    {
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.WindowClass = windowClass;
+
+        WindowQualification result =
+            new WindowsWindowClassifier(api, currentProcessId: 99)
+                .Qualify((nint)10);
+
+        Assert.AreEqual(
+            WindowSkipReason.BrowserHelperWindow,
+            result.SkipReason);
+    }
+
+    [TestMethod]
+    [DataRow("IME")]
+    [DataRow("MSCTFIME UI")]
+    [DataRow("CicMarshalWndClass")]
+    public void Qualify_TextServicesSurface_IsSkipped(string windowClass)
+    {
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.WindowClass = windowClass;
+
+        WindowQualification result =
+            new WindowsWindowClassifier(api, currentProcessId: 99)
+                .Qualify((nint)10);
+
+        Assert.AreEqual(WindowSkipReason.TransientWindow, result.SkipReason);
+    }
+
+    [TestMethod]
+    public void Qualify_BrowserFrame_Qualifies()
+    {
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.WindowClass = "Chrome_WidgetWin_1";
+        api.RootOwner = (nint)400;
+
+        WindowQualification result =
+            new WindowsWindowClassifier(api, currentProcessId: 99)
+                .Qualify((nint)400);
+
+        Assert.IsTrue(result.IsQualified);
+        Assert.AreEqual((nint)400, result.Window!.RootWindowHandle);
+        Assert.AreEqual("Chrome_WidgetWin_1", result.Window.WindowClass);
+    }
+
+    [TestMethod]
+    public void Qualify_OwnedBrowserPopup_NormalizesToBrowserFrame()
+    {
+        FakeWindowApi api = FakeWindowApi.Normal();
+        api.WindowClass = "Chrome_WidgetWin_1";
+        api.RootOwner = (nint)400;
+
+        WindowQualification result =
+            new WindowsWindowClassifier(api, currentProcessId: 99)
+                .Qualify((nint)401);
+
+        Assert.IsTrue(result.IsQualified);
+        Assert.AreEqual((nint)401, result.Window!.OriginalWindowHandle);
+        Assert.AreEqual((nint)400, result.Window.RootWindowHandle);
+    }
+
+    [TestMethod]
     public void Qualify_StaleHandle_IsSkippedWithoutFurtherNativeInspection()
     {
         FakeWindowApi api = FakeWindowApi.Normal();

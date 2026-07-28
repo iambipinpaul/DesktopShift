@@ -3,6 +3,48 @@ using DesktopShift.Core.Configuration;
 
 namespace DesktopShift.Core.Observation;
 
+/// <summary>
+/// The window identity signals a rule matches against. Every signal is compared
+/// case-insensitively.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A process name is a profile-agnostic signal. An executable name identifies
+/// the application only; it never identifies which browser profile, container,
+/// or account a window belongs to. No profile inference may be built on it.
+/// </para>
+/// <para>
+/// <see cref="PackageFamilyNames"/>, <see cref="AppUserModelIds"/>, and
+/// <see cref="ExecutablePaths"/> are the stronger stable identities and are
+/// preferred over <see cref="ProcessNames"/> when a rule must be precise.
+/// <see cref="WindowClasses"/>, <see cref="TitleContains"/>, and
+/// <see cref="CommandLineContains"/> are opt-in refinements: a rule that
+/// declares one also requires it to match.
+/// </para>
+/// <para>
+/// Together they are the extension point for future package, AppUserModelId,
+/// path, and per-profile matching. A per-profile rule is expressed today as a
+/// stable identity plus a <see cref="CommandLineContains"/> profile argument,
+/// so no matcher change is required.
+/// </para>
+/// </remarks>
+/// <param name="PackageFamilyNames">
+/// Packaged application identities. The strongest signal.
+/// </param>
+/// <param name="AppUserModelIds">Shell application identities.</param>
+/// <param name="ExecutablePaths">Full executable paths.</param>
+/// <param name="ProcessNames">
+/// Executable file names. Identifies the application, never a profile.
+/// </param>
+/// <param name="WindowClasses">
+/// Optional exact window class refinement. Chromium frame classes are shared
+/// by Electron shells, so a class alone does not identify a browser.
+/// </param>
+/// <param name="TitleContains">Optional window title substring refinement.</param>
+/// <param name="CommandLineContains">
+/// Optional command line substring refinement. This is where a per-profile
+/// argument belongs.
+/// </param>
 public sealed record WindowMatchCriteria(
     ImmutableArray<string> PackageFamilyNames,
     ImmutableArray<string> AppUserModelIds,
@@ -12,6 +54,12 @@ public sealed record WindowMatchCriteria(
     ImmutableArray<string> TitleContains,
     ImmutableArray<string> CommandLineContains)
 {
+    /// <summary>
+    /// Creates criteria that match on process name alone, the profile-agnostic
+    /// default used by configured application rules.
+    /// </summary>
+    /// <param name="processNames">The executable file names to match.</param>
+    /// <returns>Criteria carrying only <see cref="ProcessNames"/>.</returns>
     public static WindowMatchCriteria ForProcessNames(
         ImmutableArray<string> processNames) =>
         new(
