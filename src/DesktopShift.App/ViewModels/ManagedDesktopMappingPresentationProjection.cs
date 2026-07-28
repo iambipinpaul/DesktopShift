@@ -46,10 +46,11 @@ public static class ManagedDesktopMappingPresentationProjection
     {
         (string status, string glyph) = FormatStatus(mapping.Status);
         string runtimeSummary = FormatRuntimeSummary(mapping);
-        string ruleSummary = FormatRuleSummary(mapping.SemanticKey, ruleCounts);
-        string recreationPolicy = mapping.RecreateWhenMissing
-            ? "Recreate when missing"
-            : "Do not recreate when missing";
+        RuleCounts? counts = ruleCounts is null
+            ? null
+            : ruleCounts.GetValueOrDefault(mapping.SemanticKey, new RuleCounts(0, 0));
+        string ruleSummary = FormatRuleSummary(counts?.Total, counts?.Enabled);
+        string recreationPolicy = FormatRecreationPolicy(mapping.RecreateWhenMissing);
 
         return new ManagedDesktopMappingItemPresentation(
             mapping.PreferredOrder,
@@ -92,8 +93,10 @@ public static class ManagedDesktopMappingPresentationProjection
         return $"{mapped}; {attention}.";
     }
 
-    private static string FormatRuntimeSummary(ManagedDesktopRuntimeMapping mapping)
+    public static string FormatRuntimeSummary(ManagedDesktopRuntimeMapping mapping)
     {
+        ArgumentNullException.ThrowIfNull(mapping);
+
         if (!mapping.IsBound)
         {
             return mapping.Status == ManagedDesktopMappingStatus.Ambiguous
@@ -112,32 +115,42 @@ public static class ManagedDesktopMappingPresentationProjection
             : $"Mapped to {runtimeName}.";
     }
 
-    private static string FormatRuleSummary(
-        string semanticKey,
-        IReadOnlyDictionary<string, RuleCounts>? ruleCounts)
+    /// <summary>
+    /// Describes how many Application Rules target a Managed Desktop.
+    /// </summary>
+    /// <remarks>
+    /// A null count means the rule set is unknown, which is not the same as
+    /// knowing there are none.
+    /// </remarks>
+    public static string FormatRuleSummary(int? total, int? enabled)
     {
-        if (ruleCounts is null)
+        if (total is not int ruleCount)
         {
             return "Rule count unavailable";
         }
 
-        if (!ruleCounts.TryGetValue(semanticKey, out RuleCounts? counts) ||
-            counts is null ||
-            counts.Total == 0)
+        if (ruleCount == 0)
         {
             return "No application rules";
         }
 
-        string ruleLabel = counts.Total == 1
+        string ruleLabel = ruleCount == 1
             ? "1 application rule"
-            : $"{counts.Total} application rules";
-        return counts.Enabled == counts.Total
+            : $"{ruleCount} application rules";
+        return enabled == ruleCount
             ? ruleLabel
-            : $"{ruleLabel} ({counts.Enabled} enabled)";
+            : $"{ruleLabel} ({enabled} enabled)";
     }
 
-    private static string FormatAdvancedDetails(ManagedDesktopRuntimeMapping mapping)
+    public static string FormatRecreationPolicy(bool recreateWhenMissing) =>
+        recreateWhenMissing
+            ? "Recreate when missing"
+            : "Do not recreate when missing";
+
+    public static string FormatAdvancedDetails(ManagedDesktopRuntimeMapping mapping)
     {
+        ArgumentNullException.ThrowIfNull(mapping);
+
         List<string> lines = [$"Diagnostic: {mapping.Code}"];
         if (mapping.RuntimeDesktopId is Guid runtimeId)
         {
@@ -153,7 +166,7 @@ public static class ManagedDesktopMappingPresentationProjection
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static (string Label, string Glyph) FormatStatus(
+    public static (string Label, string Glyph) FormatStatus(
         ManagedDesktopMappingStatus status) =>
         status switch
         {
@@ -197,5 +210,5 @@ public static class ManagedDesktopMappingPresentationProjection
             _ => trigger.ToString(),
         };
 
-    private sealed record RuleCounts(int Total, int Enabled);
+    private readonly record struct RuleCounts(int Total, int Enabled);
 }

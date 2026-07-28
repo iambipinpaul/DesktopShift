@@ -159,9 +159,27 @@ public sealed class ManagedDesktopReconciliationService :
                 "Local managed-desktop binding metadata contains duplicate semantic keys.");
         }
 
+        // A session binding outranks the persisted one, but only while the
+        // desktop it names still exists. Once the user deletes that desktop the
+        // binding is dead, and keeping it would let it outrank a fresher
+        // persisted binding written since — an explicit recreation, for
+        // instance — and send this pass off to create a second desktop for a
+        // key that already has one.
+        List<string> deadSessionKeys = [];
         foreach ((string semanticKey, ManagedDesktopBinding binding) in sessionBindings)
         {
-            bindingByKey[semanticKey] = binding;
+            if (inventoryById.ContainsKey(binding.RuntimeDesktopId))
+            {
+                bindingByKey[semanticKey] = binding;
+                continue;
+            }
+
+            deadSessionKeys.Add(semanticKey);
+        }
+
+        foreach (string semanticKey in deadSessionKeys)
+        {
+            sessionBindings.Remove(semanticKey);
         }
 
         Dictionary<string, ManagedDesktopBinding> checkpointBindings =
