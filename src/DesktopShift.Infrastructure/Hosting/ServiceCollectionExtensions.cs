@@ -6,12 +6,14 @@ using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Recovery;
 using DesktopShift.Infrastructure.Appearance;
 using DesktopShift.Infrastructure.Assignments;
 using DesktopShift.Infrastructure.Configuration;
 using DesktopShift.Infrastructure.Diagnostics;
 using DesktopShift.Infrastructure.ManagedDesktops;
 using DesktopShift.Infrastructure.Observation;
+using DesktopShift.Infrastructure.Recovery;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -122,6 +124,67 @@ public static class ServiceCollectionExtensions
             ServiceDescriptor.Singleton<
                 IHostedService,
                 ManagedDesktopReconciliationHostedService>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the recovery pass that restores automatic assignment after
+    /// Explorer restarts, the machine resumes, or the displays change.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this after
+    /// <see cref="AddDesktopShiftManagedDesktopReconciliation"/>. A recovery
+    /// pass ends by driving the topology recovery service, so the reconciliation
+    /// registration has to be in place for this one to resolve.
+    /// </para>
+    /// <para>
+    /// Neither <see cref="INativeRegistrationSet"/> nor
+    /// <see cref="IShellLifecycleSignalSource"/> is registered here, and neither
+    /// gets a default. Both are platform types: one owns real WinEvent hooks and
+    /// a real topology notification registration, the other listens for real
+    /// Windows messages. A default would mean every test host quietly hooking
+    /// the machine it runs on. The packaged application supplies them.
+    /// </para>
+    /// <para>
+    /// The signal source is therefore resolved with <c>GetService</c> rather
+    /// than <c>GetRequiredService</c>, which is why the hosted service takes it
+    /// as nullable. A host that registers no platform source starts cleanly and
+    /// simply never recovers — nothing there can raise a lifecycle signal, so
+    /// there is nothing to answer, and turning "no platform" into "will not
+    /// start" would be the worse failure. The activity journal is optional for
+    /// the same reason it is optional in reconciliation: a host without
+    /// diagnostics still recovers, it just does so unrecorded.
+    /// </para>
+    /// <para>
+    /// <see cref="INativeRegistrationSet"/> stays required. A recovery service
+    /// without one could neither check nor retake anything, so it would be a
+    /// recovery that silently does not recover, and that is worth failing over.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The collection to register into.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddDesktopShiftShellRecovery(
+        this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IShellRecoveryService>(
+            static serviceProvider => new ShellRecoveryService(
+                serviceProvider.GetRequiredService<INativeRegistrationSet>(),
+                serviceProvider.GetRequiredService<ICompatibilityCoordinator>(),
+                serviceProvider.GetRequiredService<
+                    IManagedDesktopTopologyRecoveryService>(),
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetService<IActivityJournal>()));
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, ShellRecoveryHostedService>(
+                static serviceProvider => new ShellRecoveryHostedService(
+                    serviceProvider.GetService<IShellLifecycleSignalSource>(),
+                    serviceProvider.GetRequiredService<IShellRecoveryService>(),
+                    serviceProvider.GetService<IActivityJournal>(),
+                    serviceProvider.GetService<IDiagnosticLogWriter>())));
 
         return services;
     }

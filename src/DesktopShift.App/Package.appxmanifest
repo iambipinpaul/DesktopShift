@@ -13,6 +13,10 @@
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22621.0" MaxVersionTested="10.0.28000.0" />
+    <PackageDependency
+      Name="Microsoft.VCLibs.140.00.UWPDesktop"
+      Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      MinVersion="14.0.33728.0" />
   </Dependencies>
   <Resources>
     <Resource Language="x-generate" />
@@ -41,8 +45,8 @@
         -->
         <uap5:Extension
           Category="windows.startupTask"
-          Executable="$targetnametoken$.exe"
-          EntryPoint="$targetentrypoint$">
+          Executable="DesktopShift.exe"
+          EntryPoint="Windows.FullTrustApplication">
           <uap5:StartupTask
             TaskId="DesktopShiftStartupTask"
             Enabled="false"

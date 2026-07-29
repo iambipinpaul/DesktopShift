@@ -227,10 +227,28 @@ public sealed class RollingDiagnosticLog : IDiagnosticLogWriter
 /// The exact shape written to the log, one JSON object per line.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The privacy invariant is structural: this type has no member a window title,
 /// a browser URL, an executable path, or a command line could occupy, so no
 /// change to an upstream record can leak one into a log file.
+/// </para>
+/// <para>
+/// <see cref="TopologyReason"/> and <see cref="RecoverySignal"/> are the two
+/// members that are not about a window at all. Both only ever receive an
+/// enumeration name DesktopShift itself produced, which is what lets them be
+/// filtered on without widening what a log file can contain.
+/// </para>
 /// </remarks>
+/// <param name="TopologyReason">
+/// Why Windows said the desktop topology changed, on topology events only.
+/// </param>
+/// <param name="RecoverySignal">
+/// Which disruption drove a recovery event — <c>explorer_restarted</c>,
+/// <c>session_resumed</c>, or <c>display_changed</c> — on recovery events only.
+/// It is written as its own field rather than left inside the result code so
+/// that "every Explorer recovery in this log" is a filter rather than a prefix
+/// match.
+/// </param>
 public sealed record DiagnosticLogEntry(
     DateTimeOffset Timestamp,
     Guid SessionId,
@@ -251,7 +269,9 @@ public sealed record DiagnosticLogEntry(
     string? ErrorCode,
     string? ErrorMessage,
     string? HResult,
-    int? WindowsErrorCode)
+    int? WindowsErrorCode,
+    string? TopologyReason = null,
+    string? RecoverySignal = null)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -284,7 +304,9 @@ public sealed record DiagnosticLogEntry(
             record.Error?.Code,
             DiagnosticRedaction.Redact(record.Error?.Message),
             record.Error?.HResultText,
-            record.Error?.NativeErrorCode);
+            record.Error?.NativeErrorCode,
+            record.TopologyReason,
+            record.RecoverySignal);
     }
 
     public static string Serialize(DiagnosticLogEntry entry)

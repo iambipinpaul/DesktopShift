@@ -1,5 +1,7 @@
 bin/
 obj/
+.artifacts/
+artifacts/
 .vs/
 AppPackages/
 BundleArtifacts/
@@ -15,4 +17,3 @@ TestResults/
 *.msixbundle
 *.msixupload
 *.wapproj.user
-

@@ -1,0 +1,243 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: Four-part MSIX version (for example, 1.2.3.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: true
+
+jobs:
+  quality-gates:
+    name: Required source quality gates
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  signed-msix:
+    name: Validate, smoke, and publish signed x64 MSIX
+    needs: quality-gates
+    runs-on: windows-2025
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write
+    env:
+      DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD: ${{ secrets.DESKTOPSHIFT_SIGNING_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        env:
+          DISPATCH_VERSION: ${{ inputs.package_version }}
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME.TrimStart('v')
+            if ($version -match '^\d+\.\d+\.\d+$') {
+              $version = "$version.0"
+            }
+          }
+          else {
+            $version = $env:DISPATCH_VERSION
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+            throw "Release version '$version' must have three or four numeric components."
+          }
+
+          "package=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Materialize signing certificate
+        id: signing
+        shell: pwsh
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DESKTOPSHIFT_SIGNING_CERTIFICATE_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CERTIFICATE_BASE64)) {
+            throw 'DESKTOPSHIFT_SIGNING_CERTIFICATE_BASE64 is not configured.'
+          }
+          if ([string]::IsNullOrWhiteSpace(
+              $env:DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD)) {
+            throw 'DESKTOPSHIFT_SIGNING_CERTIFICATE_PASSWORD is not configured.'
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'DesktopShift.Signing.pfx'
+          $cerPath = Join-Path $env:RUNNER_TEMP 'DesktopShift.Signing.cer'
+          "pfx-path=$pfxPath" >> $env:GITHUB_OUTPUT
+          "cer-path=$cerPath" >> $env:GITHUB_OUTPUT
+          [IO.File]::WriteAllBytes(
+            $pfxPath,
+            [Convert]::FromBase64String($env:CERTIFICATE_BASE64))
+
+          $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfxPath,
+            $env:DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD,
+            [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+          try {
+            if ($certificate.Subject -ne 'CN=Bipin Paul') {
+              throw (
+                "Signing certificate subject '$($certificate.Subject)' does not " +
+                "match the package publisher 'CN=Bipin Paul'.")
+            }
+            if (-not $certificate.HasPrivateKey) {
+              throw 'The signing certificate does not contain a private key.'
+            }
+
+            [IO.File]::WriteAllBytes(
+              $cerPath,
+              $certificate.Export(
+                [Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+            "thumbprint=$($certificate.Thumbprint)" >> $env:GITHUB_OUTPUT
+          }
+          finally {
+            $certificate.Dispose()
+          }
+
+      - name: Trust signing certificate for runner smoke test
+        shell: pwsh
+        run: |
+          Import-Certificate `
+            -FilePath '${{ steps.signing.outputs.cer-path }}' `
+            -CertStoreLocation Cert:\CurrentUser\TrustedPeople |
+            Out-Null
+
+      - name: Construct signed package
+        id: package
+        shell: pwsh
+        run: |
+          $output = @(
+            & ./eng/packaging/Build-Msix.ps1 `
+              -Configuration Release `
+              -PackageVersion '${{ steps.version.outputs.package }}' `
+              -OutputDirectory .artifacts/package/release `
+              -CertificatePath '${{ steps.signing.outputs.pfx-path }}'
+          )
+          $package = $output |
+            Where-Object {
+              $_ -is [string] -and
+              $_.EndsWith('.msix', [StringComparison]::OrdinalIgnoreCase) -and
+              (Test-Path -LiteralPath $_)
+            } |
+            Select-Object -Last 1
+          if (-not $package) {
+            throw 'Package construction did not return a valid MSIX path.'
+          }
+
+          "path=$package" >> $env:GITHUB_OUTPUT
+
+      - name: Run signed artifact contract tests
+        shell: pwsh
+        env:
+          DESKTOPSHIFT_MSIX_PATH: ${{ steps.package.outputs.path }}
+        run: |
+          msbuild tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj `
+            /restore `
+            /t:Build `
+            /m `
+            /verbosity:minimal `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:TreatWarningsAsErrors=true
+
+          dotnet test tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj `
+            --configuration Release `
+            --no-build `
+            --no-restore `
+            --filter "FullyQualifiedName~PackagingArtifactContractTests" `
+            --logger "console;verbosity=normal" `
+            -p:Platform=x64
+
+      - name: Validate trusted signature, package layout, and metadata
+        shell: pwsh
+        run: >-
+          ./eng/packaging/Validate-Msix.ps1
+          -PackagePath '${{ steps.package.outputs.path }}'
+          -RequireTrustedSignature
+
+      - name: Install, launch, and uninstall package
+        shell: pwsh
+        run: >-
+          ./eng/packaging/Smoke-Test-Msix.ps1
+          -PackagePath '${{ steps.package.outputs.path }}'
+
+      - name: Create SHA-256 digest
+        id: digest
+        shell: pwsh
+        run: |
+          $packagePath = '${{ steps.package.outputs.path }}'
+          $digestPath = "$packagePath.sha256"
+          $hash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $([IO.Path]::GetFileName($packagePath))" |
+            Set-Content -LiteralPath $digestPath -Encoding utf8NoBOM
+          "path=$digestPath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload validated package
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopShift-${{ steps.version.outputs.package }}-x64
+          path: |
+            ${{ steps.package.outputs.path }}
+            ${{ steps.digest.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            '${{ steps.package.outputs.path }}' `
+            '${{ steps.digest.outputs.path }}' `
+            --verify-tag `
+            --generate-notes `
+            --title "DesktopShift $env:GITHUB_REF_NAME"
+
+      - name: Remove signing material from runner
+        if: always()
+        shell: pwsh
+        run: |
+          $thumbprint = '${{ steps.signing.outputs.thumbprint }}'
+          if ($thumbprint) {
+            $certificatePath = "Cert:\CurrentUser\TrustedPeople\$thumbprint"
+            if (Test-Path -LiteralPath $certificatePath) {
+              Remove-Item -LiteralPath $certificatePath -Force
+            }
+          }
+
+          foreach ($path in @(
+              '${{ steps.signing.outputs.pfx-path }}',
+              '${{ steps.signing.outputs.cer-path }}'
+          )) {
+            if ($path -and (Test-Path -LiteralPath $path)) {
+              Remove-Item -LiteralPath $path -Force
+            }
+          }

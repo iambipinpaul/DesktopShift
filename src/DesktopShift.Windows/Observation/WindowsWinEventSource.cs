@@ -1,10 +1,11 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Recovery;
 
 namespace DesktopShift.Windows.Observation;
 
-public sealed class WindowsWinEventSource : IWindowEventSource
+public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWindowEventSource
 {
     public const uint EventSystemForeground = 0x0003;
     public const uint EventObjectCreate = 0x8000;
@@ -103,6 +104,38 @@ public sealed class WindowsWinEventSource : IWindowEventSource
                 UnhookAll();
                 throw;
             }
+        }
+    }
+
+    /// <summary>
+    /// Drops every hook while leaving this source able to <see cref="Start"/>
+    /// again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Restarting Explorer invalidates every hook that was registered against
+    /// the shell that just went away, and the only way to get working hooks back
+    /// is to unhook and hook again. That has to be possible without tearing the
+    /// source down, because the bounded queue, the observation processor, and
+    /// the hosted service that owns them hold state a shell restart has no
+    /// reason to discard — the sequence counter, events already queued, and the
+    /// activity history a user may be reading at that moment.
+    /// </para>
+    /// <para>
+    /// Stopping therefore clears the hooks and nothing else. It deliberately
+    /// does not set <c>disposed</c>, which is the difference between this and
+    /// <see cref="Dispose"/>. Stopping a source that never started, was already
+    /// stopped, or has been disposed does nothing at all rather than throwing:
+    /// recovery is frequently reacting to a shell that has already vanished, and
+    /// turning that race into an exception would fail a recovery pass over a
+    /// state that is exactly what was being asked for.
+    /// </para>
+    /// </remarks>
+    public void Stop()
+    {
+        lock (syncRoot)
+        {
+            UnhookAll();
         }
     }
 

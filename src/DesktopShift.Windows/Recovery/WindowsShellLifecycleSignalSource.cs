@@ -1,0 +1,365 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using DesktopShift.Core.Recovery;
+
+namespace DesktopShift.Windows.Recovery;
+
+/// <summary>
+/// Reports Explorer restarts, resumes from sleep, and display changes by
+/// listening for the messages Windows broadcasts when they happen.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The listener owns a hidden top-level window, and the fact that it is
+/// top-level rather than message-only is the entire point of the type. All three
+/// notifications it needs — the registered <c>TaskbarCreated</c> message,
+/// <c>WM_DISPLAYCHANGE</c>, and <c>WM_POWERBROADCAST</c> — are broadcasts, and
+/// Windows delivers broadcasts to top-level windows only. A message-only window
+/// receives nothing of the sort, so a listener built on one would sit silently
+/// through every disruption it exists to notice. This is the same reason
+/// <c>ShellNotifyIconHost</c> gives for its own hidden window, and it is worth
+/// repeating here because "message-only window" is the obvious-looking choice
+/// for a window with no user interface.
+/// </para>
+/// <para>
+/// The window is hidden and marked as a tool window, so it never appears to the
+/// user, never appears in the taskbar, and never appears in the window switcher.
+/// It renders nothing and owns no user interface.
+/// </para>
+/// <para>
+/// Construct, <see cref="Start"/>, and <see cref="Dispose"/> on the thread that
+/// owns the message pump. A window belongs to the thread that created it: that
+/// thread is the only one whose pump will ever deliver these messages, and
+/// <c>DestroyWindow</c> only works when called from it.
+/// </para>
+/// <para>
+/// This type observes and nothing more. It never restarts Explorer, never
+/// suspends or resumes the machine, never changes a display setting, and never
+/// raises a signal Windows did not actually deliver.
+/// </para>
+/// </remarks>
+public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSource
+{
+    private const string WindowClassNamePrefix = "DesktopShift.ShellLifecycleListener.";
+    private const string WindowName = "DesktopShift shell lifecycle listener";
+
+    /// <summary>
+    /// The <c>TRUE</c> a window procedure returns for
+    /// <c>WM_POWERBROADCAST</c>, which is what the documented contract asks for.
+    /// </summary>
+    private const nint PowerBroadcastHandled = 1;
+
+    /// <summary>The zero a window procedure returns for a message it handled.</summary>
+    private const nint MessageHandled = 0;
+
+    private readonly NativeMethods.WindowProcedure windowProcedure;
+    private readonly string windowClassName;
+    private readonly uint taskbarCreatedMessage;
+    private readonly nint instanceHandle;
+    private readonly object syncRoot = new();
+    private nint windowHandle;
+    private long signalsRaised;
+    private long callbackFailures;
+    private bool isWindowClassRegistered;
+    private bool isDisposed;
+
+    public WindowsShellLifecycleSignalSource()
+    {
+        // RegisterClassEx keeps the function pointer, not the delegate object.
+        // Holding the delegate in a field for the window's whole lifetime is
+        // what stops the garbage collector reclaiming it out from under Windows,
+        // and it is the same reason WindowsWinEventSource holds its callback.
+        windowProcedure = OnWindowMessage;
+        windowClassName = WindowClassNamePrefix + Guid.NewGuid().ToString("N");
+        instanceHandle = NativeMethods.GetModuleHandle(null);
+
+        // The id is allocated once and reused for the object's whole life.
+        // Asking again later would return the same id, but asking once keeps the
+        // window procedure free of calls it does not need to make.
+        taskbarCreatedMessage = NativeMethods.RegisterWindowMessage("TaskbarCreated");
+    }
+
+    /// <summary>
+    /// The per-instance native class identity. Exposed internally so the
+    /// lifetime invariant can be pinned without registering a real window.
+    /// </summary>
+    internal string WindowClassName => windowClassName;
+
+    /// <inheritdoc />
+    public event EventHandler<ShellLifecycleSignalEventArgs>? SignalRaised;
+
+    /// <summary>Whether the hidden window exists and is receiving messages.</summary>
+    public bool IsListening
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return windowHandle != 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// What this listener has seen, for the hosted layer to report.
+    /// </summary>
+    public ShellLifecycleSignalSourceSnapshot Snapshot => new(
+        IsListening,
+        Interlocked.Read(ref signalsRaised),
+        Interlocked.Read(ref callbackFailures));
+
+    /// <inheritdoc />
+    public void Start()
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(isDisposed, this);
+            if (windowHandle != 0)
+            {
+                return;
+            }
+
+            RegisterWindowClass();
+            windowHandle = CreateHiddenWindow();
+        }
+    }
+
+    /// <summary>
+    /// Destroys the hidden window.
+    /// </summary>
+    /// <remarks>
+    /// Every listener has its own class because the class holds this instance's
+    /// window-procedure function pointer. Reusing one constant class would make
+    /// a later listener call the first, potentially collected instance after a
+    /// test host or app lifetime recreated the service. The class is unregistered
+    /// after its only window is destroyed so Windows stops retaining that
+    /// function pointer before this object can be collected.
+    /// </remarks>
+    public void Dispose()
+    {
+        nint handle;
+        lock (syncRoot)
+        {
+            if (isDisposed)
+            {
+                return;
+            }
+
+            isDisposed = true;
+            handle = windowHandle;
+            windowHandle = 0;
+        }
+
+        SignalRaised = null;
+
+        if (handle != 0)
+        {
+            _ = NativeMethods.DestroyWindow(handle);
+        }
+
+        if (isWindowClassRegistered)
+        {
+            _ = NativeMethods.UnregisterClass(windowClassName, instanceHandle);
+            isWindowClassRegistered = false;
+        }
+    }
+
+    private void RegisterWindowClass()
+    {
+        if (isWindowClassRegistered)
+        {
+            return;
+        }
+
+        NativeMethods.WindowClassEx windowClass = new()
+        {
+            Size = (uint)Marshal.SizeOf<NativeMethods.WindowClassEx>(),
+            WindowProcedure = Marshal.GetFunctionPointerForDelegate(windowProcedure),
+            InstanceHandle = instanceHandle,
+            ClassName = windowClassName,
+        };
+
+        if (NativeMethods.RegisterClassEx(ref windowClass) != 0)
+        {
+            isWindowClassRegistered = true;
+            return;
+        }
+
+        throw new Win32Exception(
+            Marshal.GetLastWin32Error(),
+            "DesktopShift could not register its shell lifecycle window class.");
+    }
+
+    private nint CreateHiddenWindow()
+    {
+        nint handle = NativeMethods.CreateWindowEx(
+            dwExStyle: NativeMethods.WsExToolWindow,
+            lpClassName: windowClassName,
+            lpWindowName: WindowName,
+            dwStyle: NativeMethods.WsPopup,
+            x: 0,
+            y: 0,
+            nWidth: 0,
+            nHeight: 0,
+            hWndParent: 0,
+            hMenu: 0,
+            hInstance: instanceHandle,
+            lpParam: 0);
+
+        return handle != 0
+            ? handle
+            : throw new Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "DesktopShift could not create its shell lifecycle window.");
+    }
+
+    /// <summary>
+    /// Turns one window message into at most one signal and returns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This runs on the message pump, so it does no COM, no process access, no
+    /// disk I/O, no logging, and no waiting — not even on a lock. Deciding what
+    /// a message means is a pure function; raising the event hands the decision
+    /// to the coalescer, and everything expensive happens on the other side of
+    /// that handoff. The window procedure also re-enters during
+    /// <c>CreateWindowEx</c> and <c>DestroyWindow</c>, so a lock taken here
+    /// would be a lock taken while <see cref="Start"/> or <see cref="Dispose"/>
+    /// already holds it.
+    /// </para>
+    /// <para>
+    /// No managed exception may escape into Windows, so a handler that throws is
+    /// counted and swallowed exactly as
+    /// <c>WindowsWinEventSource.OnWinEvent</c> counts and swallows one. A
+    /// listener that crashed the message pump because a subscriber threw would
+    /// take down the very thing recovery exists to keep running.
+    /// </para>
+    /// </remarks>
+    private nint OnWindowMessage(
+        nint handle,
+        uint message,
+        nint wParam,
+        nint lParam)
+    {
+        // Windows documents that a window handling WM_POWERBROADCAST returns
+        // TRUE, and it says so for every power notification rather than only for
+        // the two that mean "awake". The answer is therefore decided from the
+        // message alone, before anything can throw.
+        bool isPowerBroadcast = message == WindowsShellLifecycleMessages.PowerBroadcast;
+
+        try
+        {
+            if (WindowsShellLifecycleMessages.TryMap(
+                message,
+                wParam,
+                taskbarCreatedMessage,
+                out ShellLifecycleSignal signal))
+            {
+                Interlocked.Increment(ref signalsRaised);
+                SignalRaised?.Invoke(this, new ShellLifecycleSignalEventArgs(signal));
+                return isPowerBroadcast ? PowerBroadcastHandled : MessageHandled;
+            }
+        }
+        catch (Exception)
+        {
+            Interlocked.Increment(ref callbackFailures);
+            return isPowerBroadcast ? PowerBroadcastHandled : MessageHandled;
+        }
+
+        return isPowerBroadcast
+            ? PowerBroadcastHandled
+            : NativeMethods.DefWindowProc(handle, message, wParam, lParam);
+    }
+
+    private static class NativeMethods
+    {
+        internal const uint WsPopup = 0x80000000;
+        internal const uint WsExToolWindow = 0x00000080;
+        internal delegate nint WindowProcedure(
+            nint windowHandle,
+            uint message,
+            nint wParam,
+            nint lParam);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct WindowClassEx
+        {
+            public uint Size;
+            public uint Style;
+            public nint WindowProcedure;
+            public int ClassExtraBytes;
+            public int WindowExtraBytes;
+            public nint InstanceHandle;
+            public nint IconHandle;
+            public nint CursorHandle;
+            public nint BackgroundBrush;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string? MenuName;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string ClassName;
+            public nint SmallIconHandle;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterClassExW", SetLastError = true)]
+        internal static extern ushort RegisterClassEx(ref WindowClassEx windowClass);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "CreateWindowExW", SetLastError = true)]
+        internal static extern nint CreateWindowEx(
+            uint dwExStyle,
+            string lpClassName,
+            string lpWindowName,
+            uint dwStyle,
+            int x,
+            int y,
+            int nWidth,
+            int nHeight,
+            nint hWndParent,
+            nint hMenu,
+            nint hInstance,
+            nint lpParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "UnregisterClassW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool UnregisterClass(
+            string className,
+            nint instanceHandle);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "DefWindowProcW")]
+        internal static extern nint DefWindowProc(
+            nint windowHandle,
+            uint message,
+            nint wParam,
+            nint lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool DestroyWindow(nint windowHandle);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterWindowMessageW")]
+        internal static extern uint RegisterWindowMessage(string message);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetModuleHandleW")]
+        internal static extern nint GetModuleHandle(string? moduleName);
+    }
+}
+
+/// <summary>
+/// What a shell lifecycle listener has seen, mirroring
+/// <c>WinEventSourceSnapshot</c> so the hosted layer reports both the same way.
+/// </summary>
+/// <param name="IsListening">Whether the hidden window currently exists.</param>
+/// <param name="SignalsRaised">
+/// How many disruptions were reported. This counts mapped lifecycle signals,
+/// not every native message: the later user-interaction resume broadcast is
+/// normalized away before this count is incremented, while overlapping repeated
+/// signals are folded by the recovery service.
+/// </param>
+/// <param name="CallbackFailures">
+/// How many exceptions were swallowed at the native boundary. Anything above
+/// zero means a subscriber threw, which is worth reporting because the message
+/// pump cannot.
+/// </param>
+public sealed record ShellLifecycleSignalSourceSnapshot(
+    bool IsListening,
+    long SignalsRaised,
+    long CallbackFailures);

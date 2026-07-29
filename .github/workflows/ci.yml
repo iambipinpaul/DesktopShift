@@ -1,0 +1,210 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: true
+  SOLUTION_PATH: DesktopShift.slnx
+
+jobs:
+  formatting:
+    name: Formatting and static checks
+    runs-on: windows-2025
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore dependencies
+        shell: pwsh
+        run: >-
+          msbuild $env:SOLUTION_PATH
+          /t:Restore
+          /m
+          /verbosity:minimal
+          /p:Configuration=Release
+          /p:Platform=x64
+
+      - name: Verify managed formatting and analyzer fixes
+        shell: pwsh
+        run: >-
+          dotnet format style $env:SOLUTION_PATH
+          --verify-no-changes
+          --no-restore
+          --severity warn
+          --verbosity minimal
+
+  build-and-test:
+    name: ${{ matrix.configuration }} x64 build and tests
+    runs-on: windows-2025
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Debug
+          - Release
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore dependencies
+        shell: pwsh
+        run: >-
+          msbuild $env:SOLUTION_PATH
+          /t:Restore
+          /m
+          /verbosity:minimal
+          /p:Configuration=${{ matrix.configuration }}
+          /p:Platform=x64
+
+      - name: Build with warnings as errors
+        shell: pwsh
+        run: >-
+          msbuild $env:SOLUTION_PATH
+          /t:Build
+          /m
+          /verbosity:minimal
+          /warnaserror
+          /p:Configuration=${{ matrix.configuration }}
+          /p:Platform=x64
+          /p:ContinuousIntegrationBuild=true
+          /p:TreatWarningAsError=true
+          /p:TreatWarningsAsErrors=true
+
+      - name: Run host tests
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: >-
+          dotnet test tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "FullyQualifiedName~Hosting"
+          --logger "trx;LogFileName=core-host.trx"
+          --results-directory .artifacts/test-results
+
+      - name: Run Core unit tests
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: >-
+          dotnet test tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "FullyQualifiedName!~Hosting"
+          --logger "trx;LogFileName=core-unit.trx"
+          --results-directory .artifacts/test-results
+
+      - name: Run presentation unit tests
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: >-
+          dotnet test tests/DesktopShift.App.Presentation.Tests/DesktopShift.App.Presentation.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --logger "trx;LogFileName=presentation.trx"
+          --results-directory .artifacts/test-results
+
+      - name: Run supported non-destructive Windows contract tests
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: >-
+          dotnet test tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --logger "trx;LogFileName=windows-contracts.trx"
+          --results-directory .artifacts/test-results
+          -p:Platform=x64
+
+      - name: Upload test results
+        if: always() && matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-x64-release
+          path: .artifacts/test-results/**/*.trx
+          if-no-files-found: error
+          retention-days: 14
+
+  construct-package:
+    name: Construct and validate unsigned x64 package
+    needs:
+      - formatting
+      - build-and-test
+    runs-on: windows-2025
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Construct unsigned package
+        id: package
+        shell: pwsh
+        run: |
+          $output = @(
+            & ./eng/packaging/Build-Msix.ps1 `
+              -Configuration Release `
+              -PackageVersion 0.1.0.0 `
+              -OutputDirectory .artifacts/package/ci
+          )
+          $package = $output |
+            Where-Object {
+              $_ -is [string] -and
+              $_.EndsWith('.msix', [StringComparison]::OrdinalIgnoreCase) -and
+              (Test-Path -LiteralPath $_)
+            } |
+            Select-Object -Last 1
+          if (-not $package) {
+            throw 'Package construction did not return a valid MSIX path.'
+          }
+
+          "path=$package" >> $env:GITHUB_OUTPUT
+
+      - name: Validate package layout and metadata
+        shell: pwsh
+        run: >-
+          ./eng/packaging/Validate-Msix.ps1
+          -PackagePath '${{ steps.package.outputs.path }}'

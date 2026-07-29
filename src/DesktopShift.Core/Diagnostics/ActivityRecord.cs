@@ -4,6 +4,7 @@ using System.Text;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Recovery;
 
 namespace DesktopShift.Core.Diagnostics;
 
@@ -40,6 +41,19 @@ public enum ActivityEventSource
     /// — or deliberately did not — put it back.
     /// </remarks>
     Topology,
+
+    /// <summary>
+    /// A decision taken because the shell or the machine disrupted DesktopShift:
+    /// Explorer restarting, the machine resuming from sleep, or the display
+    /// topology changing.
+    /// </summary>
+    /// <remarks>
+    /// These carry no window identity either. They exist so that "assignment
+    /// stopped working after I restarted Explorer" is a question the activity
+    /// log already answers, including when the answer is that recovery was tried
+    /// and failed.
+    /// </remarks>
+    Recovery,
 }
 
 /// <summary>
@@ -89,6 +103,13 @@ public sealed record ActivityErrorDetail(
 /// event. It is a structured member rather than prose in the summary because a
 /// reader chasing a recreation loop filters on it.
 /// </param>
+/// <param name="RecoverySignal">
+/// Which shell or machine disruption drove the event — <c>ExplorerRestarted</c>,
+/// <c>SessionResumed</c>, or <c>DisplayChanged</c> — on the events
+/// <see cref="ActivityEventSource.Recovery"/> produces, and null on every other
+/// event. Structured for the same reason: the three recovery paths have to be
+/// distinguishable in an exported log without reading prose.
+/// </param>
 public sealed record ActivityRecord(
     Guid CorrelationId,
     Guid SessionId,
@@ -105,7 +126,8 @@ public sealed record ActivityRecord(
     TimeSpan? Duration = null,
     long? EventSequence = null,
     ActivityErrorDetail? Error = null,
-    string? TopologyReason = null);
+    string? TopologyReason = null,
+    string? RecoverySignal = null);
 
 /// <summary>
 /// Projects the pipeline's own activity records onto the privacy-safe
@@ -337,6 +359,157 @@ public static class ActivityRecordFactory
 
         return records.ToImmutable();
     }
+
+    /// <summary>
+    /// Projects one shell or machine recovery pass into the steps it took.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every event carries <see cref="ActivityRecord.RecoverySignal"/>, so the
+    /// three recovery paths stay distinguishable in an exported log without a
+    /// reader having to parse the summary. The result code carries the signal
+    /// too, which is what makes "every Explorer recovery that failed" a search
+    /// rather than an investigation.
+    /// </para>
+    /// <para>
+    /// A pass that found everything intact still produces its outcome event. A
+    /// recovery that decided nothing needed doing is exactly the evidence a user
+    /// wants after a disruption they expected to break something.
+    /// </para>
+    /// </remarks>
+    /// <param name="result">The completed pass to project.</param>
+    /// <param name="sessionId">The application run the events belong to.</param>
+    /// <returns>The events the pass produced, in the order it decided them.</returns>
+    public static ImmutableArray<ActivityRecord> FromShellRecovery(
+        ShellRecoveryResult result,
+        Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        string signal = ToCode(result.Signal);
+        ImmutableArray<ActivityRecord>.Builder records =
+            ImmutableArray.CreateBuilder<ActivityRecord>();
+
+        records.Add(
+            CreateRecoveryRecord(
+                result,
+                sessionId,
+                result.Outcome switch
+                {
+                    ShellRecoveryOutcome.Failed => ActivityResult.Failed,
+                    ShellRecoveryOutcome.NoActionNeeded => ActivityResult.Skipped,
+                    _ => ActivityResult.Succeeded,
+                },
+                $"recovery.{signal}.{ToCode(result.Outcome)}",
+                result.Summary,
+                result.Outcome == ShellRecoveryOutcome.Failed
+                    ? new ActivityErrorDetail(
+                        result.Code,
+                        result.Summary,
+                        result.HResult)
+                    : null));
+
+        if (result.RegistrationsInvalidated)
+        {
+            records.Add(
+                CreateRecoveryRecord(
+                    result,
+                    sessionId,
+                    ActivityResult.Succeeded,
+                    $"recovery.{signal}.registrations_invalidated",
+                    "Registrations taken against the previous shell were dropped before anything was validated or taken again."));
+        }
+
+        if (result.CapabilityValidationRan)
+        {
+            records.Add(
+                CreateRecoveryRecord(
+                    result,
+                    sessionId,
+                    result.FailedStage ==
+                        ShellRecoveryStage.CapabilityValidation
+                        ? ActivityResult.Failed
+                        : ActivityResult.Succeeded,
+                    $"recovery.{signal}.capability_validated",
+                    result.FailedStage switch
+                    {
+                        ShellRecoveryStage.CapabilityValidation =>
+                            "Capability validation did not succeed, so no hook and no topology registration was taken again.",
+                        _ =>
+                            result.State == ShellRecoveryState.Limited
+                                ? "Capability validation reached Limited Mode. Window placement is available; desktop creation, switching, and notifications are not."
+                                : "Capability validation succeeded for this Windows build, so fresh registrations were allowed.",
+                    }));
+        }
+
+        if (result.RegistrationsRestored)
+        {
+            records.Add(
+                CreateRecoveryRecord(
+                    result,
+                    sessionId,
+                    ActivityResult.Succeeded,
+                    $"recovery.{signal}.registrations_restored",
+                    "Fresh hooks and topology registrations were taken after validation succeeded."));
+        }
+
+        records.Add(
+            CreateRecoveryRecord(
+                result,
+                sessionId,
+                result.FailedStage == ShellRecoveryStage.Reconciliation
+                    ? ActivityResult.Failed
+                    : result.ReconciliationRan
+                        ? ActivityResult.Succeeded
+                        : ActivityResult.Skipped,
+                result.FailedStage == ShellRecoveryStage.Reconciliation
+                    ? $"recovery.{signal}.reconciliation_failed"
+                    : result.ReconciliationRan
+                        ? $"recovery.{signal}.reconciliation_ran"
+                        : $"recovery.{signal}.reconciliation_skipped",
+                result.FailedStage == ShellRecoveryStage.Reconciliation
+                    ? $"The desktop reconciliation answering {DescribeSignals(result.CoalescedSignalCount)} did not complete."
+                    : result.ReconciliationRan
+                        ? $"One desktop reconciliation answered {DescribeSignals(result.CoalescedSignalCount)}."
+                        : $"Nothing needed reconciling, so no desktop and no window was touched for {DescribeSignals(result.CoalescedSignalCount)}."));
+
+        return records.ToImmutable();
+    }
+
+    private static string DescribeSignals(int count) =>
+        count == 1
+            ? "this notification"
+            : $"all {count.ToString(CultureInfo.InvariantCulture)} notifications in the burst";
+
+    private static ActivityRecord CreateRecoveryRecord(
+        ShellRecoveryResult result,
+        Guid sessionId,
+        ActivityResult activityResult,
+        string resultCode,
+        string summary,
+        ActivityErrorDetail? error = null) =>
+        new(
+            result.CorrelationId,
+            sessionId,
+            result.OccurredAtUtc,
+            ActivityEventSource.Recovery,
+
+            // A shell disruption is not a window event. StartupReconciliation is
+            // the closest WindowEventKind offers: it is the only member naming a
+            // sweep that rebuilds state rather than one window's lifecycle.
+            WindowEventKind.StartupReconciliation,
+            activityResult,
+            resultCode,
+            summary,
+            Application: null,
+            Identity: null,
+            RuleId: null,
+            TargetDesktopKey: null,
+            Duration: null,
+            EventSequence: null,
+            error,
+            TopologyReason: null,
+            ToCode(result.Signal));
 
     private static ActivityRecord CreateTopologyRecord(
         ManagedDesktopTopologyRecoveryResult result,

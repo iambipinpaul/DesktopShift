@@ -46,7 +46,7 @@ public sealed record ActivityRecordDisplay(
             "Process identity unavailable");
         string identity = FormatIdentity(record.Identity);
         string trigger = ActivityRecordFactory.Humanize(record.Trigger);
-        string source = FormatSource(record.Source);
+        string source = FormatSource(record.Source, record.RecoverySignal);
         string target = ValueOrFallback(
             record.TargetDesktopKey,
             "No desktop assigned");
@@ -109,13 +109,19 @@ public sealed record ActivityRecordDisplay(
         return $"{duration.TotalSeconds.ToString("0.##", CultureInfo.CurrentCulture)} s";
     }
 
-    private static string FormatSource(ActivityEventSource source) =>
+    private static string FormatSource(
+        ActivityEventSource source,
+        string? recoverySignal) =>
         source switch
         {
             ActivityEventSource.Observation => "Decision",
             ActivityEventSource.Move => "Window move",
             ActivityEventSource.Switch => "Desktop switch",
             ActivityEventSource.Assignment => "Assignment result",
+            ActivityEventSource.Recovery
+                when !string.IsNullOrWhiteSpace(recoverySignal) =>
+                    $"Shell recovery ({recoverySignal.Trim()})",
+            ActivityEventSource.Recovery => "Shell recovery",
             _ => ActivityRecordFactory.Humanize(source),
         };
 
@@ -175,6 +181,13 @@ public sealed record ActivityRecordDisplay(
         StringBuilder text = new();
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Timestamp: {timestamp}");
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Source: {source}");
+        if (!string.IsNullOrWhiteSpace(record.RecoverySignal))
+        {
+            _ = text.AppendLine(
+                CultureInfo.CurrentCulture,
+                $"Recovery signal: {record.RecoverySignal.Trim()}");
+        }
+
         _ = text.AppendLine(
             CultureInfo.CurrentCulture,
             $"Result: {resultLabel} ({record.ResultCode})");

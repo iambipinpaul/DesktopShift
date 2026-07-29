@@ -3,10 +3,12 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/src/">
-    <Project Path="src/DesktopShift.App/DesktopShift.App.csproj" />
+    <Project Path="src/DesktopShift.App/DesktopShift.App.csproj">
+      <Deploy />
+    </Project>
     <Project Path="src/DesktopShift.Core/DesktopShift.Core.csproj" />
     <Project Path="src/DesktopShift.Infrastructure/DesktopShift.Infrastructure.csproj" />
-    <Project Path="src/DesktopShift.NativeBridge/DesktopShift.NativeBridge.vcxproj" />
+    <Project Path="src/DesktopShift.NativeBridge/DesktopShift.NativeBridge.vcxproj" Id="59e930d4-b6d9-4da1-9a77-3ad4b4328d98" />
     <Project Path="src/DesktopShift.Windows/DesktopShift.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">

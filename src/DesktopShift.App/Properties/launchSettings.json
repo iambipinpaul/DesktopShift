@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "DesktopShift.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "DesktopShift.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

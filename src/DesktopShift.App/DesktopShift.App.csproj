@@ -10,18 +10,27 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxBundle>Never</AppxBundle>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">false</AppxPackageSigningEnabled>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <AppxPackageDir Condition="'$(AppxPackageDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\packages\</AppxPackageDir>
+    <GenerateTestArtifacts>false</GenerateTestArtifacts>
     <Product>DesktopShift</Product>
     <Company>Bipin Paul</Company>
     <Authors>Bipin Paul</Authors>
     <Description>Automatically assign application windows to managed Windows Virtual Desktops.</Description>
     <Copyright>© 2026 Bipin Paul. All rights reserved.</Copyright>
+    <AppxPackageVersion Condition="'$(AppxPackageVersion)' == ''">0.1.0.0</AppxPackageVersion>
     <Version>0.1.0</Version>
-    <FileVersion>0.1.0.0</FileVersion>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>$(AppxPackageVersion)</FileVersion>
+    <AssemblyVersion>$(AppxPackageVersion)</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -65,4 +74,33 @@
   <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
   </PropertyGroup>
+
+  <!--
+    The AppX tooling reads the package version from the manifest, but release
+    automation needs to provide it without modifying a tracked file. Generate
+    an intermediate manifest and point the packaging targets at that copy.
+  -->
+  <Target
+    Name="GenerateVersionedPackageManifest"
+    BeforeTargets="_ValidatePresenceOfAppxManifestItems"
+    Condition="'$(GenerateAppxPackageOnBuild)' == 'true'">
+    <PropertyGroup>
+      <_VersionedPackageManifest>$(IntermediateOutputPath)VersionedPackage.appxmanifest</_VersionedPackageManifest>
+      <_IsValidAppxPackageVersion>$([System.Text.RegularExpressions.Regex]::IsMatch('$(AppxPackageVersion)', '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$'))</_IsValidAppxPackageVersion>
+    </PropertyGroup>
+    <Error
+      Condition="'$(_IsValidAppxPackageVersion)' != 'True'"
+      Text="AppxPackageVersion must contain four numeric components (for example, 1.2.3.4)." />
+    <Copy
+      SourceFiles="@(AppxManifest)"
+      DestinationFiles="$(_VersionedPackageManifest)" />
+    <XmlPoke
+      XmlInputPath="$(_VersionedPackageManifest)"
+      Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version"
+      Value="$(AppxPackageVersion)" />
+    <ItemGroup>
+      <AppxManifest Remove="@(AppxManifest)" />
+      <AppxManifest Include="$(_VersionedPackageManifest)" />
+    </ItemGroup>
+  </Target>
 </Project>

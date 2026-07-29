@@ -8,11 +8,13 @@ using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Recovery;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
 using DesktopShift.Windows.Assignments;
 using DesktopShift.Windows.Compatibility;
 using DesktopShift.Windows.Observation;
+using DesktopShift.Windows.Recovery;
 using DesktopShift.Windows.VirtualDesktops;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -58,9 +60,26 @@ public partial class App : Application
             services.AddSingleton<
                 IRunningApplicationInventory,
                 RunningApplicationInventory>();
-            services.AddSingleton<IWindowEventSource, WindowsWinEventSource>();
+            // One instance behind both interfaces on purpose: the hooks the
+            // recovery set drops and retakes have to be the very hooks window
+            // observation is feeding from, or recovery would rebuild a source
+            // nobody is listening to.
+            services.AddSingleton<WindowsWinEventSource>();
+            services.AddSingleton<IWindowEventSource>(
+                static serviceProvider =>
+                    serviceProvider.GetRequiredService<WindowsWinEventSource>());
+            services.AddSingleton<IRestartableWindowEventSource>(
+                static serviceProvider =>
+                    serviceProvider.GetRequiredService<WindowsWinEventSource>());
+            services.AddSingleton<
+                INativeRegistrationSet,
+                WindowsNativeRegistrationSet>();
+            services.AddSingleton<
+                IShellLifecycleSignalSource,
+                WindowsShellLifecycleSignalSource>();
             services.AddDesktopShiftObservation();
             services.AddDesktopShiftManagedDesktopReconciliation();
+            services.AddDesktopShiftShellRecovery();
             services.AddSingleton<
                 IManagedDesktopMaintenanceService,
                 ManagedDesktopMaintenanceService>();
