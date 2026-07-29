@@ -39,6 +39,25 @@ public sealed class HotkeyBindingEditor
     public IReadOnlyList<HotkeyKey> KeyOptions { get; } =
         Enum.GetValues<HotkeyKey>();
 
+    /// <summary>
+    /// Takes a selection from the key picker, ignoring anything that is not a
+    /// key.
+    /// </summary>
+    /// <remarks>
+    /// A ComboBox clears its selection to <see langword="null"/> while its item
+    /// source is being replaced, which the list does on every refresh. A null
+    /// selection therefore means "the list is being rebuilt", never "the user
+    /// chose nothing", and must leave <see cref="Key"/> alone: writing it back
+    /// would erase the binding the row was built from.
+    /// </remarks>
+    public void SelectKey(object? selection)
+    {
+        if (selection is HotkeyKey key)
+        {
+            Key = key;
+        }
+    }
+
     public HotkeyBinding ToBinding()
     {
         HotkeyModifiers modifiers = HotkeyModifiers.None;

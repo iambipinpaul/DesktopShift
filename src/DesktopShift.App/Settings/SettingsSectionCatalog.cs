@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DesktopShift.App.Settings;
 
 /// <summary>
-/// The eight areas the Settings page covers.
+/// The nine areas the Settings page covers.
 /// </summary>
 public enum SettingsSection
 {
@@ -15,6 +15,7 @@ public enum SettingsSection
     Appearance,
     Diagnostics,
     Hotkeys,
+    DesktopSwitching,
 }
 
 /// <summary>One section's heading, as the page renders it.</summary>
@@ -35,15 +36,16 @@ public sealed record SettingsSectionDescriptor(
 /// <para>
 /// The page reads its headings from here rather than carrying them in XAML. A
 /// heading that lives only in markup cannot be tested, and "the Settings page
-/// covers these eight areas" is exactly the kind of claim that quietly stops
+/// covers these nine areas" is exactly the kind of claim that quietly stops
 /// being true when a card is moved or removed.
 /// </para>
 /// <para>
 /// The order is the order a user meets the application in: what happens at
 /// sign-in, then what it does to windows while running, then what it does to
 /// the desktops themselves, then what the machine allows, then how loudly it
-/// speaks, then how it looks, then how to diagnose it, and finally the optional
-/// shortcuts.
+/// speaks, then how it looks, then how to diagnose it, and finally the two
+/// optional shortcut sets — the commands first, then desktop switching, because
+/// a user who wants neither can stop reading at Diagnostics.
 /// </para>
 /// </remarks>
 public static class SettingsSectionCatalog
@@ -91,6 +93,11 @@ public static class SettingsSectionCatalog
             "hotkeys",
             "Global shortcuts",
             "A global shortcut takes its key combination away from every other application. Nothing is claimed until you turn shortcuts on."),
+        new(
+            SettingsSection.DesktopSwitching,
+            "desktop-switching",
+            "Desktop switching shortcut",
+            "One profile puts Desktops 1 to 10 on the number row. Pick the modifiers once; the digits are fixed so the whole set stays predictable."),
     ];
 
     /// <summary>

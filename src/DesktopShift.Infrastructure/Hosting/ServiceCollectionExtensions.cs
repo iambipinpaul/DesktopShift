@@ -51,6 +51,13 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IGlobalHotkeyCoordinator>(
             static serviceProvider =>
                 serviceProvider.GetRequiredService<GlobalHotkeyCoordinator>());
+        services.TryAddSingleton<
+            IDesktopSwitchHotkeyRegistrar,
+            InMemoryDesktopSwitchHotkeyRegistrar>();
+        services.TryAddSingleton<DesktopSwitchHotkeyCoordinator>();
+        services.TryAddSingleton<IDesktopSwitchHotkeyCoordinator>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                DesktopSwitchHotkeyCoordinator>());
 
         // The in-memory registration is the safe default: it is what every test
         // host gets, so no test can write the machine's real login state. The
@@ -225,6 +232,15 @@ public static class ServiceCollectionExtensions
             services.TryAddSingleton<IDesktopSwitchCoordinator>(
                 static serviceProvider => serviceProvider.GetRequiredService<
                     DesktopSwitchCoordinator>());
+
+            // Registered on the same condition and for the same reason: it can
+            // only resolve a desktop position through a provider that can
+            // actually enumerate desktops, so a host without one must not be
+            // able to ask for it.
+            services.TryAddSingleton<DesktopSwitchShortcutService>();
+            services.TryAddSingleton<IDesktopSwitchShortcutService>(
+                static serviceProvider => serviceProvider.GetRequiredService<
+                    DesktopSwitchShortcutService>());
         }
         services.TryAddSingleton<IWindowAssignmentActivitySink>(
             static serviceProvider => serviceProvider.GetRequiredService<

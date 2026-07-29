@@ -304,10 +304,12 @@
                                             <CheckBox Content="Alt" IsChecked="{x:Bind Alt, Mode=TwoWay}" />
                                             <CheckBox Content="Shift" IsChecked="{x:Bind Shift, Mode=TwoWay}" />
                                             <CheckBox Content="Win" IsChecked="{x:Bind Windows, Mode=TwoWay}" />
+                                            <!--  The selection is written back by hand rather than TwoWay: replacing ItemsSource clears SelectedItem to null first, and a generated TwoWay writeback would unbox that null into HotkeyKey and crash the process.  -->
                                             <ComboBox
                                                 MinWidth="130"
                                                 ItemsSource="{x:Bind KeyOptions}"
-                                                SelectedItem="{x:Bind Key, Mode=TwoWay}" />
+                                                SelectedItem="{x:Bind Key}"
+                                                SelectionChanged="OnHotkeyKeySelectionChanged" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
@@ -325,6 +327,102 @@
                         IsOpen="False"
                         Severity="Warning"
                         Title="Shortcut settings" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="DesktopSwitchingSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Desktop switching shortcut" />
+                        <TextBlock
+                            x:Name="DesktopSwitchingSectionDescription"
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="One profile puts Desktops 1 to 10 on the number row. Pick the modifiers once; the digits are fixed so the whole set stays predictable."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="DesktopSwitchEnabledToggle"
+                        AutomationProperties.Name="Enable desktop switching shortcuts"
+                        Header="Enable desktop switching shortcuts" />
+                    <StackPanel Spacing="12">
+                        <RadioButton
+                            x:Name="DesktopSwitchCtrlAltOption"
+                            Checked="OnDesktopSwitchProfileChecked"
+                            GroupName="DesktopSwitchProfile">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Ctrl + Alt + Number" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Recommended" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            x:Name="DesktopSwitchWinAltOption"
+                            Checked="OnDesktopSwitchProfileChecked"
+                            GroupName="DesktopSwitchProfile">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Win + Alt + Number" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Overrides Windows taskbar shortcuts" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            x:Name="DesktopSwitchCustomOption"
+                            Checked="OnDesktopSwitchProfileChecked"
+                            GroupName="DesktopSwitchProfile">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Custom" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Choose any combination of Ctrl, Alt, Shift, and Win" />
+                            </StackPanel>
+                        </RadioButton>
+                        <StackPanel
+                            x:Name="DesktopSwitchCustomModifiers"
+                            Margin="32,0,0,0"
+                            Orientation="Horizontal"
+                            Spacing="10">
+                            <CheckBox
+                                x:Name="DesktopSwitchControlModifier"
+                                Checked="OnDesktopSwitchModifierChanged"
+                                Content="Ctrl"
+                                Unchecked="OnDesktopSwitchModifierChanged" />
+                            <CheckBox
+                                x:Name="DesktopSwitchAltModifier"
+                                Checked="OnDesktopSwitchModifierChanged"
+                                Content="Alt"
+                                Unchecked="OnDesktopSwitchModifierChanged" />
+                            <CheckBox
+                                x:Name="DesktopSwitchShiftModifier"
+                                Checked="OnDesktopSwitchModifierChanged"
+                                Content="Shift"
+                                Unchecked="OnDesktopSwitchModifierChanged" />
+                            <CheckBox
+                                x:Name="DesktopSwitchWindowsModifier"
+                                Checked="OnDesktopSwitchModifierChanged"
+                                Content="Win"
+                                Unchecked="OnDesktopSwitchModifierChanged" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock
+                        x:Name="DesktopSwitchSummary"
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        TextWrapping="Wrap" />
+                    <InfoBar
+                        x:Name="DesktopSwitchWarning"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning"
+                        Title="This replaces a Windows shortcut" />
+                    <Button
+                        x:Name="ApplyDesktopSwitchButton"
+                        HorizontalAlignment="Left"
+                        Click="OnApplyDesktopSwitchClick"
+                        Content="Apply desktop switching" />
+                    <InfoBar
+                        x:Name="DesktopSwitchStatus"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning"
+                        Title="Desktop switching shortcuts" />
                 </StackPanel>
             </Border>
         </StackPanel>

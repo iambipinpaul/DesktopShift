@@ -19,6 +19,10 @@ Everything else is automated:
 | Export portability and privacy | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationExportTests.cs` |
 | Hotkey conflicts and unregistered-until-enabled | `tests/DesktopShift.Core.Tests/Hotkeys/` |
 | Win32 modifier and virtual-key translation | `tests/DesktopShift.Windows.Tests/Hotkeys/Win32HotkeyTranslationTests.cs` |
+| Desktop switching profiles, digit mapping, and validation | `tests/DesktopShift.Core.Tests/Hotkeys/DesktopSwitchShortcutTests.cs` |
+| Desktop switching registration ids and `MOD_NOREPEAT` | `tests/DesktopShift.Windows.Tests/Hotkeys/WindowsDesktopSwitchHotkeyRegistrarTests.cs` |
+| Switching to a desktop by position, and the missing-desktop path | `tests/DesktopShift.Core.Tests/Hotkeys/DesktopSwitchShortcutServiceTests.cs` |
+| A key picker keeping its key while the list is rebuilt | `tests/DesktopShift.App.Presentation.Tests/Settings/SettingsPresentationTests.cs` |
 
 This document covers what those cannot.
 
@@ -35,7 +39,7 @@ This document covers what those cannot.
 
 | Case | Action | Expected result |
 | --- | --- | --- |
-| Seven sections | Open Settings and scroll from top to bottom. | Startup, Assignment, Compatibility, Notifications, Appearance, Diagnostics, and Global shortcuts are present. |
+| Nine sections | Open Settings and scroll from top to bottom. | Startup, Assignment, Desktops, Compatibility, Notifications, Appearance, Diagnostics, Global shortcuts, and Desktop switching shortcut are present, in that order. |
 | Persisted behavior | Change start-minimized, close-to-tray, next-launch pause, both notification switches, and theme. Exit from the tray, then relaunch. | Every control keeps its value. The chosen theme is applied and automatic assignment starts in the requested pause state. |
 | Rapid edits | Quickly change theme and two toggles without waiting between clicks. Leave and return to Settings. | The last value of every edited control remains; a later completion does not revert another control. |
 | Portable export | Export configuration, then open the JSON in a text editor. | JSON is indented and readable. It contains semantic desktops, rules, behavior, and shortcuts, but no runtime desktop GUID bindings or reconciliation metadata. Paths below the profile use `%USERPROFILE%`; the account name is absent. |
@@ -60,3 +64,33 @@ Use chords that do not overlap Windows or the second application.
 | Windows registration conflict | Have another application claim a chord, assign it in DesktopShift, and apply. Restart DesktopShift with that chord still claimed. | Settings immediately reports that the specific chord could not be registered, including the Windows conflict, without requiring another Apply click. Other valid chords remain available. |
 | Disable and edit | Turn the master switch off, then change chords and apply. | Every DesktopShift registration is released before validation; no edited chord is claimed while the master switch is off. |
 | Shutdown disposal | Enable shortcuts, exit DesktopShift from the tray, then claim the same chords in the second application or relaunch DesktopShift. | Every chord is free immediately after exit and registers normally on relaunch. No hidden hotkey window or registration survives shutdown. |
+| Rebuilt list survives | Scroll until the shortcut rows are on screen, then apply any settings change twice in a row. | DesktopShift stays running and each row still shows the key it was saved with. The list is rebuilt from scratch on every save, and the key pickers are reused across those rebuilds. |
+
+## Desktop switching matrix
+
+Have at least three virtual desktops open before starting, and no more than four,
+so both the "desktop exists" and "desktop does not exist" cases are reachable.
+
+Whether `Win + Alt + a number` can be registered at all is decided by the shell
+on the machine under test: if Explorer claimed the Jump List shortcuts first,
+Windows refuses DesktopShift's request. Both outcomes are correct behaviour, and
+the point of the case below is that the user is told which one they got. Record
+the result — it is the only way to find out how this behaves in practice.
+
+| Case | Action | Expected result |
+| --- | --- | --- |
+| Disabled by default | Leave the desktop switching switch off and press `Ctrl + Alt + 2` in the second application. | The second application receives the keys; the desktop does not change. |
+| Recommended profile | Enable switching with `Ctrl + Alt + Number` and apply. Press `Ctrl + Alt + 1`, then `2`, then `3`. | The foreground moves to Desktops 1, 2, and 3. The status reports 10 of 10 registered. |
+| Desktop ten on zero | With ten desktops open, press the profile's `0`. | The foreground moves to Desktop 10, not Desktop 1. |
+| Number row only | Press the profile's modifiers with the **numeric keypad** digits. | Nothing happens. Only the top row switches desktops. |
+| Held key | Press and hold `Ctrl + Alt + 3` for several seconds. | Exactly one switch occurs. The desktop does not cycle or flicker while the key is held. |
+| Missing desktop | With four desktops open, press the profile's `7`. | A notification says there is no Desktop 7 and names how many desktops exist. The foreground desktop does not change. |
+| Already current | Press the shortcut for the desktop already in front. | Nothing happens and nothing is reported. |
+| Windows override warning | Select `Win + Alt + Number` **without** applying. | A warning appears naming the taskbar Jump List shortcut before anything is claimed. |
+| Windows override outcome | Apply the `Win + Alt + Number` profile, then press `Win + Alt + 2`. | Either the desktop switches and the taskbar Jump List no longer opens, **or** Settings reports the specific desktops Windows refused and names the taskbar as the cause. Silence is a failure. |
+| Custom profile | Select Custom, tick Ctrl, Alt, and Shift, and apply. | The summary line updates before applying. `Ctrl + Alt + Shift + 2` switches to Desktop 2; the old `Ctrl + Alt + 2` no longer does. |
+| Custom with no modifier | Select Custom and untick every box. | Applying is refused with a message about the number keys, and no bare digit is ever claimed. Typing numbers still works everywhere. |
+| Profile exchange | Switch from Custom back to `Ctrl + Alt + Number` and then to Custom again. | The custom ticks are still as they were left. |
+| Restored at startup | Enable a profile, exit from the tray, and relaunch. | The same profile is registered again without opening Settings. |
+| Shutdown disposal | With a profile enabled, exit DesktopShift and press its combinations. | Every combination is free immediately. With `Win + Alt + Number`, the taskbar Jump Lists work again. |
+| Limited Mode | Force the provider into Limited Mode and press a switching shortcut. | A notification says switching is unavailable on this machine. Nothing is left half-switched. |

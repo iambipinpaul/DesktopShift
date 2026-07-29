@@ -165,6 +165,26 @@ public enum ConfigurationValidationCode
     /// no binding in the document.
     /// </summary>
     MissingHotkeyAction,
+
+    /// <summary>
+    /// The desktop switching shortcuts carry no modifier. Windows would register
+    /// ten bare digits and take the number row away from every application on
+    /// the machine.
+    /// </summary>
+    DesktopSwitchShortcutMissingModifier,
+
+    /// <summary>
+    /// Windows refused one or more desktop switching combinations. Reported
+    /// after the fact by the registrar, because nothing but Windows knows
+    /// whether the shell claimed a combination first.
+    /// </summary>
+    DesktopSwitchShortcutRegistrationFailed,
+
+    /// <summary>
+    /// A hand-edited document names a desktop switching profile or modifier bit
+    /// this build does not understand.
+    /// </summary>
+    InvalidDesktopSwitchShortcutValue,
 }
 
 /// <summary>

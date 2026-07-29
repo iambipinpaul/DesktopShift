@@ -31,6 +31,10 @@ namespace DesktopShift.App.Settings;
 /// Owns the gap between the shortcuts the document declares and the
 /// combinations Windows is actually holding.
 /// </param>
+/// <param name="DesktopSwitchHotkeys">
+/// The same job for the ten desktop-switching combinations. Separate because the
+/// two sets are claimed and refused independently.
+/// </param>
 /// <param name="Compatibility">
 /// Supplies what this Windows build allows, and runs the compatibility test on
 /// request.
@@ -62,4 +66,5 @@ public sealed record SettingsPageServices(
     IWindowReassignmentService WindowReassignment,
     IThemePreferenceService ThemePreference,
     TimeProvider TimeProvider,
-    Action<BehaviorSettings>? ApplyAcceptedBehavior = null);
+    Action<BehaviorSettings>? ApplyAcceptedBehavior = null,
+    IDesktopSwitchHotkeyCoordinator? DesktopSwitchHotkeys = null);

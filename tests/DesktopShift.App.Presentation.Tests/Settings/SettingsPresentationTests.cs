@@ -22,6 +22,7 @@ public sealed class SettingsPresentationTests
                 SettingsSection.Appearance,
                 SettingsSection.Diagnostics,
                 SettingsSection.Hotkeys,
+                SettingsSection.DesktopSwitching,
             },
             SettingsSectionCatalog.Sections
                 .Select(static section => section.Section)
@@ -108,5 +109,43 @@ public sealed class SettingsPresentationTests
         HotkeyBinding roundTrip = new HotkeyBindingEditor(source).ToBinding();
 
         Assert.AreEqual(source, roundTrip);
+    }
+
+    [TestMethod]
+    public void HotkeyEditor_TakesAKeyChosenFromThePicker()
+    {
+        HotkeyBindingEditor editor = new(
+            new HotkeyBinding(
+                HotkeyAction.TogglePause,
+                HotkeyModifiers.Control,
+                HotkeyKey.F9,
+                IsEnabled: true));
+
+        editor.SelectKey(HotkeyKey.F4);
+
+        Assert.AreEqual(HotkeyKey.F4, editor.Key);
+    }
+
+    /// <summary>
+    /// Rebuilding the shortcut list replaces each picker's item source, and a
+    /// ComboBox drops its selection to null when that happens. Treating it as a
+    /// choice would wipe the row's key on every refresh — and, when it was
+    /// written straight back through a TwoWay binding, unboxing that null into
+    /// <see cref="HotkeyKey"/> took the whole application down.
+    /// </summary>
+    [TestMethod]
+    public void HotkeyEditor_KeepsItsKeyWhenThePickerClearsItself()
+    {
+        HotkeyBindingEditor editor = new(
+            new HotkeyBinding(
+                HotkeyAction.TogglePause,
+                HotkeyModifiers.Control,
+                HotkeyKey.F9,
+                IsEnabled: true));
+
+        editor.SelectKey(null);
+        editor.SelectKey("F4");
+
+        Assert.AreEqual(HotkeyKey.F9, editor.Key);
     }
 }

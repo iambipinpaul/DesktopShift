@@ -244,6 +244,14 @@ internal static class ConfigurationValidator
                 candidate.Behavior is null ? [] : candidate.Behavior.Hotkeys,
                 requireComplete: candidate.Behavior?.AreHotkeysEnabled == true));
 
+        // Desktop switching is validated the same way and for the same reason.
+        // A profile carrying no modifier that reached the document would become
+        // active configuration and be discovered as a number row that stopped
+        // working everywhere else on the machine.
+        issues.AddRange(
+            DesktopSwitchShortcuts.Validate(
+                candidate.Behavior?.ToDesktopSwitchShortcutSettings()));
+
         return issues.ToImmutable();
     }
 

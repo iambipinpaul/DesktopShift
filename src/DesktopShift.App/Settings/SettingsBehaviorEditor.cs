@@ -63,4 +63,17 @@ public static class SettingsBehaviorEditor
             Hotkeys = [.. bindings],
         };
     }
+
+    public static BehaviorSettings WithDesktopSwitchShortcuts(
+        BehaviorSettings current,
+        DesktopSwitchShortcutSettings shortcuts)
+    {
+        ArgumentNullException.ThrowIfNull(shortcuts);
+        return current with
+        {
+            AreDesktopSwitchShortcutsEnabled = shortcuts.IsEnabled,
+            DesktopSwitchProfile = shortcuts.Profile,
+            DesktopSwitchCustomModifiers = shortcuts.CustomModifiers,
+        };
+    }
 }

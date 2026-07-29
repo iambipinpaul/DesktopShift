@@ -76,6 +76,7 @@ public sealed partial class MainWindow : Window
         IDiagnosticsCoordinator diagnosticsCoordinator,
         IConfigurationExchangeService configurationExchangeService,
         IGlobalHotkeyCoordinator globalHotkeyCoordinator,
+        IDesktopSwitchHotkeyCoordinator desktopSwitchHotkeyCoordinator,
         IAutomaticAssignmentPauseController assignmentPauseController,
         IRunningApplicationInventory runningApplicationInventory,
         IApplicationIconReader applicationIconReader,
@@ -134,7 +135,9 @@ public sealed partial class MainWindow : Window
             _windowReassignmentService,
             _themePreferenceService,
             timeProvider,
-            ApplyAcceptedBehavior);
+            ApplyAcceptedBehavior,
+            desktopSwitchHotkeyCoordinator ??
+                throw new ArgumentNullException(nameof(desktopSwitchHotkeyCoordinator)));
 
         InitializeComponent();
 
@@ -267,6 +270,8 @@ public sealed partial class MainWindow : Window
         _themePreferenceService.SetTheme(behavior.Theme);
         _ = _settingsPageServices.Hotkeys.Apply(
             behavior.ToHotkeySettings());
+        _ = _settingsPageServices.DesktopSwitchHotkeys?.Apply(
+            behavior.ToDesktopSwitchShortcutSettings());
         AcceptedBehaviorHandler?.Invoke(behavior);
     }
 

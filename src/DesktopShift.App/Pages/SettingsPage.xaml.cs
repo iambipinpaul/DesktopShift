@@ -20,6 +20,7 @@ public sealed partial class SettingsPage : Page
 {
     private readonly ObservableCollection<HotkeyBindingEditor> hotkeyBindings = [];
     private readonly SemaphoreSlim behaviorSaveGate = new(1, 1);
+    private DesktopSwitchShortcutEditor? desktopSwitchEditor;
     private SettingsPageServices? services;
     private Func<CancellationToken, Task<CompatibilityPresentation>>?
         runCompatibilityTestAsync;
@@ -57,6 +58,9 @@ public sealed partial class SettingsPage : Page
             $"Log location: {pageServices.Diagnostics.LogLocation.DisplayPath}";
         ApplyLivePause(pageServices.AssignmentPause.IsPaused);
         ShowHotkeyState(pageServices.Hotkeys.Current, showSuccess: false);
+        ShowDesktopSwitchState(
+            pageServices.DesktopSwitchHotkeys?.Current,
+            showSuccess: false);
         _ = LoadBehaviorAsync();
     }
 
@@ -242,11 +246,190 @@ public sealed partial class SettingsPage : Page
             HotkeysEnabledToggle.IsOn = currentBehavior.AreHotkeysEnabled;
             StartupStateValue.Text = presentation.StartupStateDescription;
             ReplaceHotkeys(currentBehavior.ToHotkeySettings());
+            ReplaceDesktopSwitchShortcuts(
+                currentBehavior.ToDesktopSwitchShortcutSettings());
         }
         finally
         {
             isApplyingPresentation = false;
         }
+    }
+
+    /// <summary>
+    /// Loads the profile into the radio buttons and modifier boxes, then brings
+    /// the derived text alongside them up to date.
+    /// </summary>
+    private void ReplaceDesktopSwitchShortcuts(
+        DesktopSwitchShortcutSettings settings)
+    {
+        desktopSwitchEditor = new DesktopSwitchShortcutEditor(settings);
+
+        DesktopSwitchEnabledToggle.IsOn = desktopSwitchEditor.IsEnabled;
+        DesktopSwitchCtrlAltOption.IsChecked =
+            desktopSwitchEditor.Profile == DesktopSwitchShortcutProfile.CtrlAlt;
+        DesktopSwitchWinAltOption.IsChecked =
+            desktopSwitchEditor.Profile == DesktopSwitchShortcutProfile.WinAlt;
+        DesktopSwitchCustomOption.IsChecked = desktopSwitchEditor.IsCustom;
+        DesktopSwitchControlModifier.IsChecked = desktopSwitchEditor.Control;
+        DesktopSwitchAltModifier.IsChecked = desktopSwitchEditor.Alt;
+        DesktopSwitchShiftModifier.IsChecked = desktopSwitchEditor.Shift;
+        DesktopSwitchWindowsModifier.IsChecked = desktopSwitchEditor.Windows;
+
+        RefreshDesktopSwitchPresentation();
+    }
+
+    /// <summary>
+    /// Keeps the summary line, the Windows-override warning, and the modifier
+    /// boxes' availability matching whichever profile is selected.
+    /// </summary>
+    private void RefreshDesktopSwitchPresentation()
+    {
+        if (desktopSwitchEditor is null)
+        {
+            return;
+        }
+
+        // Set per box rather than on the panel: a Panel is not a Control, so it
+        // has no enabled state to inherit from.
+        bool isCustom = desktopSwitchEditor.IsCustom;
+        DesktopSwitchControlModifier.IsEnabled = isCustom;
+        DesktopSwitchAltModifier.IsEnabled = isCustom;
+        DesktopSwitchShiftModifier.IsEnabled = isCustom;
+        DesktopSwitchWindowsModifier.IsEnabled = isCustom;
+        DesktopSwitchSummary.Text = desktopSwitchEditor.Summary;
+
+        // The message is only written when there is one, and IsOpen is only
+        // assigned when it actually changes. An InfoBar driven to the state it
+        // is already in still runs its open/close transition, and doing that
+        // from inside another control's event is how a redundant assignment
+        // turns into a visible glitch.
+        string? warning = desktopSwitchEditor.Warning;
+        if (warning is not null)
+        {
+            DesktopSwitchWarning.Message = warning;
+        }
+
+        if (DesktopSwitchWarning.IsOpen != warning is not null)
+        {
+            DesktopSwitchWarning.IsOpen = warning is not null;
+        }
+    }
+
+    /// <remarks>
+    /// Guarded against <c>isApplyingPresentation</c> like every other handler on
+    /// this page. Loading a saved profile assigns <c>IsChecked</c> on all three
+    /// radio buttons in turn, and each assignment raises this event — so without
+    /// the guard, restoring settings re-entrantly rewrites the summary and
+    /// reopens the warning InfoBar in the middle of applying a presentation,
+    /// against an editor that is being replaced underneath it.
+    /// </remarks>
+    private void OnDesktopSwitchProfileChecked(object sender, RoutedEventArgs args)
+    {
+        if (isApplyingPresentation || desktopSwitchEditor is null)
+        {
+            return;
+        }
+
+        desktopSwitchEditor.Profile = ReadSelectedDesktopSwitchProfile();
+        RefreshDesktopSwitchPresentation();
+    }
+
+    private void OnDesktopSwitchModifierChanged(object sender, RoutedEventArgs args)
+    {
+        if (isApplyingPresentation || desktopSwitchEditor is null)
+        {
+            return;
+        }
+
+        desktopSwitchEditor.Control = DesktopSwitchControlModifier.IsChecked is true;
+        desktopSwitchEditor.Alt = DesktopSwitchAltModifier.IsChecked is true;
+        desktopSwitchEditor.Shift = DesktopSwitchShiftModifier.IsChecked is true;
+        desktopSwitchEditor.Windows = DesktopSwitchWindowsModifier.IsChecked is true;
+        RefreshDesktopSwitchPresentation();
+    }
+
+    private DesktopSwitchShortcutProfile ReadSelectedDesktopSwitchProfile()
+    {
+        if (DesktopSwitchWinAltOption.IsChecked is true)
+        {
+            return DesktopSwitchShortcutProfile.WinAlt;
+        }
+
+        return DesktopSwitchCustomOption.IsChecked is true
+            ? DesktopSwitchShortcutProfile.Custom
+            : DesktopSwitchShortcutProfile.CtrlAlt;
+    }
+
+    private async void OnApplyDesktopSwitchClick(object sender, RoutedEventArgs args)
+    {
+        if (services is null || desktopSwitchEditor is null)
+        {
+            ReportDisconnected();
+            return;
+        }
+
+        desktopSwitchEditor.IsEnabled = DesktopSwitchEnabledToggle.IsOn;
+        BehaviorSettings requested =
+            SettingsBehaviorEditor.WithDesktopSwitchShortcuts(
+                currentBehavior,
+                desktopSwitchEditor.ToSettings());
+        BehaviorSettingsPresentation? presentation =
+            await PersistBehaviorAsync(requested);
+        if (presentation is null)
+        {
+            return;
+        }
+
+        if (!presentation.Accepted)
+        {
+            DesktopSwitchStatus.Message =
+                "The desktop switching candidate was retained for correction. The previous registrations are still active.";
+            DesktopSwitchStatus.Severity = InfoBarSeverity.Warning;
+            DesktopSwitchStatus.IsOpen = true;
+            return;
+        }
+
+        ShowDesktopSwitchState(
+            services.DesktopSwitchHotkeys?.Current,
+            showSuccess: true);
+    }
+
+    /// <summary>
+    /// Reports what Windows actually handed over, which is the only part of this
+    /// the user cannot work out by reading their own settings.
+    /// </summary>
+    private void ShowDesktopSwitchState(
+        DesktopSwitchHotkeyState? state,
+        bool showSuccess)
+    {
+        if (state is null)
+        {
+            if (showSuccess)
+            {
+                DesktopSwitchStatus.Message =
+                    "The profile was saved. Desktop switching shortcuts are not connected in this session.";
+                DesktopSwitchStatus.Severity = InfoBarSeverity.Informational;
+                DesktopSwitchStatus.IsOpen = true;
+            }
+
+            return;
+        }
+
+        if (state.Issues.IsEmpty && !showSuccess)
+        {
+            DesktopSwitchStatus.IsOpen = false;
+            return;
+        }
+
+        DesktopSwitchStatus.Message = state.Issues.IsEmpty
+            ? state.IsEnabled
+                ? $"{state.RegisteredCount} of {DesktopSwitchShortcuts.MaxDesktopOrdinal} desktop switching shortcuts are registered."
+                : "Desktop switching shortcuts are disabled; no combinations are registered."
+            : FormatIssues(state.Issues);
+        DesktopSwitchStatus.Severity = state.Issues.IsEmpty
+            ? InfoBarSeverity.Success
+            : InfoBarSeverity.Warning;
+        DesktopSwitchStatus.IsOpen = true;
     }
 
     private void ReplaceHotkeys(HotkeySettings settings)
@@ -255,6 +438,22 @@ public sealed partial class SettingsPage : Page
         foreach (HotkeyBinding binding in settings.Bindings)
         {
             hotkeyBindings.Add(new HotkeyBindingEditor(binding));
+        }
+    }
+
+    /// <summary>
+    /// Carries a key choice back to the row it was made on. Rebuilding the list
+    /// recycles these pickers, so this fires for reasons that have nothing to do
+    /// with the user; <see cref="HotkeyBindingEditor.SelectKey"/> decides which
+    /// of them count.
+    /// </summary>
+    private void OnHotkeyKeySelectionChanged(
+        object sender,
+        SelectionChangedEventArgs args)
+    {
+        if (sender is ComboBox { DataContext: HotkeyBindingEditor editor } picker)
+        {
+            editor.SelectKey(picker.SelectedItem);
         }
     }
 
@@ -686,6 +885,8 @@ public sealed partial class SettingsPage : Page
 
         services.ThemePreference.SetTheme(behavior.Theme);
         _ = services.Hotkeys.Apply(behavior.ToHotkeySettings());
+        _ = services.DesktopSwitchHotkeys?.Apply(
+            behavior.ToDesktopSwitchShortcutSettings());
     }
 
     private void Report(

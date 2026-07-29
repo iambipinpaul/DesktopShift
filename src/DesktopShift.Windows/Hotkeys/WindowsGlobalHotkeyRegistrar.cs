@@ -1,38 +1,32 @@
-using System.ComponentModel;
 using DesktopShift.Core.Hotkeys;
 
 namespace DesktopShift.Windows.Hotkeys;
 
 /// <summary>
-/// Claims optional global shortcuts through a private message-only window.
+/// Claims the four optional command shortcuts through a private message-only
+/// window.
 /// </summary>
 /// <remarks>
-/// The window is created lazily, so constructing the service does not reserve
-/// a key or create native state. Registration and disposal must occur on the
-/// thread that first registered a shortcut because User32 windows and hotkeys
-/// are owned by that thread.
+/// The window itself is <see cref="HotkeyMessageWindow"/>, which is shared with
+/// desktop switching. All this type adds is the mapping between an action and
+/// the numeric id Windows reports — the part that is genuinely specific to these
+/// four shortcuts.
 /// </remarks>
 public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
 {
-    public const uint HotkeyMessage = 0x0312;
-    public const int HotkeyAlreadyRegisteredError = 1409;
+    public const uint HotkeyMessage = HotkeyMessageWindow.HotkeyMessage;
+    public const int HotkeyAlreadyRegisteredError =
+        HotkeyMessageWindow.HotkeyAlreadyRegisteredError;
     public const int ReassignAllRegistrationId = 1;
     public const int ForegroundWindowRegistrationId = 2;
     public const int TogglePauseRegistrationId = 3;
     public const int OpenDesktopShiftRegistrationId = 4;
 
-    private const nint MessageHandled = 0;
     private const string WindowClassPrefix = "DesktopShift.GlobalHotkeys.";
 
-    private readonly IWindowsHotkeyNativeApi native;
-    private readonly WindowsHotkeyWindowProcedure windowProcedure;
-    private readonly string windowClassName;
+    private readonly HotkeyMessageWindow window;
     private readonly object syncRoot = new();
-    private readonly Dictionary<int, HotkeyAction> registrations = [];
-    private nint windowHandle;
-    private uint ownerThreadId;
-    private bool isWindowClassRegistered;
-    private bool isDisposed;
+    private readonly Dictionary<int, HotkeyAction> actionsByRegistrationId = [];
 
     public WindowsGlobalHotkeyRegistrar()
         : this(new User32WindowsHotkeyNativeApi())
@@ -43,9 +37,8 @@ public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
     {
         ArgumentNullException.ThrowIfNull(native);
 
-        this.native = native;
-        windowProcedure = OnWindowMessage;
-        windowClassName = WindowClassPrefix + Guid.NewGuid().ToString("N");
+        window = new HotkeyMessageWindow(native, WindowClassPrefix);
+        window.Pressed += OnWindowPressed;
     }
 
     public event EventHandler<HotkeyInvokedEventArgs>? Pressed;
@@ -56,19 +49,6 @@ public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
     {
         lock (syncRoot)
         {
-            ObjectDisposedException.ThrowIf(isDisposed, this);
-
-            if (!Win32HotkeyTranslation.TryTranslate(
-                chord,
-                out uint modifiers,
-                out uint virtualKey,
-                out string? translationFailure))
-            {
-                return new HotkeyRegistrationOutcome(
-                    false,
-                    translationFailure);
-            }
-
             if (!TryGetRegistrationId(action, out int registrationId))
             {
                 return new HotkeyRegistrationOutcome(
@@ -76,38 +56,14 @@ public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
                     "The shortcut action is not supported.");
             }
 
-            if (registrations.ContainsKey(registrationId))
+            HotkeyRegistrationOutcome outcome =
+                window.Register(registrationId, chord);
+            if (outcome.Succeeded)
             {
-                return new HotkeyRegistrationOutcome(
-                    false,
-                    "This DesktopShift shortcut is already registered.");
+                actionsByRegistrationId[registrationId] = action;
             }
 
-            HotkeyRegistrationOutcome? windowFailure = EnsureMessageWindow();
-            if (windowFailure is not null)
-            {
-                return windowFailure;
-            }
-
-            if (native.CurrentThreadId != ownerThreadId)
-            {
-                return new HotkeyRegistrationOutcome(
-                    false,
-                    "Global shortcuts must be changed on the thread that owns their Windows message window.");
-            }
-
-            if (!native.RegisterHotKey(
-                windowHandle,
-                registrationId,
-                modifiers,
-                virtualKey))
-            {
-                int error = native.GetLastError();
-                return RegistrationFailure(error);
-            }
-
-            registrations.Add(registrationId, action);
-            return HotkeyRegistrationOutcome.Success;
+            return outcome;
         }
     }
 
@@ -115,12 +71,8 @@ public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
     {
         lock (syncRoot)
         {
-            if (isDisposed)
-            {
-                return;
-            }
-
-            ReleaseRegistrations();
+            window.UnregisterAll();
+            actionsByRegistrationId.Clear();
         }
     }
 
@@ -128,144 +80,35 @@ public sealed class WindowsGlobalHotkeyRegistrar : IGlobalHotkeyRegistrar
     {
         lock (syncRoot)
         {
-            if (isDisposed)
+            if (window.IsDisposed)
             {
                 return;
             }
 
-            isDisposed = true;
-            ReleaseRegistrations();
-
-            if (windowHandle != 0)
-            {
-                _ = native.DestroyWindow(windowHandle);
-                windowHandle = 0;
-            }
-
-            if (isWindowClassRegistered)
-            {
-                _ = native.UnregisterWindowClass(windowClassName);
-                isWindowClassRegistered = false;
-            }
-
-            Pressed = null;
+            actionsByRegistrationId.Clear();
         }
+
+        window.Pressed -= OnWindowPressed;
+        window.Dispose();
+        Pressed = null;
     }
 
-    private HotkeyRegistrationOutcome? EnsureMessageWindow()
+    private void OnWindowPressed(object? sender, int registrationId)
     {
-        if (windowHandle != 0)
-        {
-            return null;
-        }
+        EventHandler<HotkeyInvokedEventArgs>? handler;
+        HotkeyAction action;
 
-        ownerThreadId = native.CurrentThreadId;
-        if (!native.RegisterWindowClass(windowClassName, windowProcedure))
+        lock (syncRoot)
         {
-            int error = native.GetLastError();
-            return NativeSetupFailure(
-                "register its global-shortcut message window class",
-                error);
-        }
-
-        isWindowClassRegistered = true;
-        windowHandle = native.CreateMessageOnlyWindow(windowClassName);
-        if (windowHandle != 0)
-        {
-            return null;
-        }
-
-        int createError = native.GetLastError();
-        _ = native.UnregisterWindowClass(windowClassName);
-        isWindowClassRegistered = false;
-        ownerThreadId = 0;
-        return NativeSetupFailure(
-            "create its global-shortcut message window",
-            createError);
-    }
-
-    private void ReleaseRegistrations()
-    {
-        foreach (int registrationId in registrations.Keys.Order())
-        {
-            if (windowHandle != 0)
+            if (!actionsByRegistrationId.TryGetValue(registrationId, out action))
             {
-                _ = native.UnregisterHotKey(windowHandle, registrationId);
-            }
-        }
-
-        registrations.Clear();
-    }
-
-    private nint OnWindowMessage(
-        nint handle,
-        uint message,
-        nint wParam,
-        nint lParam)
-    {
-        EventHandler<HotkeyInvokedEventArgs>? handler = null;
-        HotkeyAction action = default;
-
-        if (message == HotkeyMessage)
-        {
-            lock (syncRoot)
-            {
-                if (!isDisposed &&
-                    registrations.TryGetValue((int)wParam, out action))
-                {
-                    handler = Pressed;
-                }
+                return;
             }
 
-            if (handler is not null)
-            {
-                try
-                {
-                    handler(this, new HotkeyInvokedEventArgs(action));
-                }
-                catch (Exception)
-                {
-                    // No managed exception may cross a native window procedure.
-                    // Shortcut commands report their own failures asynchronously.
-                }
-            }
-
-            return MessageHandled;
+            handler = Pressed;
         }
 
-        return native.DefWindowProc(handle, message, wParam, lParam);
-    }
-
-    private static HotkeyRegistrationOutcome RegistrationFailure(int error)
-    {
-        if (error == HotkeyAlreadyRegisteredError)
-        {
-            return new HotkeyRegistrationOutcome(
-                false,
-                "Another application is already using this shortcut.",
-                error);
-        }
-
-        string detail = error == 0
-            ? "Windows returned no additional error information."
-            : new Win32Exception(error).Message;
-        return new HotkeyRegistrationOutcome(
-            false,
-            $"Windows could not register this shortcut: {detail}",
-            error == 0 ? null : error);
-    }
-
-    private static HotkeyRegistrationOutcome NativeSetupFailure(
-        string operation,
-        int error)
-    {
-        string detail = error == 0
-            ? "Windows returned no additional error information."
-            : new Win32Exception(error).Message;
-        return new HotkeyRegistrationOutcome(
-            false,
-            $"DesktopShift could not {operation}: {detail}",
-            error == 0 ? null : error);
+        handler?.Invoke(this, new HotkeyInvokedEventArgs(action));
     }
 
     private static bool TryGetRegistrationId(

@@ -152,6 +152,31 @@ public sealed class NotificationAreaCoordinator : IAsyncDisposable
     public void HandleActivationRequested() => _shellWindow.ShowAndActivate();
 
     /// <summary>
+    /// Shows a balloon for something the user asked for directly.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not gated on <see cref="TrayNotificationPreferences"/>.
+    /// Those switches govern unattended events — an assignment that failed while
+    /// the user was elsewhere — and exist so DesktopShift can be told to stay
+    /// quiet in the background. A shortcut the user just pressed is not
+    /// background noise: silence there reads as the shortcut not working at all.
+    /// </remarks>
+    public void Notify(TrayNotification notification)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        lock (_syncRoot)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+        }
+
+        _trayIconHost.Notify(notification);
+    }
+
+    /// <summary>
     /// Decides what closing the main window means, and carries the decision out
     /// for the hide case.
     /// </summary>

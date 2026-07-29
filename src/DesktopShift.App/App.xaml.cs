@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using DesktopShift.App.Tray;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Activation;
@@ -35,6 +36,9 @@ public partial class App : Application
     private NotificationAreaCoordinator? _notificationArea;
     private IGlobalHotkeyCoordinator? _hotkeyCoordinator;
     private HotkeyCommandDispatcher? _hotkeyDispatcher;
+    private IDesktopSwitchHotkeyCoordinator? _desktopSwitchHotkeyCoordinator;
+    private IDesktopSwitchShortcutService? _desktopSwitchService;
+    private Task _desktopSwitchWork = Task.CompletedTask;
     private ApplicationShutdownSequence? _shutdownSequence;
     private MainWindow? _window;
     private int _shutdownStarted;
@@ -55,6 +59,9 @@ public partial class App : Application
             services.AddSingleton<
                 IGlobalHotkeyRegistrar,
                 WindowsGlobalHotkeyRegistrar>();
+            services.AddSingleton<
+                IDesktopSwitchHotkeyRegistrar,
+                WindowsDesktopSwitchHotkeyRegistrar>();
             services.AddSingleton<
                 IForegroundWindowProvider,
                 WindowsForegroundWindowProvider>();
@@ -247,6 +254,100 @@ public partial class App : Application
             _host.Services.GetRequiredService<IGlobalHotkeyCoordinator>();
         _hotkeyCoordinator.Invoked += _hotkeyDispatcher.HandleInvoked;
         _ = _hotkeyCoordinator.Apply(behavior.ToHotkeySettings());
+
+        StartDesktopSwitchHotkeys(behavior);
+    }
+
+    /// <summary>
+    /// Restores the saved desktop-switching profile, so the combinations a user
+    /// chose are claimed again at sign-in without being asked for twice.
+    /// </summary>
+    private void StartDesktopSwitchHotkeys(BehaviorSettings behavior)
+    {
+        _desktopSwitchService =
+            _host.Services.GetRequiredService<IDesktopSwitchShortcutService>();
+        _desktopSwitchHotkeyCoordinator =
+            _host.Services.GetRequiredService<IDesktopSwitchHotkeyCoordinator>();
+        _desktopSwitchHotkeyCoordinator.Invoked += OnDesktopSwitchHotkeyInvoked;
+        _ = _desktopSwitchHotkeyCoordinator.Apply(
+            behavior.ToDesktopSwitchShortcutSettings());
+    }
+
+    /// <summary>
+    /// Runs one desktop-switching press.
+    /// </summary>
+    /// <remarks>
+    /// A key press has no caller to hand an exception to, so the work is started
+    /// and observed here rather than awaited. The switch itself is serialized by
+    /// <see cref="DesktopSwitchShortcutService"/>, so leaning on a digit does not
+    /// stack transitions.
+    /// </remarks>
+    private void OnDesktopSwitchHotkeyInvoked(
+        object? sender,
+        DesktopSwitchHotkeyInvokedEventArgs args)
+    {
+        _desktopSwitchWork = SwitchDesktopAsync(args.DesktopOrdinal);
+    }
+
+    private async Task SwitchDesktopAsync(int desktopOrdinal)
+    {
+        IDesktopSwitchShortcutService? service = _desktopSwitchService;
+        if (service is null)
+        {
+            return;
+        }
+
+        try
+        {
+            DesktopSwitchShortcutResult result = await service
+                .SwitchToDesktopAsync(desktopOrdinal)
+                .ConfigureAwait(true);
+            if (result.ShouldNotify)
+            {
+                NotifyDesktopSwitch(result);
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine(
+                $"DesktopShift could not switch to desktop {desktopOrdinal}: {exception}");
+        }
+    }
+
+    /// <summary>
+    /// Tells the user why a shortcut they pressed did nothing visible.
+    /// </summary>
+    /// <remarks>
+    /// A desktop that does not exist is the case this is really for. Pressing
+    /// Ctrl+Alt+7 with four desktops open is otherwise indistinguishable from the
+    /// shortcut being broken, and a user who cannot tell those apart will go
+    /// looking for a bug that is not there.
+    /// </remarks>
+    private void NotifyDesktopSwitch(DesktopSwitchShortcutResult result)
+    {
+        NotificationAreaCoordinator? notificationArea = _notificationArea;
+        if (notificationArea is null || result.Message is null)
+        {
+            return;
+        }
+
+        TrayNotification notification = new(
+            result.Outcome == DesktopSwitchShortcutOutcome.DesktopMissing
+                ? $"There is no Desktop {result.DesktopOrdinal}"
+                : "DesktopShift could not switch desktops",
+            result.Message,
+            result.Outcome == DesktopSwitchShortcutOutcome.DesktopMissing
+                ? TrayNotificationSeverity.Information
+                : TrayNotificationSeverity.Warning);
+
+        if (_dispatcherQueue?.HasThreadAccess is true)
+        {
+            notificationArea.Notify(notification);
+            return;
+        }
+
+        _ = _dispatcherQueue?.TryEnqueue(
+            () => notificationArea.Notify(notification));
     }
 
     private Task OpenShellFromHotkeyAsync(CancellationToken cancellationToken)
@@ -302,6 +403,22 @@ public partial class App : Application
                         }
 
                         _hotkeyCoordinator.Dispose();
+                    }
+
+                    return ValueTask.CompletedTask;
+                }),
+            // Its own step rather than a second statement in the one above: a
+            // failure releasing the four command shortcuts must not leave ten
+            // desktop combinations claimed by a process that is exiting.
+            new ShutdownStep(
+                "desktop switching shortcuts",
+                _ =>
+                {
+                    if (_desktopSwitchHotkeyCoordinator is not null)
+                    {
+                        _desktopSwitchHotkeyCoordinator.Invoked -=
+                            OnDesktopSwitchHotkeyInvoked;
+                        _desktopSwitchHotkeyCoordinator.Dispose();
                     }
 
                     return ValueTask.CompletedTask;
@@ -401,10 +518,67 @@ public partial class App : Application
         _host.Dispose();
     }
 
+    /// <summary>
+    /// Records a UI exception and keeps DesktopShift running.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two deliberate changes from simply logging. First, the exception is
+    /// written to a file: <see cref="Debug.WriteLine"/> reaches a debugger and
+    /// nothing else, so a crash on a user's machine left no evidence at all and
+    /// the only symptom was the window disappearing.
+    /// </para>
+    /// <para>
+    /// Second, <c>Handled</c> is set. Without it any exception reaching here
+    /// terminates the process, which for a notification-area utility means the
+    /// icon vanishes with no message and automatic assignment silently stops. A
+    /// failed button click should cost the user that click, not the session.
+    /// The failure is still recorded, so this hides nothing — it only declines
+    /// to treat every UI fault as fatal.
+    /// </para>
+    /// </remarks>
     private static void OnUnhandledException(
         object sender,
         Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
     {
         Debug.WriteLine($"Unhandled DesktopShift UI exception: {args.Exception}");
+        RecordCrash(args.Exception);
+        args.Handled = true;
+    }
+
+    /// <summary>
+    /// Appends an exception to a crash file beside the configuration.
+    /// </summary>
+    /// <remarks>
+    /// Written with its own file handling rather than through the diagnostic
+    /// log: the rolling log carries redacted, structured activity records, and a
+    /// stack trace is neither. This is also the one path that has to keep
+    /// working when the rest of the application is already in an unknown state,
+    /// so it depends on nothing but the file system and swallows its own
+    /// failures.
+    /// </remarks>
+    private static void RecordCrash(Exception exception)
+    {
+        try
+        {
+            string directory = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "DesktopShift");
+            _ = Directory.CreateDirectory(directory);
+            File.AppendAllText(
+                Path.Combine(directory, "crash.log"),
+                $"""
+
+                ===== {DateTimeOffset.UtcNow:O} =====
+                {exception}
+
+                """);
+        }
+        catch (Exception)
+        {
+            // Nothing useful is left to do. Failing to record a crash must not
+            // become a second crash.
+        }
     }
 }

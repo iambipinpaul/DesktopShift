@@ -192,6 +192,26 @@ public sealed record ApplicationRule(
 /// Turning this off never affects bindings. Naming is how a desktop is
 /// labelled, not how it is identified.
 /// </param>
+/// <param name="AreDesktopSwitchShortcutsEnabled">
+/// Whether the ten desktop-switching combinations are claimed. Off by default,
+/// for the same reason <paramref name="AreHotkeysEnabled"/> is: these take ten
+/// combinations away from every other application on the machine, so nothing is
+/// claimed until the user asks for it.
+///
+/// Separate from <paramref name="AreHotkeysEnabled"/> rather than folded into
+/// it. The two sets fail independently — a taskbar that already owns Win+Alt+3
+/// says nothing about whether Ctrl+Alt+Shift+R is free — and one switch
+/// governing both would mean a user who wanted desktop switching had to accept
+/// the command shortcuts to get it.
+/// </param>
+/// <param name="DesktopSwitchProfile">
+/// Which modifiers the desktop-switching shortcuts are built from. Exactly one
+/// profile is active at a time.
+/// </param>
+/// <param name="DesktopSwitchCustomModifiers">
+/// The modifiers the Custom profile uses. Kept even while a built-in profile is
+/// selected, so switching to Custom and back does not discard the user's choice.
+/// </param>
 public sealed record BehaviorSettings(
     bool StartWithWindows,
     bool StartMinimized,
@@ -202,7 +222,12 @@ public sealed record BehaviorSettings(
     bool NotifyOnCompatibilityWarning = true,
     bool AreHotkeysEnabled = false,
     ImmutableArray<HotkeyBinding> Hotkeys = default,
-    bool NameWindowsDesktops = true)
+    bool NameWindowsDesktops = true,
+    bool AreDesktopSwitchShortcutsEnabled = false,
+    DesktopSwitchShortcutProfile DesktopSwitchProfile =
+        DesktopSwitchShortcutProfile.CtrlAlt,
+    HotkeyModifiers DesktopSwitchCustomModifiers =
+        DesktopSwitchShortcuts.CtrlAltModifiers)
 {
     /// <summary>
     /// Hotkey bindings, normalized so an omitted collection is empty rather than
@@ -219,6 +244,21 @@ public sealed record BehaviorSettings(
     /// </summary>
     public HotkeySettings ToHotkeySettings() =>
         new(AreHotkeysEnabled, HotkeyDefaults.Complete(Hotkeys));
+
+    /// <summary>
+    /// The desktop-switching configuration as its coordinator consumes it.
+    /// </summary>
+    /// <remarks>
+    /// A document written before desktop switching existed carries none of these
+    /// members, so they read as their defaults: the recommended profile,
+    /// switched off. That is exactly how such a document behaved before the
+    /// feature was added, which is why the schema version did not have to move.
+    /// </remarks>
+    public DesktopSwitchShortcutSettings ToDesktopSwitchShortcutSettings() =>
+        new(
+            AreDesktopSwitchShortcutsEnabled,
+            DesktopSwitchProfile,
+            DesktopSwitchCustomModifiers);
 }
 
 public enum ApplicationRuleTrigger
