@@ -297,6 +297,40 @@ public sealed record BehaviorSettings(
 /// in <see cref="ApplicationRule.TargetDesktopKey"/>, because a sentinel key
 /// could collide with a Managed Desktop the user actually named that.
 /// </para>
+/// <para>
+/// The two shapes side by side in <c>configuration.json</c>. Notepad is one of
+/// the shipped Anywhere rules; the second entry is what a rule that moves
+/// windows looks like, so the difference is a single member:
+/// </para>
+/// <code>
+/// {
+///   "id": "notepad",
+///   "displayName": "Notepad",
+///   "isEnabled": true,
+///   "targetDesktopKey": "",
+///   "processNames": [ "Notepad.exe" ],
+///   "packageFamilyNames": [ "Microsoft.WindowsNotepad_8wekyb3d8bbwe" ],
+///   "action": "allowAnywhere"
+/// },
+/// {
+///   "id": "ide-development",
+///   "displayName": "IDE Development",
+///   "isEnabled": true,
+///   "targetDesktopKey": "ide-development",
+///   "processNames": [ "Code.exe", "devenv.exe" ],
+///   "triggers": [ "windowCreated", "windowShown", "foregroundActivated",
+///                 "startupReconciliation", "manualReassignment" ],
+///   "switchPolicy": "onForegroundActivation",
+///   "action": "moveToDesktop"
+/// }
+/// </code>
+/// <para>
+/// The Anywhere entry writes no <c>triggers</c> and no <c>switchPolicy</c>
+/// because neither is read: both say when a window is moved, and it never is.
+/// Its <c>targetDesktopKey</c> is empty for the same reason. Omitting
+/// <c>action</c> entirely reads as <see cref="MoveToDesktop"/>, which is why a
+/// document written before this member existed still loads unchanged.
+/// </para>
 /// </remarks>
 public enum ApplicationRuleAction
 {
@@ -310,11 +344,47 @@ public enum ApplicationRuleAction
     /// Leave the window exactly where it opened.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This is what exempts an application from the sweep that sends every
     /// window no rule names to the first desktop. It is also the answer for a
     /// user who wants DesktopShift to stop moving an application without
     /// unmanaging it: disabling a rule makes its application unnamed, and an
     /// unnamed application is swept.
+    /// </para>
+    /// <para>
+    /// It suits the applications a user opens from wherever they already are and
+    /// expects to stay there — a file dialog's neighbour, a scratch note, a quick
+    /// calculation. The shipped rules are the clearest examples of the shape, and
+    /// each one shows a different identity:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <c>notepad</c> — package family <c>Microsoft.WindowsNotepad_8wekyb3d8bbwe</c>
+    /// plus process <c>Notepad.exe</c>. The packaged identity claims the Store
+    /// app; the process name still claims an older unpackaged install.
+    /// </description></item>
+    /// <item><description>
+    /// <c>calculator</c> — package family
+    /// <c>Microsoft.WindowsCalculator_8wekyb3d8bbwe</c> alone, because it only
+    /// ships packaged.
+    /// </description></item>
+    /// <item><description>
+    /// <c>file-explorer</c> — process <c>explorer.exe</c> plus the path
+    /// <c>C:\Windows\explorer.exe</c>, so the shell's own windows are named
+    /// twice over.
+    /// </description></item>
+    /// <item><description>
+    /// <c>task-manager</c> and <c>settings</c> — a full path each, which is the
+    /// strongest identity an unpackaged system tool has.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// A user adding their own follows the same shape: name the application by
+    /// its strongest available identity and choose Anywhere. Paint and Photos are
+    /// the obvious candidates and are deliberately not shipped — a shipped
+    /// Anywhere rule unmanages an application for everybody, and those two are
+    /// ordinary applications somebody may well want placed.
+    /// </para>
     /// </remarks>
     AllowAnywhere,
 }
