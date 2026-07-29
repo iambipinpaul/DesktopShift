@@ -5,6 +5,8 @@ using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
 using DesktopShift.Windows.Assignments;
 using DesktopShift.Windows.Observation;
+using DesktopShift.Windows.VirtualDesktops;
+using DesktopShift.Windows.VirtualDesktops.NativeBridge;
 using Microsoft.Win32.SafeHandles;
 
 namespace DesktopShift.Windows.Tests.Security;
@@ -42,7 +44,8 @@ public sealed class AccessDeniedActivityTests
     {
         using WindowsWindowDesktopPlacementService service = new(
             new LiveWindowApi(),
-            new DenyingDesktopManagerApi());
+            new DenyingDesktopManagerApi(),
+            new DenyingWindowMover());
 
         DesktopTopologyProviderResult<Guid> result =
             await service.GetWindowDesktopIdAsync(WindowHandle);
@@ -63,7 +66,8 @@ public sealed class AccessDeniedActivityTests
     {
         using WindowsWindowDesktopPlacementService service = new(
             new LiveWindowApi(),
-            new DenyingDesktopManagerApi());
+            new DenyingDesktopManagerApi(),
+            new DenyingWindowMover());
 
         DesktopTopologyProviderResult result =
             await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
@@ -74,7 +78,10 @@ public sealed class AccessDeniedActivityTests
         Assert.AreEqual(AccessDeniedHResult, result.Error.HResult);
         StringAssert.Contains(
             result.Error.Message,
-            "running with higher privileges than DesktopShift");
+            "may have higher privileges");
+        StringAssert.Contains(
+            result.Error.Message,
+            "another Shell security or ownership boundary");
         StringAssert.Contains(
             result.Error.Message,
             "does not request elevation");
@@ -219,14 +226,22 @@ public sealed class AccessDeniedActivityTests
         public DocumentedDesktopIdResult GetWindowDesktopId(nint windowHandle) =>
             new(Guid.Empty, AccessDeniedHResult, "GetWindowDesktopId");
 
-        public DocumentedDesktopOperationResult MoveWindowToDesktop(
-            nint windowHandle,
-            Guid desktopId) =>
-            new(AccessDeniedHResult, "MoveWindowToDesktop");
-
         public void Dispose()
         {
         }
+    }
+
+    private sealed class DenyingWindowMover : IValidatedWindowDesktopMover
+    {
+        public NativeBridgeResult MoveWindowToDesktop(
+            nint windowHandle,
+            Guid desktopId) =>
+            NativeBridgeResult.Failed(
+                new NativeBridgeError(
+                    "native.window_move",
+                    "WindowMove",
+                    "The Shell denied the move.",
+                    AccessDeniedHResult));
     }
 
     private sealed class DenyingProcessApi : IWindowsProcessIdentityApi

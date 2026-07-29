@@ -280,6 +280,7 @@ namespace
                 {
                     StopNotificationsCore();
                     notificationService_.Reset();
+                    applicationViews_.Reset();
                     manager_.Reset();
                     shell_.Reset();
                 });
@@ -335,6 +336,19 @@ namespace
                         result,
                         DesktopShiftNativeStageManagerActivation,
                         L"The build-specific virtual-desktop manager interface was unavailable.");
+                }
+
+                result = shell_->QueryService(
+                    __uuidof(IApplicationViewCollection),
+                    __uuidof(IApplicationViewCollection),
+                    reinterpret_cast<void**>(applicationViews_.ReleaseAndGetAddressOf()));
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageApplicationViewActivation,
+                        L"The build-specific application-view collection was unavailable.");
                 }
 
                 ClearError(error);
@@ -687,6 +701,195 @@ namespace
                     desktop.IsCurrent = desktop.Id == id ? TRUE : FALSE;
                 }
 
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        HRESULT MoveWindowToDesktop(
+            HWND window,
+            const GUID& id,
+            DesktopShiftNativeError* error)
+        {
+            if (window == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageWindowMove,
+                    L"A nonzero top-level window handle is required.");
+            }
+
+            if (id == GUID_NULL)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageWindowMove,
+                    L"A non-empty target desktop identifier is required.");
+            }
+
+            return Invoke([this, window, id, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageWindowMove,
+                        L"Window movement is disabled until harmless adapter validation succeeds.");
+                }
+
+                if (!IsWindow(window))
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE),
+                        DesktopShiftNativeStageWindowMove,
+                        L"The top-level window handle is no longer live.");
+                }
+
+                const HWND root = GetAncestor(window, GA_ROOT);
+                if (root == nullptr || !IsWindow(root))
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE),
+                        DesktopShiftNativeStageWindowMove,
+                        L"The top-level window handle is no longer live.");
+                }
+
+                if (root != window)
+                {
+                    return SetError(
+                        error,
+                        E_INVALIDARG,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The window handle does not identify a top-level window.");
+                }
+
+                if (applicationViews_ == nullptr)
+                {
+                    return SetError(
+                        error,
+                        E_UNEXPECTED,
+                        DesktopShiftNativeStageApplicationViewActivation,
+                        L"The build-specific application-view collection is not active.");
+                }
+
+                ComPtr<IObjectArray> desktops;
+                HRESULT result =
+                    manager_->GetDesktops(desktops.ReleaseAndGetAddressOf());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The desktop inventory could not be resolved for moving the window.");
+                }
+
+                UINT count = 0;
+                result = desktops->GetCount(&count);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The desktop inventory could not be counted for moving the window.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> target;
+                for (UINT index = 0; index < count; ++index)
+                {
+                    ComPtr<IVirtualDesktop24H2> candidate;
+                    result = desktops->GetAt(
+                        index,
+                        __uuidof(IVirtualDesktop24H2),
+                        reinterpret_cast<void**>(
+                            candidate.ReleaseAndGetAddressOf()));
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageWindowMove,
+                            L"A desktop entry could not be resolved for moving the window.");
+                    }
+
+                    GUID candidateId{};
+                    result = candidate->GetId(&candidateId);
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageWindowMove,
+                            L"A desktop entry did not return its identifier for moving the window.");
+                    }
+
+                    if (candidateId == id)
+                    {
+                        target = std::move(candidate);
+                        break;
+                    }
+                }
+
+                if (target == nullptr)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageWindowMove,
+                        L"The requested desktop was not present in the current inventory.");
+                }
+
+                ComPtr<IApplicationView> view;
+                result = applicationViews_->GetViewForHwnd(
+                    window,
+                    view.ReleaseAndGetAddressOf());
+                if (FAILED(result) || view == nullptr)
+                {
+                    return SetError(
+                        error,
+                        FAILED(result) ? result : HrContractMismatch,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The Windows Shell could not resolve an application view for the window.");
+                }
+
+                BOOL canMove = FALSE;
+                result = manager_->CanViewMoveDesktops(view.Get(), &canMove);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The Windows Shell could not determine whether the window can move.");
+                }
+
+                if (!canMove)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+                        DesktopShiftNativeStageWindowMove,
+                        L"The Windows Shell reports that this window cannot move between desktops.");
+                }
+
+                result = manager_->MoveViewToDesktop(view.Get(), target.Get());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowMove,
+                        L"The Windows Shell rejected the application-view move.");
+                }
+
+                // Shell has committed the move. Return immediately rather than
+                // adding a post-commit failure path that could invite a retry.
                 ClearError(error);
                 return S_OK;
             });
@@ -1084,6 +1287,7 @@ namespace
 
         ComPtr<IServiceProvider> shell_;
         ComPtr<IVirtualDesktopManagerInternal24H2> manager_;
+        ComPtr<IApplicationViewCollection> applicationViews_;
         ComPtr<IVirtualDesktopNotificationService24H2> notificationService_;
         ComPtr<NotificationSink> notificationSink_;
         DWORD notificationCookie_{0};
@@ -1330,6 +1534,43 @@ extern "C"
         catch (...)
         {
             return SetUnexpectedError(error, DesktopShiftNativeStageDesktopSwitch);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_MoveWindowToDesktop(
+        void* adapter,
+        intptr_t windowHandle,
+        const GUID* desktopId,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        if (desktopId == nullptr)
+        {
+            return SetError(
+                error,
+                E_POINTER,
+                DesktopShiftNativeStageWindowMove,
+                L"A target desktop identifier was not provided.");
+        }
+
+        try
+        {
+            const GUID requestedDesktopId = *desktopId;
+            const HWND requestedWindow =
+                reinterpret_cast<HWND>(windowHandle);
+            return AsAdapter(adapter)->MoveWindowToDesktop(
+                requestedWindow,
+                requestedDesktopId,
+                error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageWindowMove);
         }
     }
 

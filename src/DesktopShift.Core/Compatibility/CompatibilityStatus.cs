@@ -98,10 +98,10 @@ public sealed record PrivilegeBoundary(
     /// the compatibility surface, and exported bundles all give the same reason.
     /// </summary>
     public const string DeniedWindowExplanation =
-        "A window owned by an application running with higher privileges than " +
-        "DesktopShift is denied with E_ACCESSDENIED (0x80070005). DesktopShift " +
-        "runs with the signed-in user's own privileges and does not request " +
-        "elevation.";
+        "Windows denied the cross-process window operation with E_ACCESSDENIED " +
+        "(0x80070005). The target may have higher privileges, or another Shell " +
+        "security or ownership boundary may have refused the request. DesktopShift " +
+        "runs with the signed-in user's own privileges and does not request elevation.";
 
     /// <summary>The rights DesktopShift holds when it runs as intended.</summary>
     public const string LeastPrivilegeExplanation =
@@ -123,10 +123,10 @@ public sealed record PrivilegeBoundary(
     /// </summary>
     public const string ElevatedCompanionNotice =
         DeniedWindowExplanation +
-        " Reaching those windows would require a separate companion running " +
-        "with different rights. No such companion is implemented, installed, " +
-        "or started, and none is required: every DesktopShift feature works " +
-        "without one.";
+        " Windows that are inaccessible specifically because they run with higher " +
+        "privileges would require a separate companion running with different " +
+        "rights. No such companion is implemented, installed, or started; " +
+        "DesktopShift works without one, with those windows remaining out of reach.";
 
     /// <summary>The boundary DesktopShift reports when it runs as intended.</summary>
     public static PrivilegeBoundary LeastPrivilege { get; } = new(

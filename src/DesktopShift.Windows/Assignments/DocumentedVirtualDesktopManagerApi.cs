@@ -11,20 +11,9 @@ internal sealed record DocumentedDesktopIdResult(
     public bool IsSuccess => HResult >= 0;
 }
 
-internal sealed record DocumentedDesktopOperationResult(
-    int HResult,
-    string Stage)
-{
-    public bool IsSuccess => HResult >= 0;
-}
-
 internal interface IDocumentedVirtualDesktopManagerApi : IDisposable
 {
     DocumentedDesktopIdResult GetWindowDesktopId(nint windowHandle);
-
-    DocumentedDesktopOperationResult MoveWindowToDesktop(
-        nint windowHandle,
-        Guid desktopId);
 }
 
 internal sealed class DocumentedVirtualDesktopManagerApi :
@@ -52,32 +41,6 @@ internal sealed class DocumentedVirtualDesktopManagerApi :
         {
             return new DocumentedDesktopIdResult(
                 Guid.Empty,
-                exception.HResult,
-                "ManagerActivation");
-        }
-    }
-
-    public DocumentedDesktopOperationResult MoveWindowToDesktop(
-        nint windowHandle,
-        Guid desktopId)
-    {
-        try
-        {
-            return apartment.Invoke(
-                manager =>
-                {
-                    Guid requestedDesktopId = desktopId;
-                    int hResult = manager.MoveWindowToDesktop(
-                        windowHandle,
-                        ref requestedDesktopId);
-                    return new DocumentedDesktopOperationResult(
-                        hResult,
-                        "MoveWindowToDesktop");
-                });
-        }
-        catch (Exception exception)
-        {
-            return new DocumentedDesktopOperationResult(
                 exception.HResult,
                 "ManagerActivation");
         }

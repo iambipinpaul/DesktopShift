@@ -8,6 +8,7 @@ namespace DesktopShift.Windows.VirtualDesktops;
 public sealed class ValidatedVirtualDesktopTopologyProvider :
     IDesktopTopologyProvider,
     IDesktopTopologyFallbackSource,
+    IValidatedWindowDesktopMover,
     IDisposable
 {
     private static readonly VirtualDesktopCapabilities FullManagedDesktopCapabilities = new(
@@ -430,6 +431,46 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         }
     }
 
+    NativeBridgeResult IValidatedWindowDesktopMover.MoveWindowToDesktop(
+        nint windowHandle,
+        Guid desktopId)
+    {
+        lock (syncRoot)
+        {
+            ThrowIfDisposed();
+            if (activeBridge is null)
+            {
+                return NativeBridgeResult.Failed(
+                    new NativeBridgeError(
+                        "native.window_move_unavailable",
+                        "ProviderSelection",
+                        "Window moves require a validated native virtual-desktop adapter, but DesktopShift is currently in Limited Mode.",
+                        unchecked((int)0x80070032)));
+            }
+
+            try
+            {
+                // Adapter replacement and disposal use this same lock. Hold it
+                // through the single native call so recovery cannot invalidate
+                // the bridge after selection but before the move completes.
+                // A refusal for one HWND remains an operation failure and does
+                // not demote the validated provider.
+                return activeBridge.MoveWindowToDesktop(
+                    windowHandle,
+                    desktopId);
+            }
+            catch (Exception exception)
+            {
+                return NativeBridgeResult.Failed(
+                    new NativeBridgeError(
+                        "native.window_move_exception",
+                        "WindowMove",
+                        "The native window move failed unexpectedly.",
+                        exception.HResult));
+            }
+        }
+    }
+
     public void Dispose()
     {
         lock (syncRoot)
@@ -540,4 +581,18 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
     private void ThrowIfDisposed() =>
         ObjectDisposedException.ThrowIf(disposed, this);
+}
+
+/// <summary>
+/// Resolves each move against the provider's currently validated native
+/// adapter.
+/// </summary>
+/// <remarks>
+/// Shell recovery replaces the adapter owned by the provider. Callers retain
+/// this seam rather than an adapter instance, so they cannot keep using the
+/// stale bridge that recovery discarded.
+/// </remarks>
+internal interface IValidatedWindowDesktopMover
+{
+    NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
 }

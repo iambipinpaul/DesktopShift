@@ -289,6 +289,127 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
+    public async Task WindowMove_UsesValidatedBridgeAndKeepsOperationalFailureStructured()
+    {
+        nint windowHandle = (nint)0x1234;
+        Guid desktopId =
+            Guid.Parse("11111111-1111-1111-1111-111111111111");
+        NativeBridgeError moveError = new(
+            "native.window_move",
+            "WindowMove",
+            "The Windows Shell rejected the window move.",
+            unchecked((int)0x80070005));
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            MoveResult = NativeBridgeResult.Failed(moveError),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        NativeBridgeResult result =
+            ((IValidatedWindowDesktopMover)provider)
+                .MoveWindowToDesktop(windowHandle, desktopId);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(moveError, result.Error);
+        Assert.AreEqual(windowHandle, bridge.LastMovedWindowHandle);
+        Assert.AreEqual(desktopId, bridge.LastMovedDesktopId);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsNull(provider.LastFallback);
+        Assert.IsFalse(bridge.IsDisposed);
+    }
+
+    [TestMethod]
+    public async Task WindowMove_AfterRevalidationUsesReplacementBridge()
+    {
+        FakeNativeBridge first = new(CreateSnapshot());
+        FakeNativeBridge second = new(CreateSnapshot());
+        int activationCount = 0;
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    activationCount++ == 0 ? first : second)));
+
+        _ = await provider.TestCompatibilityAsync(Build26200);
+        _ = await provider.TestCompatibilityAsync(Build26200);
+        _ = ((IValidatedWindowDesktopMover)provider).MoveWindowToDesktop(
+            (nint)0x2468,
+            Guid.Parse("11111111-1111-1111-1111-111111111111"));
+
+        Assert.IsTrue(first.IsDisposed);
+        Assert.AreEqual(0, first.MoveCount);
+        Assert.AreEqual(1, second.MoveCount);
+    }
+
+    [TestMethod]
+    public async Task WindowMove_SerializesAdapterReplacementUntilMoveCompletes()
+    {
+        using ManualResetEventSlim moveEntered = new();
+        using ManualResetEventSlim releaseMove = new();
+        using ManualResetEventSlim replacementValidated = new();
+        FakeNativeBridge first = new(CreateSnapshot())
+        {
+            MoveEntered = moveEntered,
+            ReleaseMove = releaseMove,
+        };
+        FakeNativeBridge second = new(CreateSnapshot())
+        {
+            ValidationEntered = replacementValidated,
+        };
+        int activationCount = 0;
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    activationCount++ == 0 ? first : second)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        Task<NativeBridgeResult> move = Task.Run(
+            () => ((IValidatedWindowDesktopMover)provider)
+                .MoveWindowToDesktop(
+                    (nint)0x1357,
+                    Guid.Parse("11111111-1111-1111-1111-111111111111")));
+        Assert.IsTrue(moveEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        Task<DesktopTopologyProviderResult> replacement = Task.Run(
+            async () => await provider.TestCompatibilityAsync(Build26200));
+        Assert.IsTrue(replacementValidated.Wait(TimeSpan.FromSeconds(5)));
+        Assert.IsFalse(first.IsDisposed);
+        Assert.IsFalse(replacement.IsCompleted);
+
+        releaseMove.Set();
+        _ = await move;
+        _ = await replacement;
+
+        Assert.IsTrue(first.IsDisposed);
+        Assert.AreEqual(1, first.MoveCount);
+        Assert.AreEqual(0, second.MoveCount);
+    }
+
+    [TestMethod]
+    public void WindowMove_InLimitedModeReturnsUnavailableWithoutNativeCall()
+    {
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Failed(
+                    new NativeBridgeError(
+                        "test.unexpected_activation",
+                        "Test",
+                        "The factory must not be called.",
+                        unchecked((int)0x8000FFFF)))));
+
+        NativeBridgeResult result =
+            ((IValidatedWindowDesktopMover)provider).MoveWindowToDesktop(
+                (nint)0x1234,
+                Guid.NewGuid());
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("native.window_move_unavailable", result.Error?.Code);
+        Assert.AreEqual(unchecked((int)0x80070032), result.Error?.HResult);
+    }
+
+    [TestMethod]
     public async Task LimitedMode_ReportsMutationsAsUnsupportedWithoutNativeCall()
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
@@ -431,6 +552,15 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public NativeBridgeResult SwitchResult { get; init; } =
             NativeBridgeResult.Succeeded;
 
+        public NativeBridgeResult MoveResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
+        public ManualResetEventSlim? ValidationEntered { get; init; }
+
+        public ManualResetEventSlim? MoveEntered { get; init; }
+
+        public ManualResetEventSlim? ReleaseMove { get; init; }
+
         public int ValidationCount { get; private set; }
 
         public int MutationCount { get; private set; }
@@ -439,8 +569,15 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         public Guid LastSwitchedDesktopId { get; private set; }
 
+        public nint LastMovedWindowHandle { get; private set; }
+
+        public Guid LastMovedDesktopId { get; private set; }
+
+        public int MoveCount { get; private set; }
+
         public NativeBridgeResult Validate()
         {
+            ValidationEntered?.Set();
             ValidationCount++;
             return ValidationResult;
         }
@@ -459,6 +596,29 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             MutationCount++;
             LastSwitchedDesktopId = desktopId;
             return SwitchResult;
+        }
+
+        public NativeBridgeResult MoveWindowToDesktop(
+            nint windowHandle,
+            Guid desktopId)
+        {
+            MoveEntered?.Set();
+            if (ReleaseMove is not null &&
+                !ReleaseMove.Wait(TimeSpan.FromSeconds(5)))
+            {
+                return NativeBridgeResult.Failed(
+                    new NativeBridgeError(
+                        "test.move_timeout",
+                        "Test",
+                        "The test did not release the blocked move.",
+                        unchecked((int)0x800705B4)));
+            }
+
+            MutationCount++;
+            MoveCount++;
+            LastMovedWindowHandle = windowHandle;
+            LastMovedDesktopId = desktopId;
+            return MoveResult;
         }
 
         public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)

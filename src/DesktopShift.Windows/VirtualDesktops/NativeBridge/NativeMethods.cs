@@ -25,6 +25,8 @@ internal static partial class NativeMethods
         NotificationRegistration = 9,
         DesktopCreation = 10,
         DesktopSwitch = 11,
+        ApplicationViewActivation = 12,
+        WindowMove = 13,
     }
 
     internal enum NativeTopologyReason : uint
@@ -104,6 +106,13 @@ internal static partial class NativeMethods
     [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
     internal static extern int DesktopShiftNative_SwitchDesktop(
         nint adapter,
+        in Guid desktopId,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_MoveWindowToDesktop(
+        nint adapter,
+        nint windowHandle,
         in Guid desktopId,
         out NativeError error);
 

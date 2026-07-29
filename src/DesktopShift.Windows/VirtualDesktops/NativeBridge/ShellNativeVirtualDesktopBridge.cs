@@ -215,6 +215,28 @@ internal sealed class ShellNativeVirtualDesktopBridge :
         }
     }
 
+    public NativeBridgeResult MoveWindowToDesktop(
+        nint windowHandle,
+        Guid desktopId)
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_MoveWindowToDesktop(
+                adapter,
+                windowHandle,
+                in desktopId,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.window_move_failed"));
+        }
+    }
+
     public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)
     {
         ArgumentNullException.ThrowIfNull(onTopologyChanged);

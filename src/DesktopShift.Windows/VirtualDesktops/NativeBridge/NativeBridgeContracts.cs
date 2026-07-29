@@ -48,6 +48,8 @@ internal interface INativeVirtualDesktopBridge : IDisposable
 
     NativeBridgeResult SwitchDesktop(Guid desktopId);
 
+    NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
+
     NativeBridgeResult StartNotifications(Action<string> onTopologyChanged);
 }
 

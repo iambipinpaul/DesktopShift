@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DesktopShift.Core\DesktopShift.Core.csproj" />
     <ProjectReference Include="..\..\src\DesktopShift.Windows\DesktopShift.Windows.csproj" />
+    <ProjectReference Include="..\DesktopShift.TestWindowHost\DesktopShift.TestWindowHost.csproj" />
   </ItemGroup>
 
   <ItemGroup>

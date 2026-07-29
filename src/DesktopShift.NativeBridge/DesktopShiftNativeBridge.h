@@ -25,6 +25,8 @@ extern "C"
         DesktopShiftNativeStageNotificationRegistration = 9,
         DesktopShiftNativeStageDesktopCreation = 10,
         DesktopShiftNativeStageDesktopSwitch = 11,
+        DesktopShiftNativeStageApplicationViewActivation = 12,
+        DesktopShiftNativeStageWindowMove = 13,
     };
 
     enum DesktopShiftNativeTopologyReason : uint32_t
@@ -92,6 +94,12 @@ extern "C"
 
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_SwitchDesktop(
         void* adapter,
+        const GUID* desktopId,
+        DesktopShiftNativeError* error) noexcept;
+
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_MoveWindowToDesktop(
+        void* adapter,
+        intptr_t windowHandle,
         const GUID* desktopId,
         DesktopShiftNativeError* error) noexcept;
 

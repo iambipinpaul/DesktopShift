@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Windows.VirtualDesktops;
+using DesktopShift.Windows.VirtualDesktops.NativeBridge;
 
 namespace DesktopShift.Windows.Tests.VirtualDesktops;
 
@@ -8,7 +9,7 @@ namespace DesktopShift.Windows.Tests.VirtualDesktops;
 public sealed class NativeBridgeOptInContractTests
 {
     [TestMethod]
-    public void NativeBridge_ExportsMutationBoundariesWithoutInvokingThem()
+    public void NativeBridge_ExportsMutationBoundariesAndPinsMoveStagesWithoutInvokingThem()
     {
         string libraryPath = Path.Combine(
             AppContext.BaseDirectory,
@@ -31,6 +32,21 @@ public sealed class NativeBridgeOptInContractTests
                     "DesktopShiftNative_SwitchDesktop",
                     out entryPoint));
             Assert.AreNotEqual(0, entryPoint);
+            Assert.IsTrue(
+                NativeLibrary.TryGetExport(
+                    library,
+                    "DesktopShiftNative_MoveWindowToDesktop",
+                    out entryPoint));
+            Assert.AreNotEqual(0, entryPoint);
+
+            IReadOnlyDictionary<string, uint> stages = Enum
+                .GetValues<NativeMethods.NativeStage>()
+                .ToDictionary(
+                    static stage => stage.ToString(),
+                    static stage => (uint)stage,
+                    StringComparer.Ordinal);
+            Assert.AreEqual(12U, stages["ApplicationViewActivation"]);
+            Assert.AreEqual(13U, stages["WindowMove"]);
         }
         finally
         {

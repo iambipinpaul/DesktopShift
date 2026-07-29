@@ -17,6 +17,9 @@
   <Folder Name="/tests/">
     <Project Path="tests/DesktopShift.App.Presentation.Tests/DesktopShift.App.Presentation.Tests.csproj" />
     <Project Path="tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj" />
+    <Project Path="tests/DesktopShift.TestWindowHost/DesktopShift.TestWindowHost.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>

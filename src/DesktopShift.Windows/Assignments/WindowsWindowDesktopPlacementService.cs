@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
+using DesktopShift.Windows.VirtualDesktops;
+using DesktopShift.Windows.VirtualDesktops.NativeBridge;
 
 namespace DesktopShift.Windows.Assignments;
 
@@ -15,13 +17,16 @@ public sealed class WindowsWindowDesktopPlacementService :
 
     private readonly IWindowHandleApi windowApi;
     private readonly IDocumentedVirtualDesktopManagerApi desktopManager;
+    private readonly IValidatedWindowDesktopMover desktopMover;
     private readonly bool ownsDesktopManager;
     private bool disposed;
 
-    public WindowsWindowDesktopPlacementService()
+    public WindowsWindowDesktopPlacementService(
+        ValidatedVirtualDesktopTopologyProvider topologyProvider)
         : this(
             new WindowHandleApi(),
             new DocumentedVirtualDesktopManagerApi(),
+            topologyProvider,
             ownsDesktopManager: true)
     {
     }
@@ -29,12 +34,15 @@ public sealed class WindowsWindowDesktopPlacementService :
     internal WindowsWindowDesktopPlacementService(
         IWindowHandleApi windowApi,
         IDocumentedVirtualDesktopManagerApi desktopManager,
+        IValidatedWindowDesktopMover desktopMover,
         bool ownsDesktopManager = false)
     {
         this.windowApi =
             windowApi ?? throw new ArgumentNullException(nameof(windowApi));
         this.desktopManager =
             desktopManager ?? throw new ArgumentNullException(nameof(desktopManager));
+        this.desktopMover =
+            desktopMover ?? throw new ArgumentNullException(nameof(desktopMover));
         this.ownsDesktopManager = ownsDesktopManager;
     }
 
@@ -97,8 +105,8 @@ public sealed class WindowsWindowDesktopPlacementService :
         // decides whether a window may leave its desktop, and re-issuing the
         // identical call cannot change that answer, so a refusal is reported
         // rather than retried.
-        DocumentedDesktopOperationResult result =
-            desktopManager.MoveWindowToDesktop(windowHandle, desktopId);
+        NativeBridgeResult result =
+            desktopMover.MoveWindowToDesktop(windowHandle, desktopId);
         return ValueTask.FromResult(
             result.IsSuccess
                 ? DesktopTopologyProviderResult.Succeeded()
@@ -162,7 +170,7 @@ public sealed class WindowsWindowDesktopPlacementService :
         }
 
         nint rootWindow = windowApi.GetRootWindow(windowHandle);
-        if (rootWindow == 0 || !windowApi.IsWindow(windowHandle))
+        if (rootWindow == 0 || !windowApi.IsWindow(rootWindow))
         {
             return new DesktopTopologyProviderError(
                 "window_placement.stale_window_handle",
@@ -186,36 +194,71 @@ public sealed class WindowsWindowDesktopPlacementService :
     /// Only distinctions Windows actually states are drawn. An access denial is
     /// a defined <c>HRESULT</c>, and a window that stopped existing can be
     /// observed directly. Every other refusal keeps the generic code and
-    /// carries the exact <c>HRESULT</c> the manager returned, because no other
+    /// carries the exact <c>HRESULT</c> the Shell bridge returned, because no other
     /// mapping from a refusal to a cause is contractual. A full-screen remote
     /// session lands here: it is a window Windows is managing itself, and the
     /// honest report is that the move was refused, with the code Windows gave.
     /// </remarks>
     /// <param name="windowHandle">The window whose move was refused.</param>
-    /// <param name="result">The refusal the documented manager returned.</param>
+    /// <param name="result">The refusal the validated Shell bridge returned.</param>
     /// <returns>A failed result naming the most specific known cause.</returns>
     private DesktopTopologyProviderResult ClassifyMoveFailure(
         nint windowHandle,
-        DocumentedDesktopOperationResult result)
+        NativeBridgeResult result)
     {
+        NativeBridgeError error = result.Error ??
+            new NativeBridgeError(
+                "native.window_move_failed",
+                "WindowMove",
+                "The native window move failed without structured error details.",
+                UnexpectedResultHResult);
+
         if (string.Equals(
-            result.Stage,
+                error.Stage,
+                "ProviderSelection",
+                StringComparison.Ordinal) ||
+            string.Equals(
+                error.Code,
+                "native.window_move_unavailable",
+                StringComparison.Ordinal))
+        {
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.move_unavailable",
+                "DesktopShift could not attempt the window move because no validated native adapter is available. " +
+                error.Message,
+                error.HResult);
+        }
+
+        if (string.Equals(
+            error.Code,
+            "native.window_move_exception",
+            StringComparison.Ordinal))
+        {
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.move_exception",
+                "DesktopShift could not complete the native window-move call. " +
+                error.Message,
+                error.HResult);
+        }
+
+        if (string.Equals(
+            error.Stage,
             ManagerActivationStage,
             StringComparison.Ordinal))
         {
             return DesktopTopologyProviderResult.Failed(
                 "window_placement.manager_activation_failed",
                 "The virtual desktop manager could not be activated, so the window was not moved.",
-                result.HResult);
+                error.HResult);
         }
 
-        if (result.HResult == AccessDeniedHResult)
+        if (error.HResult == AccessDeniedHResult)
         {
             return DesktopTopologyProviderResult.Failed(
                 "window_placement.move_access_denied",
-                "Windows denied access to the window, so it was not moved to the requested virtual desktop. " +
+                "Windows denied the Shell request to move the window, so it was left where it is. " +
                 PrivilegeBoundary.DeniedWindowExplanation,
-                result.HResult);
+                error.HResult);
         }
 
         if (!windowApi.IsWindow(windowHandle))
@@ -226,13 +269,13 @@ public sealed class WindowsWindowDesktopPlacementService :
             return DesktopTopologyProviderResult.Failed(
                 "window_placement.stale_window_handle",
                 "The window closed before it could be moved to the requested virtual desktop.",
-                result.HResult);
+                error.HResult);
         }
 
         return DesktopTopologyProviderResult.Failed(
             "window_placement.move_failed",
-            "Windows refused to move the window to the requested virtual desktop. A window can be refused while it is in a state Windows manages itself, such as a full-screen remote session.",
-            result.HResult);
+            $"Windows refused to move the window to the requested virtual desktop. {error.Message}",
+            error.HResult);
     }
 
     /// <summary>

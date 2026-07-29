@@ -18,10 +18,34 @@ namespace DesktopShift::NativeBridge::ShellAbi
     inline constexpr GUID CLSID_VirtualDesktopNotificationService = {
         0xA501FDEC, 0x4A09, 0x464C, {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
 
+    // DesktopShift only needs an application-view identity and the collection
+    // prefix through GetViewForHwnd. Keeping the declarations prefix-only
+    // avoids claiming knowledge of later private slots that can change between
+    // Windows build families.
+    MIDL_INTERFACE("372E1D3B-38D3-42E4-A15B-8AB2B178F513")
+    IApplicationView : public IUnknown
+    {
+    };
+
+    MIDL_INTERFACE("1841C6D7-4F9D-42C0-AF41-8747538F10E5")
+    IApplicationViewCollection : public IUnknown
+    {
+        virtual HRESULT STDMETHODCALLTYPE GetViews(IObjectArray** views) = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetViewsByZOrder(IObjectArray** views) = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetViewsByAppUserModelId(
+            PCWSTR appUserModelId,
+            IObjectArray** views) = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetViewForHwnd(
+            HWND window,
+            IApplicationView** view) = 0;
+    };
+
     MIDL_INTERFACE("3F07F4BE-B107-441A-AF0F-39D82529072C")
     IVirtualDesktop24H2 : public IUnknown
     {
-        virtual HRESULT STDMETHODCALLTYPE IsViewVisible(IUnknown* view, BOOL* visible) = 0;
+        virtual HRESULT STDMETHODCALLTYPE IsViewVisible(
+            IApplicationView* view,
+            BOOL* visible) = 0;
         virtual HRESULT STDMETHODCALLTYPE GetId(GUID* id) = 0;
         virtual HRESULT STDMETHODCALLTYPE GetName(HSTRING* name) = 0;
         virtual HRESULT STDMETHODCALLTYPE GetWallpaperPath(HSTRING* path) = 0;
@@ -33,9 +57,11 @@ namespace DesktopShift::NativeBridge::ShellAbi
     {
         virtual HRESULT STDMETHODCALLTYPE GetCount(UINT* count) = 0;
         virtual HRESULT STDMETHODCALLTYPE MoveViewToDesktop(
-            IUnknown* view,
+            IApplicationView* view,
             IVirtualDesktop24H2* desktop) = 0;
-        virtual HRESULT STDMETHODCALLTYPE CanViewMoveDesktops(IUnknown* view, BOOL* canMove) = 0;
+        virtual HRESULT STDMETHODCALLTYPE CanViewMoveDesktops(
+            IApplicationView* view,
+            BOOL* canMove) = 0;
         virtual HRESULT STDMETHODCALLTYPE GetCurrentDesktop(IVirtualDesktop24H2** desktop) = 0;
         virtual HRESULT STDMETHODCALLTYPE GetDesktops(IObjectArray** desktops) = 0;
         // Keep this prefix in lockstep with Microsoft's build-family declaration:

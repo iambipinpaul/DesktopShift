@@ -46,7 +46,11 @@ public partial class App : Application
             // in-memory default the foundation installs for tests.
             services.AddSingleton<IStartupRegistration, StartupTaskRegistration>();
             services.AddSingleton<IWindowsBuildInfoProvider, EnvironmentWindowsBuildInfoProvider>();
-            services.AddSingleton<IDesktopTopologyProvider, ValidatedVirtualDesktopTopologyProvider>();
+            services.AddSingleton<ValidatedVirtualDesktopTopologyProvider>();
+            services.AddSingleton<IDesktopTopologyProvider>(
+                static serviceProvider =>
+                    serviceProvider.GetRequiredService<
+                        ValidatedVirtualDesktopTopologyProvider>());
             services.AddSingleton<ICompatibilityCoordinator, CompatibilityCoordinator>();
             services.AddSingleton<
                 IWindowDesktopPlacementService,

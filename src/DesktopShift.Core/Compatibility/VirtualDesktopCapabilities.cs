@@ -13,7 +13,7 @@ public sealed record VirtualDesktopCapabilities(
 {
     public static VirtualDesktopCapabilities DocumentedLimited { get; } = new(
         CanGetWindowDesktopId: true,
-        CanMoveWindowToDesktop: true,
+        CanMoveWindowToDesktop: false,
         CanEnumerateDesktops: false,
         CanGetCurrentDesktop: false,
         CanCreateDesktop: false,

@@ -47,14 +47,14 @@ handle Windows granted.
 | Step | Expected |
 | --- | --- |
 | Arrange for a rule to claim a window owned by an elevated application | Outcome **Move failed**, code `window_placement.move_access_denied`, HRESULT `0x80070005` |
-| Read the explanation | It names E_ACCESSDENIED and states that DesktopShift runs with the signed-in user's own privileges and does not request elevation |
+| Read the explanation | It names E_ACCESSDENIED, says that either privileges or another Shell security/ownership boundary refused the operation, and states that DesktopShift does not request elevation |
 | Confirm what did not happen | No elevation prompt, no retry, no UAC dialog, and the window stays where it is |
 
 ### 3. The companion that does not exist
 
 | Step | Expected |
 | --- | --- |
-| Read the compatibility explanation after a denial | It states that reaching those windows would need a separate companion with different rights, and that none is implemented, installed, or started |
+| Read the compatibility explanation after a denial | It states that windows refused specifically because of higher privileges would need a separate companion with different rights, and that none is implemented, installed, or started |
 | Export a diagnostic bundle and open `manifest.json` | `securityNotice` carries the same boundary, whether or not anything was denied during the run |
 
 The purpose of row 3 is that a maintainer reading an exported archive can tell a

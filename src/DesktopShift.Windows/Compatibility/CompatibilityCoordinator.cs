@@ -255,7 +255,7 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
             _ => CompatibilityTestOutcome.PassedLimitedMode,
         };
         string summary = outcome == CompatibilityTestOutcome.PassedLimitedMode
-            ? "Limited Mode is ready. Window moves to known desktop IDs are available; desktop enumeration, creation, switching, and notifications are not."
+            ? "Limited Mode is ready for desktop membership queries. Cross-process window moves, desktop enumeration, creation, switching, and notifications are not available."
             : "Full Mode is ready for this Windows build.";
 
         diagnostics.Add(

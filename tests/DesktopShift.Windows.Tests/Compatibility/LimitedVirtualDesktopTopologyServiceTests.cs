@@ -26,7 +26,7 @@ public sealed class LimitedVirtualDesktopTopologyServiceTests
         Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
         Assert.IsFalse(provider.Identity.UsesPrivateApis);
         Assert.IsTrue(provider.Capabilities.CanGetWindowDesktopId);
-        Assert.IsTrue(provider.Capabilities.CanMoveWindowToDesktop);
+        Assert.IsFalse(provider.Capabilities.CanMoveWindowToDesktop);
         Assert.IsFalse(provider.Capabilities.HasPrivateTopologyCapabilities);
     }
 

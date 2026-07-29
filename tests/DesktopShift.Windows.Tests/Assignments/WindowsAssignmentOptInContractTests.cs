@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Windows.Assignments;
+using DesktopShift.Windows.VirtualDesktops;
 
 namespace DesktopShift.Windows.Tests.Assignments;
 
@@ -21,7 +23,18 @@ public sealed class WindowsAssignmentOptInContractTests
 
         using TestTopLevelWindow testWindow = new();
         nint windowHandle = testWindow.Handle;
-        using WindowsWindowDesktopPlacementService placement = new();
+        using ValidatedVirtualDesktopTopologyProvider provider = new();
+        DesktopTopologyProviderResult compatibility =
+            provider.TestCompatibilityAsync(GetCurrentBuildInfo())
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        Assert.IsTrue(compatibility.IsSuccess, compatibility.Error?.Message);
+        Assert.AreEqual(
+            DesktopTopologyProviderMode.Full,
+            provider.Identity.Mode,
+            provider.LastFallback?.Error.Message);
+        using WindowsWindowDesktopPlacementService placement = new(provider);
         DesktopTopologyProviderResult<Guid> placementResult;
         int remainingAttempts = 50;
         do
@@ -68,5 +81,17 @@ public sealed class WindowsAssignmentOptInContractTests
 
         // The move contract is invoked only for this test-owned HWND and uses
         // the exact GUID already returned for it, so placement is unchanged.
+    }
+
+    private static WindowsBuildInfo GetCurrentBuildInfo()
+    {
+        Version version = Environment.OSVersion.Version;
+        return new WindowsBuildInfo(
+            OperatingSystem.IsWindows(),
+            version.Major,
+            version.Minor,
+            version.Build,
+            Math.Max(version.Revision, 0),
+            RuntimeInformation.OSArchitecture);
     }
 }

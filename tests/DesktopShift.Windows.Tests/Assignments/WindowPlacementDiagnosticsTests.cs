@@ -6,6 +6,8 @@ using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Windows.Assignments;
+using DesktopShift.Windows.VirtualDesktops;
+using DesktopShift.Windows.VirtualDesktops.NativeBridge;
 
 namespace DesktopShift.Windows.Tests.Assignments;
 
@@ -27,9 +29,7 @@ public sealed class WindowPlacementDiagnosticsTests
     public async Task DeniedMove_ReachesTheActivityRecordWithItsHResult()
     {
         ImmutableArray<ActivityRecord> records = await AssignAsync(
-            new DocumentedDesktopOperationResult(
-                unchecked((int)0x80070005),
-                "MoveWindowToDesktop"));
+            FailedMove(unchecked((int)0x80070005)));
 
         ActivityRecord move = records.Single(
             static record => record.Source == ActivityEventSource.Move);
@@ -45,7 +45,7 @@ public sealed class WindowPlacementDiagnosticsTests
     public async Task ManagerActivationFailure_KeepsItsCodeAndHResult()
     {
         ImmutableArray<ActivityRecord> records = await AssignAsync(
-            new DocumentedDesktopOperationResult(
+            FailedMove(
                 unchecked((int)0x80040154),
                 "ManagerActivation"));
 
@@ -61,9 +61,7 @@ public sealed class WindowPlacementDiagnosticsTests
     public async Task RefusedMove_KeepsTheExactHResultWindowsReturned()
     {
         ImmutableArray<ActivityRecord> records = await AssignAsync(
-            new DocumentedDesktopOperationResult(
-                unchecked((int)0x8002802B),
-                "MoveWindowToDesktop"));
+            FailedMove(unchecked((int)0x8002802B)));
 
         ActivityRecord move = records.Single(
             static record => record.Source == ActivityEventSource.Move);
@@ -75,7 +73,7 @@ public sealed class WindowPlacementDiagnosticsTests
     public async Task SuccessfulMove_IsRecordedWithoutAnError()
     {
         ImmutableArray<ActivityRecord> records = await AssignAsync(
-            new DocumentedDesktopOperationResult(0, "MoveWindowToDesktop"));
+            NativeBridgeResult.Succeeded);
 
         ActivityRecord move = records.Single(
             static record => record.Source == ActivityEventSource.Move);
@@ -87,9 +85,7 @@ public sealed class WindowPlacementDiagnosticsTests
     public async Task RecordedFailures_CarryOnlyPrivacySafeIdentity()
     {
         ImmutableArray<ActivityRecord> records = await AssignAsync(
-            new DocumentedDesktopOperationResult(
-                unchecked((int)0x80070005),
-                "MoveWindowToDesktop"));
+            FailedMove(unchecked((int)0x80070005)));
 
         foreach (ActivityRecord record in records)
         {
@@ -103,7 +99,7 @@ public sealed class WindowPlacementDiagnosticsTests
     }
 
     private static async Task<ImmutableArray<ActivityRecord>> AssignAsync(
-        DocumentedDesktopOperationResult moveResult)
+        NativeBridgeResult moveResult)
     {
         FakeDesktopManagerApi desktopManager = new()
         {
@@ -115,6 +111,7 @@ public sealed class WindowPlacementDiagnosticsTests
         };
         using WindowsWindowDesktopPlacementService placement = new(
             new FakeWindowHandleApi(),
+            desktopManager,
             desktopManager);
         BoundedWindowAssignmentActivityStore store = new();
         WindowAssignmentService service = new(
@@ -139,6 +136,16 @@ public sealed class WindowPlacementDiagnosticsTests
 
         return ActivityRecordFactory.FromAssignment(activity, Guid.NewGuid());
     }
+
+    private static NativeBridgeResult FailedMove(
+        int hResult,
+        string stage = "WindowMove") =>
+        NativeBridgeResult.Failed(
+            new NativeBridgeError(
+                "native.window_move",
+                stage,
+                "Test window move failure.",
+                hResult));
 
     private sealed class BoundReconciliationService :
         IManagedDesktopReconciliationService
@@ -183,18 +190,19 @@ public sealed class WindowPlacementDiagnosticsTests
     }
 
     private sealed class FakeDesktopManagerApi :
-        IDocumentedVirtualDesktopManagerApi
+        IDocumentedVirtualDesktopManagerApi,
+        IValidatedWindowDesktopMover
     {
         public DocumentedDesktopIdResult GetResult { get; init; } =
             new(OtherDesktopId, 0, "GetWindowDesktopId");
 
-        public DocumentedDesktopOperationResult MoveResult { get; init; } =
-            new(0, "MoveWindowToDesktop");
+        public NativeBridgeResult MoveResult { get; init; } =
+            NativeBridgeResult.Succeeded;
 
         public DocumentedDesktopIdResult GetWindowDesktopId(nint windowHandle) =>
             GetResult;
 
-        public DocumentedDesktopOperationResult MoveWindowToDesktop(
+        public NativeBridgeResult MoveWindowToDesktop(
             nint windowHandle,
             Guid desktopId) =>
             MoveResult;

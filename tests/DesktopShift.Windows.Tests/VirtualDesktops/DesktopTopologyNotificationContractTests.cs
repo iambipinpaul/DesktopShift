@@ -312,6 +312,16 @@ public sealed class DesktopTopologyNotificationContractTests
             return NativeBridgeResult.Succeeded;
         }
 
+        public NativeBridgeResult MoveWindowToDesktop(
+            nint windowHandle,
+            Guid desktopId)
+        {
+            _ = windowHandle;
+            _ = desktopId;
+            MutatingCallCount++;
+            return NativeBridgeResult.Succeeded;
+        }
+
         public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)
         {
             topologyChanged = onTopologyChanged;
