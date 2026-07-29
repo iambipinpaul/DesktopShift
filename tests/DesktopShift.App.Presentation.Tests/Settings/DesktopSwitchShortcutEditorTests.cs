@@ -57,20 +57,6 @@ public sealed class DesktopSwitchShortcutEditorTests
     }
 
     [TestMethod]
-    public void TheWindowsOverrideProfile_CarriesAWarningTheOthersDoNot()
-    {
-        DesktopSwitchShortcutEditor editor =
-            new(DesktopSwitchShortcutSettings.Disabled);
-
-        editor.Profile = DesktopSwitchShortcutProfile.CtrlAlt;
-        Assert.IsNull(editor.Warning);
-
-        editor.Profile = DesktopSwitchShortcutProfile.WinAlt;
-        Assert.IsNotNull(editor.Warning);
-        Assert.Contains("Jump List", editor.Warning);
-    }
-
-    [TestMethod]
     public void TheSummary_FollowsTheSelectedProfile()
     {
         DesktopSwitchShortcutEditor editor =
@@ -78,8 +64,12 @@ public sealed class DesktopSwitchShortcutEditorTests
 
         Assert.Contains("Ctrl + Alt + 1", editor.Summary);
 
-        editor.Profile = DesktopSwitchShortcutProfile.WinAlt;
-        Assert.Contains("Alt + Win + 1", editor.Summary);
+        editor.Profile = DesktopSwitchShortcutProfile.Custom;
+        editor.Control = true;
+        editor.Alt = false;
+        editor.Shift = true;
+        editor.Windows = false;
+        Assert.Contains("Ctrl + Shift + 1", editor.Summary);
         Assert.Contains("Desktop 10", editor.Summary);
     }
 
@@ -115,12 +105,12 @@ public sealed class DesktopSwitchShortcutEditorTests
                 original,
                 new DesktopSwitchShortcutSettings(
                     true,
-                    DesktopSwitchShortcutProfile.WinAlt,
+                    DesktopSwitchShortcutProfile.Custom,
                     HotkeyModifiers.Shift));
 
         Assert.IsTrue(updated.AreDesktopSwitchShortcutsEnabled);
         Assert.AreEqual(
-            DesktopSwitchShortcutProfile.WinAlt,
+            DesktopSwitchShortcutProfile.Custom,
             updated.DesktopSwitchProfile);
         Assert.AreEqual(
             HotkeyModifiers.Shift,

@@ -31,10 +31,6 @@ public static class DesktopSwitchShortcuts
     public const HotkeyModifiers CtrlAltModifiers =
         HotkeyModifiers.Control | HotkeyModifiers.Alt;
 
-    /// <summary>The modifiers the Windows-override profile uses.</summary>
-    public const HotkeyModifiers WinAltModifiers =
-        HotkeyModifiers.Windows | HotkeyModifiers.Alt;
-
     /// <summary>The lowest desktop position a shortcut can select.</summary>
     public const int MinDesktopOrdinal = 1;
 
@@ -54,7 +50,6 @@ public static class DesktopSwitchShortcuts
     public static ImmutableArray<DesktopSwitchShortcutProfile> Profiles { get; } =
     [
         DesktopSwitchShortcutProfile.CtrlAlt,
-        DesktopSwitchShortcutProfile.WinAlt,
         DesktopSwitchShortcutProfile.Custom,
     ];
 
@@ -99,7 +94,6 @@ public static class DesktopSwitchShortcuts
         HotkeyModifiers customModifiers) => profile switch
         {
             DesktopSwitchShortcutProfile.CtrlAlt => CtrlAltModifiers,
-            DesktopSwitchShortcutProfile.WinAlt => WinAltModifiers,
             DesktopSwitchShortcutProfile.Custom => customModifiers,
             _ => HotkeyModifiers.None,
         };
@@ -122,7 +116,6 @@ public static class DesktopSwitchShortcuts
         profile switch
         {
             DesktopSwitchShortcutProfile.CtrlAlt => "Ctrl + Alt + Number",
-            DesktopSwitchShortcutProfile.WinAlt => "Win + Alt + Number",
             DesktopSwitchShortcutProfile.Custom => "Custom",
             _ => profile.ToString(),
         };
@@ -135,31 +128,9 @@ public static class DesktopSwitchShortcuts
         profile switch
         {
             DesktopSwitchShortcutProfile.CtrlAlt => "Recommended",
-            DesktopSwitchShortcutProfile.WinAlt =>
-                "Overrides Windows taskbar shortcuts",
             DesktopSwitchShortcutProfile.Custom =>
                 "Choose any combination of Ctrl, Alt, Shift, and Win",
             _ => string.Empty,
-        };
-
-    /// <summary>
-    /// What the user has to be told before a profile is claimed, or null when a
-    /// profile costs them nothing.
-    /// </summary>
-    /// <remarks>
-    /// Win + Alt + digit is the taskbar Jump List shortcut: it opens the recent
-    /// files list for the nth pinned application. Claiming it means that stops
-    /// working, and — because Windows hands the combination over only if the
-    /// shell has not already taken it — it may not be claimable at all. Both
-    /// halves of that are the user's to weigh, so both are said before they
-    /// choose rather than after a registration fails.
-    /// </remarks>
-    public static string? Warn(DesktopSwitchShortcutProfile profile) =>
-        profile switch
-        {
-            DesktopSwitchShortcutProfile.WinAlt =>
-                "Win + Alt + a number opens the Jump List for the matching taskbar app. Using it here replaces that, and Windows may refuse the combination outright if the taskbar claimed it first — DesktopShift will say so if that happens.",
-            _ => null,
         };
 
     /// <summary>

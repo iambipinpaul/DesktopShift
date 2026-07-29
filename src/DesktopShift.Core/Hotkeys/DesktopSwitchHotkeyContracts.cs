@@ -27,12 +27,6 @@ public enum DesktopSwitchShortcutProfile
     /// </summary>
     CtrlAlt,
 
-    /// <summary>
-    /// Win + Alt + digit, which is the taskbar Jump List shortcut. Windows may
-    /// refuse to hand these over, and the user is told so before they choose it.
-    /// </summary>
-    WinAlt,
-
     /// <summary>Whatever combination of Ctrl, Alt, Shift, and Win the user picked.</summary>
     Custom,
 }

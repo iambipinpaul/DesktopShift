@@ -71,11 +71,12 @@ Use chords that do not overlap Windows or the second application.
 Have at least three virtual desktops open before starting, and no more than four,
 so both the "desktop exists" and "desktop does not exist" cases are reachable.
 
-Whether `Win + Alt + a number` can be registered at all is decided by the shell
-on the machine under test: if Explorer claimed the Jump List shortcuts first,
-Windows refuses DesktopShift's request. Both outcomes are correct behaviour, and
-the point of the case below is that the user is told which one they got. Record
-the result — it is the only way to find out how this behaves in practice.
+There is no `Win + Alt + Number` profile. It was offered once and removed: the
+shell holds those ten combinations from boot, so `RegisterHotKey` refuses every
+one of them and the profile could never register anything. Nothing but a
+low-level keyboard hook can take them, and DesktopShift deliberately does not
+install one, so there is nothing to test here. A custom profile can still
+include the Windows key alongside other modifiers.
 
 | Case | Action | Expected result |
 | --- | --- | --- |
@@ -86,11 +87,10 @@ the result — it is the only way to find out how this behaves in practice.
 | Held key | Press and hold `Ctrl + Alt + 3` for several seconds. | Exactly one switch occurs. The desktop does not cycle or flicker while the key is held. |
 | Missing desktop | With four desktops open, press the profile's `7`. | A notification says there is no Desktop 7 and names how many desktops exist. The foreground desktop does not change. |
 | Already current | Press the shortcut for the desktop already in front. | Nothing happens and nothing is reported. |
-| Windows override warning | Select `Win + Alt + Number` **without** applying. | A warning appears naming the taskbar Jump List shortcut before anything is claimed. |
-| Windows override outcome | Apply the `Win + Alt + Number` profile, then press `Win + Alt + 2`. | Either the desktop switches and the taskbar Jump List no longer opens, **or** Settings reports the specific desktops Windows refused and names the taskbar as the cause. Silence is a failure. |
+| Claimed combination | Select Custom, tick only Win and Alt, and apply. | Settings reports the desktops Windows refused and how many are active. Silence is a failure. The taskbar Jump Lists keep working. |
 | Custom profile | Select Custom, tick Ctrl, Alt, and Shift, and apply. | The summary line updates before applying. `Ctrl + Alt + Shift + 2` switches to Desktop 2; the old `Ctrl + Alt + 2` no longer does. |
 | Custom with no modifier | Select Custom and untick every box. | Applying is refused with a message about the number keys, and no bare digit is ever claimed. Typing numbers still works everywhere. |
 | Profile exchange | Switch from Custom back to `Ctrl + Alt + Number` and then to Custom again. | The custom ticks are still as they were left. |
 | Restored at startup | Enable a profile, exit from the tray, and relaunch. | The same profile is registered again without opening Settings. |
-| Shutdown disposal | With a profile enabled, exit DesktopShift and press its combinations. | Every combination is free immediately. With `Win + Alt + Number`, the taskbar Jump Lists work again. |
+| Shutdown disposal | With a profile enabled, exit DesktopShift and press its combinations. | Every combination is free immediately and can be claimed by another application. |
 | Limited Mode | Force the provider into Limited Mode and press a switching shortcut. | A notification says switching is unavailable on this machine. Nothing is left half-switched. |

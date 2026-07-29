@@ -358,15 +358,6 @@
                             </StackPanel>
                         </RadioButton>
                         <RadioButton
-                            x:Name="DesktopSwitchWinAltOption"
-                            Checked="OnDesktopSwitchProfileChecked"
-                            GroupName="DesktopSwitchProfile">
-                            <StackPanel Spacing="2">
-                                <TextBlock FontWeight="SemiBold" Text="Win + Alt + Number" />
-                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Overrides Windows taskbar shortcuts" />
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton
                             x:Name="DesktopSwitchCustomOption"
                             Checked="OnDesktopSwitchProfileChecked"
                             GroupName="DesktopSwitchProfile">
@@ -406,12 +397,6 @@
                         x:Name="DesktopSwitchSummary"
                         Style="{StaticResource DesktopShift.CaptionStyle}"
                         TextWrapping="Wrap" />
-                    <InfoBar
-                        x:Name="DesktopSwitchWarning"
-                        IsClosable="False"
-                        IsOpen="False"
-                        Severity="Warning"
-                        Title="This replaces a Windows shortcut" />
                     <Button
                         x:Name="ApplyDesktopSwitchButton"
                         HorizontalAlignment="Left"

@@ -267,8 +267,6 @@ public sealed partial class SettingsPage : Page
         DesktopSwitchEnabledToggle.IsOn = desktopSwitchEditor.IsEnabled;
         DesktopSwitchCtrlAltOption.IsChecked =
             desktopSwitchEditor.Profile == DesktopSwitchShortcutProfile.CtrlAlt;
-        DesktopSwitchWinAltOption.IsChecked =
-            desktopSwitchEditor.Profile == DesktopSwitchShortcutProfile.WinAlt;
         DesktopSwitchCustomOption.IsChecked = desktopSwitchEditor.IsCustom;
         DesktopSwitchControlModifier.IsChecked = desktopSwitchEditor.Control;
         DesktopSwitchAltModifier.IsChecked = desktopSwitchEditor.Alt;
@@ -279,8 +277,8 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Keeps the summary line, the Windows-override warning, and the modifier
-    /// boxes' availability matching whichever profile is selected.
+    /// Keeps the summary line and the modifier boxes' availability matching
+    /// whichever profile is selected.
     /// </summary>
     private void RefreshDesktopSwitchPresentation()
     {
@@ -297,31 +295,15 @@ public sealed partial class SettingsPage : Page
         DesktopSwitchShiftModifier.IsEnabled = isCustom;
         DesktopSwitchWindowsModifier.IsEnabled = isCustom;
         DesktopSwitchSummary.Text = desktopSwitchEditor.Summary;
-
-        // The message is only written when there is one, and IsOpen is only
-        // assigned when it actually changes. An InfoBar driven to the state it
-        // is already in still runs its open/close transition, and doing that
-        // from inside another control's event is how a redundant assignment
-        // turns into a visible glitch.
-        string? warning = desktopSwitchEditor.Warning;
-        if (warning is not null)
-        {
-            DesktopSwitchWarning.Message = warning;
-        }
-
-        if (DesktopSwitchWarning.IsOpen != warning is not null)
-        {
-            DesktopSwitchWarning.IsOpen = warning is not null;
-        }
     }
 
     /// <remarks>
     /// Guarded against <c>isApplyingPresentation</c> like every other handler on
-    /// this page. Loading a saved profile assigns <c>IsChecked</c> on all three
-    /// radio buttons in turn, and each assignment raises this event — so without
-    /// the guard, restoring settings re-entrantly rewrites the summary and
-    /// reopens the warning InfoBar in the middle of applying a presentation,
-    /// against an editor that is being replaced underneath it.
+    /// this page. Loading a saved profile assigns <c>IsChecked</c> on both radio
+    /// buttons in turn, and each assignment raises this event — so without the
+    /// guard, restoring settings re-entrantly rewrites the summary in the middle
+    /// of applying a presentation, against an editor that is being replaced
+    /// underneath it.
     /// </remarks>
     private void OnDesktopSwitchProfileChecked(object sender, RoutedEventArgs args)
     {
@@ -350,11 +332,6 @@ public sealed partial class SettingsPage : Page
 
     private DesktopSwitchShortcutProfile ReadSelectedDesktopSwitchProfile()
     {
-        if (DesktopSwitchWinAltOption.IsChecked is true)
-        {
-            return DesktopSwitchShortcutProfile.WinAlt;
-        }
-
         return DesktopSwitchCustomOption.IsChecked is true
             ? DesktopSwitchShortcutProfile.Custom
             : DesktopSwitchShortcutProfile.CtrlAlt;

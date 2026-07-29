@@ -56,10 +56,12 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrarTests
         List<int> pressed = [];
         registrar.Pressed += (_, args) => pressed.Add(args.DesktopOrdinal);
 
+        // Windows and Alt together, so the Windows modifier's translation is
+        // covered even though no built-in profile uses it.
         HotkeyRegistrationOutcome outcome = registrar.Register(
             10,
             new HotkeyChord(
-                DesktopSwitchShortcuts.WinAltModifiers,
+                HotkeyModifiers.Windows | HotkeyModifiers.Alt,
                 DesktopSwitchShortcuts.KeyFor(10)));
 
         Assert.IsTrue(outcome.Succeeded, outcome.FailureMessage);
@@ -107,7 +109,7 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrarTests
     }
 
     [TestMethod]
-    public void ATaskbarConflict_IsReturnedAsASpecificFailure()
+    public void AClaimedCombination_IsReturnedAsASpecificFailure()
     {
         FakeWindowsHotkeyNativeApi native = new()
         {
@@ -119,7 +121,7 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrarTests
         HotkeyRegistrationOutcome outcome = registrar.Register(
             1,
             new HotkeyChord(
-                DesktopSwitchShortcuts.WinAltModifiers,
+                DesktopSwitchShortcuts.CtrlAltModifiers,
                 DesktopSwitchShortcuts.KeyFor(1)));
 
         Assert.IsFalse(outcome.Succeeded);

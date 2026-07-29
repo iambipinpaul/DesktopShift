@@ -66,26 +66,25 @@ public sealed class DesktopSwitchShortcutTests
         Assert.AreEqual("Ctrl + Alt + 0", bindings[^1].Chord.Describe());
     }
 
+    /// <summary>
+    /// Only the two profiles that can actually be claimed are offered. Win + Alt
+    /// + digit was offered once and removed: the shell holds those ten
+    /// combinations from boot, so <c>RegisterHotKey</c> refuses every one of
+    /// them and no profile built on it can ever register anything.
+    /// </summary>
     [TestMethod]
-    public void WinAltProfile_ClaimsTheWindowsKeyAndWarnsAboutJumpLists()
+    public void OnlyClaimableProfiles_AreOffered()
     {
-        DesktopSwitchShortcutSettings settings =
-            new(true, DesktopSwitchShortcutProfile.WinAlt);
-
-        Assert.AreEqual(
-            HotkeyModifiers.Windows | HotkeyModifiers.Alt,
-            settings.ActiveModifiers);
-
-        string? warning =
-            DesktopSwitchShortcuts.Warn(DesktopSwitchShortcutProfile.WinAlt);
-        Assert.IsNotNull(warning, "The override profile has to state its cost.");
-        Assert.Contains("Jump List", warning);
-
-        // The recommended profile costs the user nothing, so it says nothing.
-        Assert.IsNull(
-            DesktopSwitchShortcuts.Warn(DesktopSwitchShortcutProfile.CtrlAlt));
-        Assert.IsNull(
-            DesktopSwitchShortcuts.Warn(DesktopSwitchShortcutProfile.Custom));
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                DesktopSwitchShortcutProfile.CtrlAlt,
+                DesktopSwitchShortcutProfile.Custom,
+            },
+            DesktopSwitchShortcuts.Profiles.ToArray());
+        CollectionAssert.AreEqual(
+            DesktopSwitchShortcuts.Profiles.ToArray(),
+            Enum.GetValues<DesktopSwitchShortcutProfile>());
     }
 
     [TestMethod]

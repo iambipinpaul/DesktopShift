@@ -13,10 +13,9 @@ namespace DesktopShift.App.Settings;
 /// the round trip.
 /// </para>
 /// <para>
-/// Everything the Settings page shows about the choice — the warning, the
-/// summary line, whether the modifier boxes do anything — is computed here
-/// rather than in the page, because a rule that lives only in markup cannot be
-/// tested.
+/// Everything the Settings page shows about the choice — the summary line,
+/// whether the modifier boxes do anything — is computed here rather than in the
+/// page, because a rule that lives only in markup cannot be tested.
 /// </para>
 /// </remarks>
 public sealed class DesktopSwitchShortcutEditor
@@ -67,12 +66,6 @@ public sealed class DesktopSwitchShortcutEditor
             return modifiers;
         }
     }
-
-    /// <summary>
-    /// What the user has to be told before this profile is claimed, or null when
-    /// it costs them nothing.
-    /// </summary>
-    public string? Warning => DesktopSwitchShortcuts.Warn(Profile);
 
     /// <summary>
     /// The line naming what the ten shortcuts will be, so the choice is legible

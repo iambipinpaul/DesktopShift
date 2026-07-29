@@ -231,9 +231,8 @@ public sealed class DesktopSwitchHotkeyCoordinator : IDesktopSwitchHotkeyCoordin
         string summary =
             $"Windows refused the {DesktopSwitchShortcuts.Describe(settings.Profile)} shortcut for {desktops}. {registered} of {registrations.Count} shortcuts are active.";
 
-        return settings.Profile == DesktopSwitchShortcutProfile.WinAlt
-            ? $"{summary} The taskbar Jump List shortcuts claimed these first; choose Ctrl + Alt + Number or a custom combination instead."
-            : $"{summary} Another application is already using the refused combinations.";
+        return
+            $"{summary} Something else on this machine already holds the refused combinations; choose a different one.";
     }
 
     /// <summary>

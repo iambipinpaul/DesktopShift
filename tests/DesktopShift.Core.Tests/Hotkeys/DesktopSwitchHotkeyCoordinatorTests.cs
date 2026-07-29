@@ -68,14 +68,15 @@ public sealed class DesktopSwitchHotkeyCoordinatorTests
         DesktopSwitchHotkeyState state = coordinator.Apply(
             new DesktopSwitchShortcutSettings(
                 true,
-                DesktopSwitchShortcutProfile.WinAlt));
+                DesktopSwitchShortcutProfile.Custom,
+                HotkeyModifiers.Windows | HotkeyModifiers.Shift));
 
         // Twenty attempts, ten held: nothing from the first profile survived to
         // be claimed twice or left behind.
         Assert.AreEqual(2, registrar.UnregisterAllCount);
         Assert.HasCount(20, registrar.Attempts);
         Assert.AreEqual(10, registrar.HeldCount);
-        Assert.AreEqual(DesktopSwitchShortcutProfile.WinAlt, state.Profile);
+        Assert.AreEqual(DesktopSwitchShortcutProfile.Custom, state.Profile);
         Assert.IsTrue(
             registrar.Attempts[^1].Chord.Modifiers.HasFlag(
                 HotkeyModifiers.Windows),
@@ -106,8 +107,10 @@ public sealed class DesktopSwitchHotkeyCoordinatorTests
     public void ARefusedDesktop_IsReportedWithoutAbandoningTheOthers()
     {
         InMemoryDesktopSwitchHotkeyRegistrar registrar = new();
+        const HotkeyModifiers modifiers =
+            HotkeyModifiers.Control | HotkeyModifiers.Shift;
         HotkeyChord contested = new(
-            DesktopSwitchShortcuts.WinAltModifiers,
+            modifiers,
             DesktopSwitchShortcuts.KeyFor(3));
         registrar.Refuse(contested);
         using DesktopSwitchHotkeyCoordinator coordinator =
@@ -116,7 +119,8 @@ public sealed class DesktopSwitchHotkeyCoordinatorTests
         DesktopSwitchHotkeyState state = coordinator.Apply(
             new DesktopSwitchShortcutSettings(
                 true,
-                DesktopSwitchShortcutProfile.WinAlt));
+                DesktopSwitchShortcutProfile.Custom,
+                modifiers));
 
         Assert.AreEqual(9, state.RegisteredCount);
         CollectionAssert.AreEqual(
@@ -135,7 +139,7 @@ public sealed class DesktopSwitchHotkeyCoordinatorTests
         Assert.AreEqual(
             ConfigurationValidationCode.DesktopSwitchShortcutRegistrationFailed,
             issue.Code);
-        Assert.Contains("Jump List", issue.Message);
+        Assert.Contains("already holds", issue.Message);
         Assert.Contains("9 of 10", issue.Message);
     }
 
