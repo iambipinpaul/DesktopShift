@@ -133,6 +133,61 @@ public sealed class ActivityRecordFactoryTests
     }
 
     [TestMethod]
+    public void WindowNotTrackedAssignment_IsAStructuredNonActionableSkip()
+    {
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Skipped,
+                    skipReason: WindowAssignmentSkipReason.WindowNotTracked,
+                    moveOutcome: WindowMoveOutcome.NotAttempted,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    error: new WindowAssignmentError(
+                        "window_placement.window_not_tracked",
+                        "Windows was not tracking this window on a virtual desktop.",
+                        unchecked((int)0x8002802B))),
+                DiagnosticTestData.Session);
+
+        Assert.HasCount(1, records);
+        Assert.AreEqual(ActivityResult.Skipped, records[0].Result);
+        Assert.AreEqual(
+            "assignment.skipped.window_not_tracked",
+            records[0].ResultCode);
+        Assert.Contains("was not tracking", records[0].Summary);
+        Assert.IsNotNull(records[0].Error);
+        Assert.AreEqual("0x8002802B", records[0].Error?.HResultText);
+    }
+
+    [TestMethod]
+    public void WindowUnavailableDuringMove_IsASkippedMoveAndAssignment()
+    {
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Skipped,
+                    skipReason: WindowAssignmentSkipReason.WindowNotTracked,
+                    moveOutcome: WindowMoveOutcome.WindowUnavailable,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    error: new WindowAssignmentError(
+                        "window_placement.stale_window_handle",
+                        "The window closed before it could be moved.",
+                        unchecked((int)0x80070006))),
+                DiagnosticTestData.Session);
+
+        Assert.HasCount(2, records);
+        ActivityRecord move = records.Single(
+            static record => record.Source == ActivityEventSource.Move);
+        Assert.AreEqual(ActivityResult.Skipped, move.Result);
+        Assert.AreEqual("move.window_unavailable", move.ResultCode);
+        Assert.Contains("became unavailable", move.Summary);
+        Assert.AreEqual(
+            ActivityResult.Skipped,
+            records.Single(
+                static record => record.Source == ActivityEventSource.Assignment)
+                .Result);
+    }
+
+    [TestMethod]
     public void FailedMove_CarriesTheHResultAndWindowsErrorCode()
     {
         ImmutableArray<ActivityRecord> records =

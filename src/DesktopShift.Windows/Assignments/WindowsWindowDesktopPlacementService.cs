@@ -13,6 +13,7 @@ public sealed class WindowsWindowDesktopPlacementService :
     private const int UnexpectedResultHResult =
         unchecked((int)0x8000FFFF);
     private const int AccessDeniedHResult = unchecked((int)0x80070005);
+    private const int WindowNotTrackedHResult = unchecked((int)0x8002802B);
     private const string ManagerActivationStage = "ManagerActivation";
 
     private readonly IWindowHandleApi windowApi;
@@ -311,6 +312,14 @@ public sealed class WindowsWindowDesktopPlacementService :
                 "window_placement.query_access_denied",
                 "Windows denied access to the window, so its virtual desktop could not be read and the window was left where it is. " +
                 PrivilegeBoundary.DeniedWindowExplanation,
+                result.HResult);
+        }
+
+        if (result.HResult == WindowNotTrackedHResult)
+        {
+            return DesktopTopologyProviderResult<Guid>.Failed(
+                "window_placement.window_not_tracked",
+                "Windows was not tracking this window on a virtual desktop.",
                 result.HResult);
         }
 

@@ -164,6 +164,8 @@ public sealed record AssignmentActivityPresentation(
             WindowMoveOutcome.Succeeded => $"Moved to {target}",
             WindowMoveOutcome.AlreadyCorrect => $"Already on {target}",
             WindowMoveOutcome.Failed => $"Move to {target} failed",
+            WindowMoveOutcome.WindowUnavailable =>
+                $"Window became unavailable before move to {target}",
             _ => "Move not attempted",
         };
 
@@ -176,6 +178,11 @@ public sealed record AssignmentActivityPresentation(
             WindowAssignmentSkipReason.SelfGeneratedForegroundSuppressed)
         {
             return $"Suppressed a self-generated foreground event for {processName}";
+        }
+
+        if (activity.SkipReason == WindowAssignmentSkipReason.WindowNotTracked)
+        {
+            return $"Ignored a {processName} window that Windows was not tracking on a virtual desktop";
         }
 
         string placement = activity.MoveOutcome switch

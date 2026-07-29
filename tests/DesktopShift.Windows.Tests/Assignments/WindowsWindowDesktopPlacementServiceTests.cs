@@ -136,6 +136,31 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
     }
 
     [TestMethod]
+    public async Task GetDesktop_ReportsATransientWindowThatWindowsIsNotTracking()
+    {
+        int hResult = unchecked((int)0x8002802B);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            GetResult = new DocumentedDesktopIdResult(
+                Guid.Empty,
+                hResult,
+                "GetWindowDesktopId"),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi(),
+            desktopManager);
+
+        DesktopTopologyProviderResult<Guid> result =
+            await service.GetWindowDesktopIdAsync(WindowHandle);
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(
+            "window_placement.window_not_tracked",
+            result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+    }
+
+    [TestMethod]
     public async Task Move_RejectsEmptyDesktopIdBeforeCallingCom()
     {
         FakeDesktopManagerApi desktopManager = new();

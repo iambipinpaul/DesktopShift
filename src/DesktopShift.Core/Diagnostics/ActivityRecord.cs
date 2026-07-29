@@ -602,6 +602,8 @@ public static class ActivityRecordFactory
                 $"The window was already on {activity.TargetDesktopKey}.",
             WindowMoveOutcome.Failed =>
                 $"The window could not be moved to {activity.TargetDesktopKey}.",
+            WindowMoveOutcome.WindowUnavailable =>
+                $"The window became unavailable before it could be moved to {activity.TargetDesktopKey}.",
             _ => "No move was attempted.",
         };
 
@@ -627,6 +629,9 @@ public static class ActivityRecordFactory
                 $"Assigned {activity.Identity.ProcessName} to {activity.TargetDesktopKey}.",
             WindowAssignmentOutcome.Failed =>
                 $"Could not assign {activity.Identity.ProcessName} to {activity.TargetDesktopKey}.",
+            WindowAssignmentOutcome.Skipped
+                when activity.SkipReason == WindowAssignmentSkipReason.WindowNotTracked =>
+                $"Skipped an {activity.Identity.ProcessName} window that Windows was not tracking on a virtual desktop.",
             _ =>
                 $"Skipped {activity.Identity.ProcessName}: {Humanize(activity.SkipReason)}.",
         };

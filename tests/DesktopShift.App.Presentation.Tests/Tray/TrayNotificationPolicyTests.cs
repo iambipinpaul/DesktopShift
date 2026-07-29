@@ -43,6 +43,37 @@ public sealed class TrayNotificationPolicyTests
     }
 
     [TestMethod]
+    public void ForAssignment_WindowNotTrackedSkipNeverNotifiesOrBecomesARecentIssue()
+    {
+        WindowAssignmentActivity activity =
+            AssignmentActivities.AlreadyCorrect(DateTimeOffset.UnixEpoch) with
+            {
+                SkipReason = WindowAssignmentSkipReason.WindowNotTracked,
+                MoveOutcome = WindowMoveOutcome.NotAttempted,
+                Error = new WindowAssignmentError(
+                    "window_placement.window_not_tracked",
+                    "Windows was not tracking this window on a virtual desktop.",
+                    HResult: unchecked((int)0x8002802B)),
+            };
+
+        Assert.IsNull(
+            TrayNotificationPolicy.ForAssignment(
+                activity,
+                TrayNotificationPreferences.Default));
+        Assert.IsNull(
+            TrayNotificationPolicy.ForAssignment(
+                activity with { MoveOutcome = WindowMoveOutcome.WindowUnavailable },
+                TrayNotificationPreferences.Default));
+        Assert.IsNull(
+            RecentIssueProjection.Project(
+                [
+                    activity,
+                    activity with { MoveOutcome = WindowMoveOutcome.WindowUnavailable },
+                ],
+                CompatibilityStatuses.FullModePassed()));
+    }
+
+    [TestMethod]
     public void ForCompatibility_PassingFullModeIsSilent()
     {
         Assert.IsNull(

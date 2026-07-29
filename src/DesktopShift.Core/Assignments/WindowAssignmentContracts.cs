@@ -17,6 +17,7 @@ public enum WindowAssignmentSkipReason
     AlreadyOnTargetDesktop,
     TargetDesktopUnresolved,
     SelfGeneratedForegroundSuppressed,
+    WindowNotTracked,
 }
 
 public enum WindowMoveOutcome
@@ -25,6 +26,7 @@ public enum WindowMoveOutcome
     Succeeded,
     AlreadyCorrect,
     Failed,
+    WindowUnavailable,
 }
 
 public enum DesktopSwitchOutcome

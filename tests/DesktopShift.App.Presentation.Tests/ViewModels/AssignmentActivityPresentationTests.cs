@@ -81,6 +81,61 @@ public sealed class AssignmentActivityPresentationTests
     }
 
     [TestMethod]
+    public void Create_WindowNotTrackedExplainsTheSilentTransientSkip()
+    {
+        WindowAssignmentActivity source = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.WindowNotTracked,
+            TimeSpan.FromMilliseconds(3.6));
+        WindowAssignmentActivity activity = source with
+        {
+            Error = new WindowAssignmentError(
+                "window_placement.window_not_tracked",
+                "Windows was not tracking this window on a virtual desktop.",
+                HResult: unchecked((int)0x8002802B)),
+        };
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Skipped", presentation.Outcome);
+        Assert.AreEqual(
+            "Ignored a Code.exe window that Windows was not tracking on a virtual desktop",
+            presentation.Decision);
+        Assert.AreEqual("Move not attempted", presentation.Movement);
+        Assert.Contains(
+            "window_placement.window_not_tracked",
+            presentation.Diagnostic);
+    }
+
+    [TestMethod]
+    public void Create_WindowThatDisappearsDuringMoveRemainsASilentSkip()
+    {
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.WindowNotTracked,
+            TimeSpan.FromMilliseconds(4),
+            moveOutcome: WindowMoveOutcome.WindowUnavailable) with
+        {
+            Error = new WindowAssignmentError(
+                "window_placement.stale_window_handle",
+                "The window closed before it could be moved.",
+                HResult: unchecked((int)0x80070006)),
+        };
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Skipped", presentation.Outcome);
+        Assert.AreEqual(
+            "Window became unavailable before move to code",
+            presentation.Movement);
+        Assert.Contains("stale_window_handle", presentation.Diagnostic);
+    }
+
+    [TestMethod]
     public async Task ReassignmentCommandCallsServiceOnceAndAwaitsStructuredCompletion()
     {
         TaskCompletionSource<WindowReassignmentBatchResult> completion =

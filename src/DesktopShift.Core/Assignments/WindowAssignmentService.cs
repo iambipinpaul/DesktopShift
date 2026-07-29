@@ -118,14 +118,20 @@ public sealed class WindowAssignmentService(
 
         if (!currentDesktop.IsSuccess || currentDesktop.Value == Guid.Empty)
         {
+            bool windowNotTracked =
+                IsWindowNotTracked(currentDesktop.Error);
             return await RecordAsync(
                 CreateActivity(
                     request,
                     correlationId,
                     startedAtUtc,
                     startedTimestamp,
-                    WindowAssignmentOutcome.Failed,
-                    WindowAssignmentSkipReason.None,
+                    windowNotTracked
+                        ? WindowAssignmentOutcome.Skipped
+                        : WindowAssignmentOutcome.Failed,
+                    windowNotTracked
+                        ? WindowAssignmentSkipReason.WindowNotTracked
+                        : WindowAssignmentSkipReason.None,
                     targetDesktopId,
                     previousDesktopId: null,
                     ToAssignmentError(
@@ -164,21 +170,29 @@ public sealed class WindowAssignmentService(
 
             if (!move.IsSuccess)
             {
+                bool windowNotTracked =
+                    IsWindowNotTracked(move.Error);
                 return await RecordAsync(
                     CreateActivity(
                         request,
                         correlationId,
                         startedAtUtc,
                         startedTimestamp,
-                        WindowAssignmentOutcome.Failed,
-                        WindowAssignmentSkipReason.None,
+                        windowNotTracked
+                            ? WindowAssignmentOutcome.Skipped
+                            : WindowAssignmentOutcome.Failed,
+                        windowNotTracked
+                            ? WindowAssignmentSkipReason.WindowNotTracked
+                            : WindowAssignmentSkipReason.None,
                         targetDesktopId,
                         previousDesktopId,
                         ToAssignmentError(
                             move.Error,
                             "assignment.move_failed",
                             "The window could not be moved to its managed desktop."),
-                        WindowMoveOutcome.Failed),
+                        windowNotTracked
+                            ? WindowMoveOutcome.WindowUnavailable
+                            : WindowMoveOutcome.Failed),
                     CancellationToken.None).ConfigureAwait(false);
             }
 
@@ -313,4 +327,10 @@ public sealed class WindowAssignmentService(
                 error.Message,
                 error.HResult,
                 error.NativeErrorCode);
+
+    private static bool IsWindowNotTracked(
+        DesktopTopologyProviderError? error) =>
+        error?.Code is
+            "window_placement.window_not_tracked" or
+            "window_placement.stale_window_handle";
 }
