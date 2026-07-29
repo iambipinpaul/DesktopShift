@@ -27,10 +27,23 @@ namespace DesktopShift.Windows.Recovery;
 /// It renders nothing and owns no user interface.
 /// </para>
 /// <para>
-/// Construct, <see cref="Start"/>, and <see cref="Dispose"/> on the thread that
-/// owns the message pump. A window belongs to the thread that created it: that
-/// thread is the only one whose pump will ever deliver these messages, and
-/// <c>DestroyWindow</c> only works when called from it.
+/// The listener owns the thread its window lives on, and that ownership is the
+/// second point of the type. A window belongs to the thread that created it, and
+/// only that thread's message pump will ever deliver these broadcasts — so a
+/// window created on a thread that does not pump receives nothing, silently and
+/// forever. <see cref="Start"/> is called from <c>IHostedService.StartAsync</c>,
+/// which runs on whichever thread the generic host's start sequence happens to
+/// be on by then: any hosted service registered earlier that awaits real I/O
+/// moves every later one onto the thread pool, where nothing pumps. Rather than
+/// make correctness depend on registration order, this type starts a dedicated
+/// background thread, creates the window on it, and runs the pump there for the
+/// window's whole life.
+/// </para>
+/// <para>
+/// That also decides how teardown works. <c>DestroyWindow</c> only succeeds when
+/// called from the owning thread, so <see cref="Dispose"/> posts
+/// <c>WM_CLOSE</c> to the window and joins the pump thread instead of destroying
+/// the window where it stands.
 /// </para>
 /// <para>
 /// This type observes and nothing more. It never restarts Explorer, never
@@ -52,11 +65,22 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
     /// <summary>The zero a window procedure returns for a message it handled.</summary>
     private const nint MessageHandled = 0;
 
+    /// <summary>How long <see cref="Dispose"/> waits for the pump thread to end.</summary>
+    /// <remarks>
+    /// The thread is a background thread, so a pump that somehow refuses to end
+    /// cannot keep the process alive. This bound exists so that shutting the
+    /// listener down cannot block the host's stop sequence either.
+    /// </remarks>
+    private static readonly TimeSpan PumpThreadJoinTimeout = TimeSpan.FromSeconds(5);
+
     private readonly NativeMethods.WindowProcedure windowProcedure;
     private readonly string windowClassName;
     private readonly uint taskbarCreatedMessage;
     private readonly nint instanceHandle;
     private readonly object syncRoot = new();
+    private readonly ManualResetEventSlim pumpReady = new(false);
+    private Thread? pumpThread;
+    private Exception? pumpStartFailure;
     private nint windowHandle;
     private long signalsRaised;
     private long callbackFailures;
@@ -109,35 +133,85 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
         Interlocked.Read(ref callbackFailures));
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Returns once the window exists and its pump is running, so a caller that
+    /// sees this return knows the listener is live rather than merely requested.
+    /// A failure on the pump thread is re-thrown here for the same reason: the
+    /// caller that asked to start listening is the one that has to hear that it
+    /// did not.
+    /// </remarks>
     public void Start()
     {
+        Thread thread;
         lock (syncRoot)
         {
             ObjectDisposedException.ThrowIf(isDisposed, this);
-            if (windowHandle != 0)
+            if (pumpThread is not null)
             {
                 return;
             }
 
-            RegisterWindowClass();
-            windowHandle = CreateHiddenWindow();
+            thread = new Thread(RunPumpThread)
+            {
+                // Background, so a pump still draining cannot hold the process
+                // open; STA because this thread owns a window for its lifetime.
+                IsBackground = true,
+                Name = WindowName,
+            };
+            thread.SetApartmentState(ApartmentState.STA);
+            pumpThread = thread;
+        }
+
+        thread.Start();
+        pumpReady.Wait();
+
+        Exception? failure;
+        lock (syncRoot)
+        {
+            failure = pumpStartFailure;
+            if (failure is not null)
+            {
+                // A failed start must leave the object startable again rather
+                // than stuck holding a thread that already ended.
+                pumpThread = null;
+                pumpStartFailure = null;
+                pumpReady.Reset();
+            }
+        }
+
+        if (failure is not null)
+        {
+            UnregisterWindowClass();
+            throw failure;
         }
     }
 
     /// <summary>
-    /// Destroys the hidden window.
+    /// Destroys the hidden window and ends the thread that pumps it.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The window is closed by posting to it rather than by destroying it here.
+    /// <c>DestroyWindow</c> fails when it is not called from the thread that owns
+    /// the window, and this runs on whichever thread the host stops on, so
+    /// posting <c>WM_CLOSE</c> is what makes teardown work from anywhere: the
+    /// pump thread destroys its own window, the window procedure turns the
+    /// resulting <c>WM_DESTROY</c> into a quit, and the pump ends.
+    /// </para>
+    /// <para>
     /// Every listener has its own class because the class holds this instance's
     /// window-procedure function pointer. Reusing one constant class would make
     /// a later listener call the first, potentially collected instance after a
     /// test host or app lifetime recreated the service. The class is unregistered
-    /// after its only window is destroyed so Windows stops retaining that
-    /// function pointer before this object can be collected.
+    /// after its only window is destroyed — which is why the join comes first —
+    /// so Windows stops retaining that function pointer before this object can be
+    /// collected.
+    /// </para>
     /// </remarks>
     public void Dispose()
     {
         nint handle;
+        Thread? thread;
         lock (syncRoot)
         {
             if (isDisposed)
@@ -147,21 +221,104 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
 
             isDisposed = true;
             handle = windowHandle;
-            windowHandle = 0;
+            thread = pumpThread;
+            pumpThread = null;
         }
 
         SignalRaised = null;
 
         if (handle != 0)
         {
-            _ = NativeMethods.DestroyWindow(handle);
+            _ = NativeMethods.PostMessage(
+                handle,
+                NativeMethods.WmClose,
+                0,
+                0);
         }
 
-        if (isWindowClassRegistered)
+        _ = thread?.Join(PumpThreadJoinTimeout);
+        UnregisterWindowClass();
+        pumpReady.Dispose();
+    }
+
+    /// <summary>
+    /// Owns the window for its whole life: creates it, reports the outcome to
+    /// <see cref="Start"/>, then pumps until the window is destroyed.
+    /// </summary>
+    private void RunPumpThread()
+    {
+        try
         {
-            _ = NativeMethods.UnregisterClass(windowClassName, instanceHandle);
-            isWindowClassRegistered = false;
+            RegisterWindowClass();
+            nint handle = CreateHiddenWindow();
+            lock (syncRoot)
+            {
+                windowHandle = handle;
+            }
         }
+        catch (Exception exception)
+        {
+            lock (syncRoot)
+            {
+                pumpStartFailure = exception;
+            }
+
+            pumpReady.Set();
+            return;
+        }
+
+        pumpReady.Set();
+
+        try
+        {
+            RunMessageLoop();
+        }
+        finally
+        {
+            lock (syncRoot)
+            {
+                windowHandle = 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The pump itself, which ends only when the window is destroyed.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetMessage</c> answers three ways and all three end the loop or
+    /// continue it: zero is the <c>WM_QUIT</c> the window procedure posts on
+    /// <c>WM_DESTROY</c>, and -1 is an error against a handle that is already
+    /// gone. Neither is worth throwing over on a thread nobody can catch on.
+    /// </remarks>
+    private static void RunMessageLoop()
+    {
+        while (true)
+        {
+            int available = NativeMethods.GetMessage(
+                out NativeMethods.Message message,
+                0,
+                0,
+                0);
+            if (available is 0 or -1)
+            {
+                return;
+            }
+
+            _ = NativeMethods.TranslateMessage(ref message);
+            _ = NativeMethods.DispatchMessage(ref message);
+        }
+    }
+
+    private void UnregisterWindowClass()
+    {
+        if (!isWindowClassRegistered)
+        {
+            return;
+        }
+
+        _ = NativeMethods.UnregisterClass(windowClassName, instanceHandle);
+        isWindowClassRegistered = false;
     }
 
     private void RegisterWindowClass()
@@ -241,6 +398,16 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
         nint wParam,
         nint lParam)
     {
+        // Destruction is what ends the pump. Posting the quit here rather than
+        // from Dispose keeps it on the thread whose loop has to see it, and
+        // keeps it correct whether the window went away because Dispose asked
+        // or because Windows tore it down first.
+        if (message == NativeMethods.WmDestroy)
+        {
+            NativeMethods.PostQuitMessage(0);
+            return MessageHandled;
+        }
+
         // Windows documents that a window handling WM_POWERBROADCAST returns
         // TRUE, and it says so for every power notification rather than only for
         // the two that mean "awake". The answer is therefore decided from the
@@ -275,11 +442,32 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
     {
         internal const uint WsPopup = 0x80000000;
         internal const uint WsExToolWindow = 0x00000080;
+        internal const uint WmDestroy = 0x0002;
+        internal const uint WmClose = 0x0010;
+
         internal delegate nint WindowProcedure(
             nint windowHandle,
             uint message,
             nint wParam,
             nint lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Point
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Message
+        {
+            public nint WindowHandle;
+            public uint Value;
+            public nint WParam;
+            public nint LParam;
+            public uint Time;
+            public Point Cursor;
+        }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         internal struct WindowClassEx
@@ -331,9 +519,30 @@ public sealed class WindowsShellLifecycleSignalSource : IShellLifecycleSignalSou
             nint wParam,
             nint lParam);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMessageW", SetLastError = true)]
+        internal static extern int GetMessage(
+            out Message message,
+            nint windowHandle,
+            uint filterMinimum,
+            uint filterMaximum);
+
+        [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool DestroyWindow(nint windowHandle);
+        internal static extern bool TranslateMessage(ref Message message);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "DispatchMessageW")]
+        internal static extern nint DispatchMessage(ref Message message);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "PostMessageW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool PostMessage(
+            nint windowHandle,
+            uint message,
+            nint wParam,
+            nint lParam);
+
+        [DllImport("user32.dll")]
+        internal static extern void PostQuitMessage(int exitCode);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterWindowMessageW")]
         internal static extern uint RegisterWindowMessage(string message);

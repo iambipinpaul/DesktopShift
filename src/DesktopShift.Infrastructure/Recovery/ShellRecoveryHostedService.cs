@@ -9,7 +9,9 @@ namespace DesktopShift.Infrastructure.Recovery;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Signals arrive off a window procedure on the UI thread. The platform source
+/// Signals arrive off a window procedure, on whichever thread the platform
+/// source pumps its listener window on rather than on the thread that started
+/// this service. The platform source
 /// normalizes the documented pair of resume broadcasts into one wake signal,
 /// while genuinely repeated shell or display notifications can still overlap.
 /// The handler therefore queues and returns immediately,
@@ -157,9 +159,10 @@ internal sealed class ShellRecoveryHostedService(
     /// Hands one raw notification to the recovery pass without waiting for it.
     /// </summary>
     /// <remarks>
-    /// This runs on the thread that pumps the user's window messages. A pass
-    /// that took a COM call to a shell that has just died could block for
-    /// seconds, so the only correct thing to do here is queue and return.
+    /// This runs on the listener's own message pump. A pass that took a COM
+    /// call to a shell that has just died could block for seconds, and a pump
+    /// blocked that long stops delivering the very broadcasts recovery watches
+    /// for, so the only correct thing to do here is queue and return.
     /// </remarks>
     private void OnSignalRaised(
         object? sender,
