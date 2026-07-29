@@ -116,7 +116,19 @@ public sealed class WindowAssignmentService(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (!currentDesktop.IsSuccess || currentDesktop.Value == Guid.Empty)
+        // A window Windows has not placed on a desktop yet is not a refusal, and
+        // it arrives two ways: the not-tracked code, and a successful query that
+        // carries no identifier. Either way there is no current desktop to
+        // compare the target against, which is a different thing from the answer
+        // being unavailable.
+        bool hasCurrentDesktop =
+            currentDesktop.IsSuccess && currentDesktop.Value != Guid.Empty;
+        bool isUnplacedWindow =
+            !hasCurrentDesktop &&
+            (currentDesktop.IsSuccess ||
+                currentDesktop.Error?.Code ==
+                    "window_placement.window_not_tracked");
+        if (!hasCurrentDesktop && !isUnplacedWindow)
         {
             bool windowNotTracked =
                 IsWindowNotTracked(currentDesktop.Error);
@@ -141,8 +153,15 @@ public sealed class WindowAssignmentService(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        Guid previousDesktopId = currentDesktop.Value;
+        Guid? previousDesktopId =
+            hasCurrentDesktop ? currentDesktop.Value : null;
         WindowMoveOutcome moveOutcome = WindowMoveOutcome.AlreadyCorrect;
+
+        // An unplaced window is moved rather than abandoned. Moving a window
+        // that already sits on the target desktop is a no-op, so being wrong
+        // costs nothing, and if Windows still has not placed the window it
+        // refuses with an HRESULT of its own instead of the window being left
+        // behind until it next takes focus.
         if (previousDesktopId != targetDesktopId)
         {
             DesktopTopologyProviderResult move;

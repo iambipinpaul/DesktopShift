@@ -87,7 +87,7 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
     }
 
     [TestMethod]
-    public async Task GetDesktop_RejectsEmptySuccessfulGuid()
+    public async Task GetDesktop_ReportsAnEmptySuccessfulGuidAsAnUnplacedWindow()
     {
         FakeDesktopManagerApi desktopManager = new()
         {
@@ -103,11 +103,14 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
         DesktopTopologyProviderResult<Guid> result =
             await service.GetWindowDesktopIdAsync(WindowHandle);
 
+        // An S_OK with no identifier says the same thing the not-tracked
+        // HRESULT says, and it is reported the same way. The HRESULT carried is
+        // the one Windows returned, never a synthesized one.
         Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
         Assert.AreEqual(
-            "window_placement.invalid_desktop_result",
+            "window_placement.window_not_tracked",
             result.Error?.Code);
-        Assert.AreEqual(unchecked((int)0x8000FFFF), result.Error?.HResult);
+        Assert.AreEqual(0, result.Error?.HResult);
     }
 
     [TestMethod]

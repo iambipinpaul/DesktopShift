@@ -13,11 +13,9 @@ public sealed class WindowAssignmentServiceTests
     private static readonly Guid OtherDesktopId = Guid.NewGuid();
 
     [TestMethod]
-    [DataRow("window_placement.window_not_tracked")]
-    [DataRow("window_placement.stale_window_handle")]
-    public async Task TransientPlacementLookupFailure_IsSkippedWithDiagnostics(
-        string errorCode)
+    public async Task StalePlacementLookup_IsSkippedWithoutAttemptingAMove()
     {
+        const string errorCode = "window_placement.stale_window_handle";
         const int hResult = unchecked((int)0x8002802B);
         const int nativeErrorCode = 1400;
         DesktopTopologyProviderError placementError = new(
@@ -59,6 +57,98 @@ public sealed class WindowAssignmentServiceTests
         Assert.AreEqual(0, placement.MoveCallCount);
         Assert.HasCount(1, activities.Snapshot);
         Assert.AreSame(result, activities.Snapshot[0]);
+    }
+
+    /// <summary>
+    /// A window Windows has not placed on a desktop yet is moved, not abandoned.
+    /// A window shown before the Shell registers it reached this path and was
+    /// left where it opened until it next took focus.
+    /// </summary>
+    [TestMethod]
+    public async Task WindowWindowsHasNotPlacedYet_IsMovedRatherThanAbandoned()
+    {
+        StubPlacementService placement = new(
+            DesktopTopologyProviderResult<Guid>.Failed(
+                "window_placement.window_not_tracked",
+                "Windows was not tracking this window on a virtual desktop.",
+                hResult: 0));
+        BoundedWindowAssignmentActivityStore activities = new();
+        WindowAssignmentService service = new(
+            placement,
+            new BoundReconciliationService(),
+            activities,
+            TimeProvider.System);
+
+        WindowAssignmentActivity result = await service.AssignAsync(
+            CreateRequest((nint)126));
+
+        Assert.AreEqual(1, placement.MoveCallCount);
+        Assert.AreEqual(WindowAssignmentOutcome.Succeeded, result.Outcome);
+        Assert.AreEqual(WindowMoveOutcome.Succeeded, result.MoveOutcome);
+        Assert.AreEqual(TargetDesktopId, result.TargetDesktopId);
+        Assert.IsNull(result.PreviousDesktopId);
+        Assert.IsNull(result.Error);
+    }
+
+    /// <summary>
+    /// The same unplaced window, reported as a query that succeeded while
+    /// carrying no identifier. Both shapes mean the window has no desktop yet.
+    /// </summary>
+    [TestMethod]
+    public async Task QuerySucceedingWithNoDesktopId_IsMovedRatherThanAbandoned()
+    {
+        StubPlacementService placement = new(
+            DesktopTopologyProviderResult<Guid>.Succeeded(Guid.Empty));
+        BoundedWindowAssignmentActivityStore activities = new();
+        WindowAssignmentService service = new(
+            placement,
+            new BoundReconciliationService(),
+            activities,
+            TimeProvider.System);
+
+        WindowAssignmentActivity result = await service.AssignAsync(
+            CreateRequest((nint)127));
+
+        Assert.AreEqual(1, placement.MoveCallCount);
+        Assert.AreEqual(WindowAssignmentOutcome.Succeeded, result.Outcome);
+        Assert.AreEqual(WindowMoveOutcome.Succeeded, result.MoveOutcome);
+        Assert.IsNull(result.PreviousDesktopId);
+    }
+
+    /// <summary>
+    /// Attempting the move on an unplaced window does not invent a success. A
+    /// window Windows still will not place is reported with the refusal Windows
+    /// gave, not with a code DesktopShift synthesized before trying.
+    /// </summary>
+    [TestMethod]
+    public async Task UnplacedWindowWhoseMoveIsRefused_ReportsTheRefusal()
+    {
+        const int hResult = unchecked((int)0x8002802B);
+        DesktopTopologyProviderError moveError = new(
+            "window_placement.move_failed",
+            "Windows refused to move the window to the requested virtual desktop.",
+            hResult);
+        StubPlacementService placement = new(
+            DesktopTopologyProviderResult<Guid>.Succeeded(Guid.Empty),
+            new DesktopTopologyProviderResult(
+                DesktopTopologyResultOutcome.Failed,
+                moveError));
+        BoundedWindowAssignmentActivityStore activities = new();
+        WindowAssignmentService service = new(
+            placement,
+            new BoundReconciliationService(),
+            activities,
+            TimeProvider.System);
+
+        WindowAssignmentActivity result = await service.AssignAsync(
+            CreateRequest((nint)128));
+
+        Assert.AreEqual(1, placement.MoveCallCount);
+        Assert.AreEqual(WindowAssignmentOutcome.Failed, result.Outcome);
+        Assert.AreEqual(WindowMoveOutcome.Failed, result.MoveOutcome);
+        Assert.AreEqual(moveError.Code, result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+        Assert.IsNull(result.PreviousDesktopId);
     }
 
     [TestMethod]
@@ -152,6 +242,17 @@ public sealed class WindowAssignmentServiceTests
         Assert.HasCount(1, activities.Snapshot);
         Assert.AreSame(result, activities.Snapshot[0]);
     }
+
+    private static WindowAssignmentRequest CreateRequest(nint windowHandle) =>
+        new(
+            WindowEventKind.Shown,
+            windowHandle,
+            CreateRule(),
+            new WindowSafeIdentity(
+                "Code.exe",
+                PackageFamilyName: null,
+                AppUserModelId: null,
+                "Chrome_WidgetWin_1"));
 
     private static WindowObservationRule CreateRule() =>
         new(

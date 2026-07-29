@@ -15,6 +15,8 @@ public sealed class WindowsWindowDesktopPlacementService :
     private const int AccessDeniedHResult = unchecked((int)0x80070005);
     private const int WindowNotTrackedHResult = unchecked((int)0x8002802B);
     private const string ManagerActivationStage = "ManagerActivation";
+    private const string WindowNotTrackedMessage =
+        "Windows was not tracking this window on a virtual desktop.";
 
     private readonly IWindowHandleApi windowApi;
     private readonly IDocumentedVirtualDesktopManagerApi desktopManager;
@@ -69,11 +71,17 @@ public sealed class WindowsWindowDesktopPlacementService :
 
         if (result.DesktopId == Guid.Empty)
         {
+            // Windows says "I have not placed this window on a desktop yet" two
+            // ways: the documented not-tracked HRESULT, and an S_OK carrying an
+            // empty identifier. A window shown before the Shell has registered
+            // it takes the second path. Both report the same code, so a caller
+            // cannot read one of them as a refusal, and Activity never shows an
+            // HRESULT that no Windows call returned.
             return ValueTask.FromResult(
                 DesktopTopologyProviderResult<Guid>.Failed(
-                    "window_placement.invalid_desktop_result",
-                    "Windows returned an empty virtual desktop identifier.",
-                    UnexpectedResultHResult));
+                    "window_placement.window_not_tracked",
+                    WindowNotTrackedMessage,
+                    result.HResult));
         }
 
         return ValueTask.FromResult(
@@ -319,7 +327,7 @@ public sealed class WindowsWindowDesktopPlacementService :
         {
             return DesktopTopologyProviderResult<Guid>.Failed(
                 "window_placement.window_not_tracked",
-                "Windows was not tracking this window on a virtual desktop.",
+                WindowNotTrackedMessage,
                 result.HResult);
         }
 
