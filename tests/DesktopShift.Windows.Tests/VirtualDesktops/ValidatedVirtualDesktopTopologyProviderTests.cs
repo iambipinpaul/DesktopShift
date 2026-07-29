@@ -510,6 +510,248 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
                     "windows.shell.25h2.26200"));
     }
 
+    /// <summary>
+    /// A shell that went away mid-call. This is the exact code Windows returns
+    /// once Explorer has been killed and the COM proxies the adapter holds have
+    /// become stale.
+    /// </summary>
+    private static NativeBridgeError DeadShellError() => new(
+        "native.enumeration",
+        "Enumeration",
+        "The virtual-desktop count probe failed.",
+        unchecked((int)0x800706BA));
+
+    [TestMethod]
+    public async Task DeadShellDuringEnumeration_RebuildsTheAdapterInsteadOfDemoting()
+    {
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        FakeNativeBridge restarted = new(CreateSnapshot());
+        Queue<FakeNativeBridge> bridges = new([dead, restarted]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Dequeue())));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>> result =
+            await provider.EnumerateDesktopsAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.HasCount(2, result.Value!);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsNull(provider.LastFallback);
+        Assert.AreEqual(1, provider.ReconnectCount);
+        Assert.IsTrue(dead.IsDisposed);
+        Assert.IsFalse(restarted.IsDisposed);
+
+        // The rebuild proves what activation proves, and does it once.
+        Assert.AreEqual(1, restarted.ValidationCount);
+    }
+
+    [TestMethod]
+    public async Task ProviderRebuild_AnnouncesThatHeldDesktopIdsMustBeLookedUpAgain()
+    {
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        Queue<FakeNativeBridge> bridges =
+            new([dead, new FakeNativeBridge(CreateSnapshot())]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Dequeue())));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+        List<string> reasons = [];
+        provider.TopologyChanged += (_, args) => reasons.Add(args.Reason);
+
+        _ = await provider.EnumerateDesktopsAsync();
+
+        Assert.Contains("ProviderReconnected", reasons);
+    }
+
+    [TestMethod]
+    public async Task RefusalThatIsNotATransportFailure_StillDemotesToLimitedMode()
+    {
+        NativeBridgeError refusal = new(
+            "native.enumeration",
+            "Enumeration",
+            "The shell refused the inventory probe.",
+            unchecked((int)0x80004005));
+        int activations = 0;
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+            {
+                activations++;
+                return NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    new FakeNativeBridge(CreateSnapshot())
+                    {
+                        SnapshotResult =
+                            NativeBridgeResult<NativeDesktopSnapshot>.Failed(refusal),
+                    });
+            }));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>> result =
+            await provider.EnumerateDesktopsAsync();
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
+        Assert.IsNotNull(provider.LastFallback);
+        Assert.AreEqual(0, provider.ReconnectCount);
+        Assert.AreEqual(1, activations);
+    }
+
+    [TestMethod]
+    public async Task ShellThatStaysDead_DemotesAfterOneRebuildRatherThanRetrying()
+    {
+        int activations = 0;
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+            {
+                activations++;
+                return NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    new FakeNativeBridge(CreateSnapshot())
+                    {
+                        SnapshotResult = NativeBridgeResult<NativeDesktopSnapshot>
+                            .Failed(DeadShellError()),
+                    });
+            }));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>> result =
+            await provider.EnumerateDesktopsAsync();
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
+        Assert.IsNotNull(provider.LastFallback);
+        Assert.AreEqual(unchecked((int)0x800706BA), provider.LastFallback.Error.HResult);
+        Assert.AreEqual(1, provider.ReconnectCount);
+        Assert.AreEqual(2, activations);
+    }
+
+    [TestMethod]
+    public async Task RebuildThatCannotValidate_LeavesTheProviderInLimitedMode()
+    {
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        FakeNativeBridge unusable = new(CreateSnapshot())
+        {
+            ValidationResult = NativeBridgeResult.Failed(
+                new NativeBridgeError(
+                    "native.behavior_validation",
+                    "BehaviorValidation",
+                    "The restarted shell did not satisfy the contract.",
+                    unchecked((int)0x80040201))),
+        };
+        Queue<FakeNativeBridge> bridges = new([dead, unusable]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Dequeue())));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>> result =
+            await provider.EnumerateDesktopsAsync();
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
+        Assert.AreEqual(0, provider.ReconnectCount);
+        Assert.IsTrue(unusable.IsDisposed);
+    }
+
+    /// <summary>
+    /// A rebuild that just succeeded must not be attempted again on the very
+    /// next failure. Foreground bursts produce many calls per second, and one
+    /// full COM activation each would be its own outage.
+    /// </summary>
+    [TestMethod]
+    public async Task SecondFailureInsideTheCooldown_DoesNotRebuildAgain()
+    {
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        FakeNativeBridge alsoDead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        int activations = 0;
+        Queue<FakeNativeBridge> bridges = new([dead, alsoDead]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+            {
+                activations++;
+                return NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Count > 0
+                        ? bridges.Dequeue()
+                        : new FakeNativeBridge(CreateSnapshot()));
+            }));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        _ = await provider.EnumerateDesktopsAsync();
+        _ = await provider.EnumerateDesktopsAsync();
+        _ = await provider.EnumerateDesktopsAsync();
+
+        // One activation for the compatibility test, one for the single
+        // permitted rebuild, and none for the calls that followed it.
+        Assert.AreEqual(2, activations);
+        Assert.AreEqual(1, provider.ReconnectCount);
+    }
+
+    [TestMethod]
+    public async Task DeadShellDuringSwitch_RebuildsAndCompletesTheSwitch()
+    {
+        Guid target = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SwitchResult = NativeBridgeResult.Failed(DeadShellError()),
+        };
+        FakeNativeBridge restarted = new(CreateSnapshot());
+        Queue<FakeNativeBridge> bridges = new([dead, restarted]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Dequeue())));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult result =
+            await provider.SwitchDesktopAsync(target);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(target, restarted.LastSwitchedDesktopId);
+        Assert.AreEqual(1, provider.ReconnectCount);
+    }
+
+    [TestMethod]
+    public async Task TransportFailureWithoutAnEarlierFullMode_NeverRebuilds()
+    {
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Failed(
+                    DeadShellError())));
+
+        _ = await provider.TestCompatibilityAsync(Build26200);
+        DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>> result =
+            await provider.EnumerateDesktopsAsync();
+
+        // Limited Mode answers from the documented provider, and no adapter this
+        // provider never validated may be activated behind the caller's back.
+        Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
+        Assert.AreEqual(0, provider.ReconnectCount);
+        Assert.AreEqual(DesktopTopologyResultOutcome.Unsupported, result.Outcome);
+    }
+
     private static ValidatedVirtualDesktopTopologyProvider CreateProvider(
         INativeVirtualDesktopBridgeFactory bridgeFactory) =>
         new(new LimitedVirtualDesktopTopologyService(), bridgeFactory);
@@ -591,6 +833,19 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         public int ProbeCount { get; private set; }
 
+        public int SnapshotCount { get; private set; }
+
+        /// <summary>
+        /// What the inventory read answers, or null to answer with the snapshot
+        /// this bridge was built around.
+        /// </summary>
+        /// <remarks>
+        /// Defaults to null so every existing test keeps describing a healthy
+        /// adapter. A test that wants a dead shell sets a transport failure here
+        /// and asserts on what the provider does about it.
+        /// </remarks>
+        public NativeBridgeResult<NativeDesktopSnapshot>? SnapshotResult { get; init; }
+
         public Guid LastRenamedDesktopId { get; private set; }
 
         public string? LastRequestedName { get; private set; }
@@ -602,8 +857,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             return ValidationResult;
         }
 
-        public NativeBridgeResult<NativeDesktopSnapshot> ReadSnapshot() =>
-            NativeBridgeResult<NativeDesktopSnapshot>.Succeeded(snapshot);
+        public NativeBridgeResult<NativeDesktopSnapshot> ReadSnapshot()
+        {
+            SnapshotCount++;
+            return SnapshotResult ??
+                NativeBridgeResult<NativeDesktopSnapshot>.Succeeded(snapshot);
+        }
 
         public NativeBridgeResult<Guid> CreateDesktop()
         {

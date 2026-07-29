@@ -33,6 +33,18 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     private static readonly VirtualDesktopCapabilities FullCapabilitiesWithNaming =
         FullManagedDesktopCapabilities with { CanRenameDesktop = true };
 
+    /// <summary>
+    /// The shortest gap between two rebuild attempts.
+    /// </summary>
+    /// <remarks>
+    /// A shell that is genuinely gone fails every call, and every one of those
+    /// failures asks to rebuild. Without a floor, a foreground burst would turn
+    /// one dead shell into an activation attempt per window event. This bounds
+    /// the cost of being wrong to one attempt per interval while still letting
+    /// the first failure after a restart rebuild immediately.
+    /// </remarks>
+    private const long ReconnectCooldownMilliseconds = 5_000;
+
     private readonly object syncRoot = new();
     private readonly LimitedVirtualDesktopTopologyService limitedProvider;
     private readonly INativeVirtualDesktopBridgeFactory bridgeFactory;
@@ -40,6 +52,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     private DesktopTopologyProviderIdentity identity;
     private VirtualDesktopCapabilities capabilities;
     private DesktopTopologyProviderFallback? lastFallback;
+    private WindowsBuildInfo? validatedBuild;
+    private long? lastReconnectTicks;
+    private int reconnectCount;
     private bool disposed;
 
     public ValidatedVirtualDesktopTopologyProvider()
@@ -90,6 +105,26 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             lock (syncRoot)
             {
                 return lastFallback;
+            }
+        }
+    }
+
+    /// <summary>
+    /// How many times a dead shell adapter was rebuilt in place rather than
+    /// demoted to Limited Mode.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so a test can prove that a transport failure was answered by one
+    /// rebuild rather than by a silent retry loop, and so the cooldown is
+    /// observable rather than merely asserted about.
+    /// </remarks>
+    internal int ReconnectCount
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return reconnectCount;
             }
         }
     }
@@ -219,6 +254,12 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
                 ? FullCapabilitiesWithNaming
                 : FullManagedDesktopCapabilities;
             lastFallback = null;
+
+            // Remembered so a later rebuild targets the family this machine
+            // actually validated, and the cooldown is cleared so the first
+            // failure after a fresh activation can rebuild without waiting.
+            validatedBuild = build;
+            lastReconnectTicks = null;
         }
 
         DesktopTopologyProviderResult notificationResult =
@@ -247,7 +288,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         try
         {
-            NativeBridgeResult<NativeDesktopSnapshot> result = bridge.ReadSnapshot();
+            NativeBridgeResult<NativeDesktopSnapshot> result = InvokeWithReconnect(
+                bridge,
+                static live => live.ReadSnapshot());
             if (!result.IsSuccess)
             {
                 DesktopTopologyProviderError error = ToProviderError(
@@ -304,7 +347,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         try
         {
-            NativeBridgeResult<NativeDesktopSnapshot> result = bridge.ReadSnapshot();
+            NativeBridgeResult<NativeDesktopSnapshot> result = InvokeWithReconnect(
+                bridge,
+                static live => live.ReadSnapshot());
             if (result.IsSuccess)
             {
                 return ValueTask.FromResult(
@@ -350,7 +395,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         try
         {
-            NativeBridgeResult<Guid> result = bridge.CreateDesktop();
+            NativeBridgeResult<Guid> result = InvokeWithReconnect(
+                bridge,
+                static live => live.CreateDesktop());
             if (result.IsSuccess)
             {
                 return ValueTask.FromResult(
@@ -455,7 +502,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         try
         {
-            NativeBridgeResult result = bridge.SwitchDesktop(desktopId);
+            NativeBridgeResult result = InvokeWithReconnect(
+                bridge,
+                live => live.SwitchDesktop(desktopId));
             if (result.IsSuccess)
             {
                 return ValueTask.FromResult(
@@ -497,6 +546,15 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         {
             NativeBridgeResult result = bridge.StartNotifications(OnNativeTopologyChanged);
             if (result.IsSuccess)
+            {
+                return ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
+            }
+
+            // Registration is the one operation a rebuild performs itself, so
+            // this site reconnects without retrying: a rebuild that returned an
+            // adapter has already registered on it, and asking again would
+            // register twice against the same shell.
+            if (IsShellTransportFailure(result.Error) && TryReconnect() is not null)
             {
                 return ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
             }
@@ -628,6 +686,186 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             ThrowIfDisposed();
             return activeBridge;
         }
+    }
+
+    /// <summary>
+    /// Whether a failure means "the shell process behind this adapter is gone"
+    /// rather than "this shell cannot do virtual desktops".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The distinction is the whole reason this type has two answers to a failed
+    /// native call. Limited Mode is the honest response to a Windows build whose
+    /// shell will never satisfy the contract — it is a property of the machine,
+    /// so it is worth latching. A dead COM proxy is the opposite: the machine is
+    /// fine and the object is stale, which happens every single time Explorer
+    /// restarts or is killed. Latching Limited Mode on one of those meant a
+    /// transient shell hiccup silently disabled assignment until the user
+    /// restarted the app, with the only visible symptom being every later target
+    /// reported as unresolved.
+    /// </para>
+    /// <para>
+    /// These are the RPC and COM codes for a server that went away mid-call or
+    /// between calls. Anything outside this set is treated as a real refusal and
+    /// still demotes, so widening the set is the only way to make a genuine
+    /// incompatibility look recoverable.
+    /// </para>
+    /// </remarks>
+    private static bool IsShellTransportFailure(NativeBridgeError? error) =>
+        error is not null &&
+        (uint)error.HResult is
+            0x800706BA or // RPC_S_SERVER_UNAVAILABLE
+            0x800706BE or // RPC_S_CALL_FAILED
+            0x800706BF or // RPC_S_CALL_FAILED_DNE
+            0x80010007 or // RPC_E_SERVER_DIED
+            0x80010012 or // RPC_E_SERVER_DIED_DNE
+            0x80010108 or // RPC_E_DISCONNECTED
+            0x800401FD;   // CO_E_OBJNOTCONNECTED
+
+    /// <summary>
+    /// Runs one native operation and, when it fails the way a departed shell
+    /// fails, rebuilds the adapter and runs it exactly once more.
+    /// </summary>
+    /// <remarks>
+    /// Once more, not until it works. A second transport failure against a
+    /// freshly validated adapter is no longer a stale proxy, so it is reported
+    /// and demotes like any other failure.
+    /// </remarks>
+    private NativeBridgeResult<T> InvokeWithReconnect<T>(
+        INativeVirtualDesktopBridge bridge,
+        Func<INativeVirtualDesktopBridge, NativeBridgeResult<T>> operation)
+    {
+        NativeBridgeResult<T> result = operation(bridge);
+        if (result.IsSuccess || !IsShellTransportFailure(result.Error))
+        {
+            return result;
+        }
+
+        INativeVirtualDesktopBridge? reconnected = TryReconnect();
+        return reconnected is null ? result : operation(reconnected);
+    }
+
+    /// <inheritdoc cref="InvokeWithReconnect{T}"/>
+    private NativeBridgeResult InvokeWithReconnect(
+        INativeVirtualDesktopBridge bridge,
+        Func<INativeVirtualDesktopBridge, NativeBridgeResult> operation)
+    {
+        NativeBridgeResult result = operation(bridge);
+        if (result.IsSuccess || !IsShellTransportFailure(result.Error))
+        {
+            return result;
+        }
+
+        INativeVirtualDesktopBridge? reconnected = TryReconnect();
+        return reconnected is null ? result : operation(reconnected);
+    }
+
+    /// <summary>
+    /// Rebuilds the native adapter against the build this provider already
+    /// validated, and returns the live adapter, or null if Full Mode could not
+    /// be re-established.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This proves exactly what activation proves, in the same order: a bridge
+    /// that validates, and notifications that register. A rebuild that skipped
+    /// either would be a route into Full Mode that never established Full Mode.
+    /// Naming is asked for separately and a refusal costs naming alone, which is
+    /// the same bargain activation makes.
+    /// </para>
+    /// <para>
+    /// Activation happens outside the lock because it is COM work against a
+    /// shell that may still be starting up, and the swap happens inside it.
+    /// Returning the new adapter rather than a bool is what lets the caller
+    /// retry without a second lock acquisition and without racing a disposal
+    /// between the two.
+    /// </para>
+    /// </remarks>
+    private INativeVirtualDesktopBridge? TryReconnect()
+    {
+        int build;
+        lock (syncRoot)
+        {
+            // Never in Full Mode means there is nothing to restore: an adapter
+            // this provider never validated is not one it may activate here.
+            if (disposed || validatedBuild is null)
+            {
+                return null;
+            }
+
+            if (lastReconnectTicks is long previous &&
+                Environment.TickCount64 - previous < ReconnectCooldownMilliseconds)
+            {
+                return null;
+            }
+
+            lastReconnectTicks = Environment.TickCount64;
+            build = validatedBuild.Build;
+        }
+
+        NativeBridgeResult<INativeVirtualDesktopBridge> activation;
+        try
+        {
+            activation = bridgeFactory.TryCreate(build);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        if (!activation.IsSuccess)
+        {
+            return null;
+        }
+
+        INativeVirtualDesktopBridge bridge = activation.Value!;
+        bool canRename;
+        try
+        {
+            if (!bridge.Validate().IsSuccess ||
+                !bridge.StartNotifications(OnNativeTopologyChanged).IsSuccess)
+            {
+                bridge.Dispose();
+                return null;
+            }
+
+            canRename = bridge.ProbeDesktopLookup().IsSuccess;
+        }
+        catch (Exception)
+        {
+            bridge.Dispose();
+            return null;
+        }
+
+        lock (syncRoot)
+        {
+            if (disposed)
+            {
+                bridge.Dispose();
+                return null;
+            }
+
+            activeBridge?.Dispose();
+            activeBridge = bridge;
+            identity = CreateFullIdentity(build);
+            capabilities = canRename
+                ? FullCapabilitiesWithNaming
+                : FullManagedDesktopCapabilities;
+
+            // The fallback record is cleared because it is no longer true. A
+            // stale one would keep reporting Limited Mode in compatibility
+            // diagnostics for a provider that is demonstrably running Full.
+            lastFallback = null;
+            reconnectCount++;
+        }
+
+        // Raised outside the lock, and raised at all because every desktop id
+        // held by a caller was handed out by the adapter that just died. The
+        // listeners that reconcile bindings need to know to look again.
+        TopologyChanged?.Invoke(
+            this,
+            new DesktopTopologyChangedEventArgs("ProviderReconnected"));
+        return bridge;
     }
 
     private void ActivateFallback(
