@@ -144,6 +144,31 @@ public interface IDesktopTopologyProvider
         Guid desktopId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Names an existing runtime desktop so Task View shows what DesktopShift
+    /// calls it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default refuses. Naming needs shell manager slots past the ones the
+    /// rest of this interface uses, and a provider that has not proved that
+    /// layout must not be assumed capable of it — so a provider opts in by
+    /// overriding, never by inheriting.
+    /// </para>
+    /// <para>
+    /// There is deliberately no counterpart for deleting or reordering a
+    /// desktop, and there is not going to be one.
+    /// </para>
+    /// </remarks>
+    ValueTask<DesktopTopologyProviderResult> RenameDesktopAsync(
+        Guid desktopId,
+        string displayName,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            DesktopTopologyProviderResult.Unsupported(
+                "desktop_topology.rename_unsupported",
+                "This provider cannot name virtual desktops."));
+
     ValueTask<DesktopTopologyProviderResult> StartTopologyNotificationsAsync(
         CancellationToken cancellationToken = default);
 }

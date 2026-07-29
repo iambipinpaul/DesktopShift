@@ -74,6 +74,50 @@ namespace DesktopShift::NativeBridge::ShellAbi
         virtual HRESULT STDMETHODCALLTYPE SwitchDesktopAndMoveForegroundView(
             IVirtualDesktop24H2* desktop) = 0;
         virtual HRESULT STDMETHODCALLTYPE CreateDesktop(IVirtualDesktop24H2** desktop) = 0;
+
+        // Everything below exists for one reason: SetDesktopName is the
+        // fourteenth slot, and a vtable cannot be entered halfway. Naming a
+        // managed destination in Task View needs slot 14, so slots 10 to 13
+        // have to be declared to place it, whether DesktopShift wants them or
+        // not.
+        //
+        // That is a real cost and it is stated rather than hidden. This
+        // declaration now claims knowledge of four slots further into private
+        // territory than it used to, and slot 11 is RemoveDesktop. If a build
+        // family shifts these, a SetDesktopName call lands on a neighbour, and
+        // one of those neighbours deletes a desktop.
+        //
+        // Three things hold that risk down, and all three are required:
+        //
+        //   1. The AdapterProfile table in DesktopShiftNativeBridge.cpp gates
+        //      naming per build. An unrecognized build never reaches any slot
+        //      declared here, so the first call is never a blind one.
+        //   2. Slots 10, 11 and 13 are declared with deliberately unusable
+        //      signatures and DoNotCall names. They occupy the right offsets
+        //      and nothing more; calling one does not compile by accident.
+        //   3. FindDesktop at slot 12 is read-only and is called first, as a
+        //      behavioural probe. If it does not return the desktop whose ID it
+        //      was handed, the layout has moved and naming stays switched off.
+        //
+        // Removal and reordering are still never exported. See
+        // DesktopTopologyNotificationContractTests, which asserts that.
+        virtual HRESULT STDMETHODCALLTYPE Reserved_MoveDesktop_DoNotCall(
+            void* desktop,
+            int index) = 0;
+        virtual HRESULT STDMETHODCALLTYPE Reserved_RemoveDesktop_DoNotCall(
+            void* desktop,
+            void* fallback) = 0;
+        virtual HRESULT STDMETHODCALLTYPE FindDesktop(
+            const GUID* desktopId,
+            IVirtualDesktop24H2** desktop) = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+            Reserved_GetDesktopSwitchIncludeExcludeViews_DoNotCall(
+                void* desktop,
+                void** included,
+                void** excluded) = 0;
+        virtual HRESULT STDMETHODCALLTYPE SetDesktopName(
+            IVirtualDesktop24H2* desktop,
+            HSTRING name) = 0;
     };
 
     MIDL_INTERFACE("B9E5E94D-233E-49AB-AF5C-2B4541C3AADE")

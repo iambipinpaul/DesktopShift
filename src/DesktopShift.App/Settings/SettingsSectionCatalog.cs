@@ -3,12 +3,13 @@ using System.Collections.Immutable;
 namespace DesktopShift.App.Settings;
 
 /// <summary>
-/// The seven areas the Settings page covers.
+/// The eight areas the Settings page covers.
 /// </summary>
 public enum SettingsSection
 {
     Startup,
     Assignment,
+    Desktops,
     Compatibility,
     Notifications,
     Appearance,
@@ -34,14 +35,15 @@ public sealed record SettingsSectionDescriptor(
 /// <para>
 /// The page reads its headings from here rather than carrying them in XAML. A
 /// heading that lives only in markup cannot be tested, and "the Settings page
-/// covers these seven areas" is exactly the kind of claim that quietly stops
+/// covers these eight areas" is exactly the kind of claim that quietly stops
 /// being true when a card is moved or removed.
 /// </para>
 /// <para>
 /// The order is the order a user meets the application in: what happens at
-/// sign-in, then what it does while running, then what the machine allows, then
-/// how loudly it speaks, then how it looks, then how to diagnose it, and finally
-/// the optional shortcuts.
+/// sign-in, then what it does to windows while running, then what it does to
+/// the desktops themselves, then what the machine allows, then how loudly it
+/// speaks, then how it looks, then how to diagnose it, and finally the optional
+/// shortcuts.
 /// </para>
 /// </remarks>
 public static class SettingsSectionCatalog
@@ -59,6 +61,11 @@ public static class SettingsSectionCatalog
             "assignment",
             "Assignment",
             "Automatic assignment reacts to window events. Pausing stops that; it never stops an assignment you ask for."),
+        new(
+            SettingsSection.Desktops,
+            "desktops",
+            "Desktops",
+            "Task View shows its own names. DesktopShift can keep those names matching your Managed Desktops, so Win+Tab reads Code and Web rather than Desktop 2 and Desktop 3."),
         new(
             SettingsSection.Compatibility,
             "compatibility",

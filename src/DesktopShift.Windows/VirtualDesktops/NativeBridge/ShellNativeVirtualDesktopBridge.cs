@@ -237,6 +237,46 @@ internal sealed class ShellNativeVirtualDesktopBridge :
         }
     }
 
+    public NativeBridgeResult ProbeDesktopLookup()
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_ProbeDesktopLookup(
+                adapter,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.layout_probe_failed"));
+        }
+    }
+
+    public NativeBridgeResult SetDesktopName(Guid desktopId, string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_SetDesktopName(
+                adapter,
+                in desktopId,
+                name,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.desktop_rename_failed"));
+        }
+    }
+
     public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)
     {
         ArgumentNullException.ThrowIfNull(onTopologyChanged);

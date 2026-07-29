@@ -118,6 +118,11 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IManagedDesktopRecreationGate>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 ManagedDesktopRecreationCooldown>());
+        services.TryAddSingleton(
+            static _ => ManagedDesktopNamingOptions.Default);
+        services.TryAddSingleton<
+            IManagedDesktopNamingService,
+            ManagedDesktopNamingService>();
         services.TryAddSingleton<ManagedDesktopReconciliationService>();
         services.TryAddSingleton<IManagedDesktopReconciliationService>(
             static serviceProvider => serviceProvider.GetRequiredService<

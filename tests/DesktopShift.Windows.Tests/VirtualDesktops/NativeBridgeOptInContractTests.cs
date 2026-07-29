@@ -39,6 +39,17 @@ public sealed class NativeBridgeOptInContractTests
                     out entryPoint));
             Assert.AreNotEqual(0, entryPoint);
 
+            // Naming is the one mutation boundary that targets a desktop rather
+            // than a window. It is asserted present here, alongside the others,
+            // rather than left to be discovered — the point of this file is that
+            // every way the bridge can change the machine is written down.
+            Assert.IsTrue(
+                NativeLibrary.TryGetExport(
+                    library,
+                    "DesktopShiftNative_SetDesktopName",
+                    out entryPoint));
+            Assert.AreNotEqual(0, entryPoint);
+
             IReadOnlyDictionary<string, uint> stages = Enum
                 .GetValues<NativeMethods.NativeStage>()
                 .ToDictionary(
@@ -47,6 +58,8 @@ public sealed class NativeBridgeOptInContractTests
                     StringComparer.Ordinal);
             Assert.AreEqual(12U, stages["ApplicationViewActivation"]);
             Assert.AreEqual(13U, stages["WindowMove"]);
+            Assert.AreEqual(14U, stages["LayoutProbe"]);
+            Assert.AreEqual(15U, stages["DesktopRename"]);
         }
         finally
         {

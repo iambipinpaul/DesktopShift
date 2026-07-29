@@ -27,6 +27,8 @@ extern "C"
         DesktopShiftNativeStageDesktopSwitch = 11,
         DesktopShiftNativeStageApplicationViewActivation = 12,
         DesktopShiftNativeStageWindowMove = 13,
+        DesktopShiftNativeStageLayoutProbe = 14,
+        DesktopShiftNativeStageDesktopRename = 15,
     };
 
     enum DesktopShiftNativeTopologyReason : uint32_t
@@ -101,6 +103,24 @@ extern "C"
         void* adapter,
         intptr_t windowHandle,
         const GUID* desktopId,
+        DesktopShiftNativeError* error) noexcept;
+
+    // Proves, without changing anything, that this build lays the manager
+    // vtable out where DesktopShift believes it does. Resolves a desktop the
+    // caller already enumerated through FindDesktop and checks the identity
+    // that comes back. A build whose layout has shifted fails here instead of
+    // discovering it during a rename.
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_ProbeDesktopLookup(
+        void* adapter,
+        DesktopShiftNativeError* error) noexcept;
+
+    // Naming is the only mutation here that targets a desktop rather than a
+    // window. There is deliberately no counterpart for removing or reordering
+    // one; see DesktopTopologyNotificationContractTests.
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_SetDesktopName(
+        void* adapter,
+        const GUID* desktopId,
+        const wchar_t* name,
         DesktopShiftNativeError* error) noexcept;
 
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_StartNotifications(

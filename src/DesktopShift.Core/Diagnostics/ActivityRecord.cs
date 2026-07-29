@@ -31,9 +31,10 @@ public enum ActivityEventSource
     Assignment,
 
     /// <summary>
-    /// A decision taken because the Windows virtual-desktop topology changed:
-    /// the semantic reconciliation itself, a recreation that was suppressed, a
-    /// desktop that only moved position, and whether a window pass followed.
+    /// A decision taken about the desktops themselves rather than about a
+    /// window: the semantic reconciliation, a recreation that was suppressed, a
+    /// desktop that only moved position, whether a window pass followed, and
+    /// whether a managed destination's Windows name was brought into line.
     /// </summary>
     /// <remarks>
     /// These events are not about one window, so they carry no window identity.
@@ -359,6 +360,112 @@ public static class ActivityRecordFactory
 
         return records.ToImmutable();
     }
+
+    /// <summary>
+    /// Projects the naming decisions a pass took, and only the ones worth
+    /// reading.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Desktops that already carried the right name produce nothing. That is the
+    /// steady state and it recurs on every topology notification, so journalling
+    /// it would bury the events that matter under a constant hum.
+    /// </para>
+    /// <para>
+    /// A pass that could not name anything — naming switched off, or a build
+    /// that never proved the layout — produces a single event rather than one
+    /// per destination. The reason is the same for all of them, and repeating it
+    /// four times says nothing extra.
+    /// </para>
+    /// </remarks>
+    /// <param name="pass">The completed naming pass to project.</param>
+    /// <param name="sessionId">The application run the events belong to.</param>
+    /// <returns>The events worth recording, in the order they were decided.</returns>
+    public static ImmutableArray<ActivityRecord> FromNaming(
+        ManagedDesktopNamingPass pass,
+        Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(pass);
+
+        ImmutableArray<ActivityRecord>.Builder records =
+            ImmutableArray.CreateBuilder<ActivityRecord>();
+
+        if (pass.Results.Any(static result =>
+                result.Outcome == ManagedDesktopNamingOutcome.Unavailable))
+        {
+            ManagedDesktopNamingResult first = pass.Results[0];
+            records.Add(
+                CreateNamingRecord(
+                    pass,
+                    sessionId,
+                    ActivityResult.Skipped,
+                    $"naming.{ToCode(ManagedDesktopNamingOutcome.Unavailable)}",
+                    first.Explanation,
+                    targetDesktopKey: null));
+            return records.ToImmutable();
+        }
+
+        foreach (ManagedDesktopNamingResult result in pass.Results)
+        {
+            if (result.Outcome == ManagedDesktopNamingOutcome.AlreadyNamed)
+            {
+                continue;
+            }
+
+            records.Add(
+                CreateNamingRecord(
+                    pass,
+                    sessionId,
+                    result.Outcome switch
+                    {
+                        ManagedDesktopNamingOutcome.Applied =>
+                            ActivityResult.Succeeded,
+                        ManagedDesktopNamingOutcome.Failed or
+                        ManagedDesktopNamingOutcome.NotStored =>
+                            ActivityResult.Failed,
+                        _ => ActivityResult.Skipped,
+                    },
+                    $"naming.{ToCode(result.Outcome)}",
+                    result.Explanation,
+                    result.SemanticKey,
+                    result.Outcome is
+                        ManagedDesktopNamingOutcome.Failed or
+                        ManagedDesktopNamingOutcome.NotStored
+                        ? new ActivityErrorDetail(result.Code, result.Explanation)
+                        : null));
+        }
+
+        return records.ToImmutable();
+    }
+
+    private static ActivityRecord CreateNamingRecord(
+        ManagedDesktopNamingPass pass,
+        Guid sessionId,
+        ActivityResult activityResult,
+        string resultCode,
+        string summary,
+        string? targetDesktopKey,
+        ActivityErrorDetail? error = null) =>
+        new(
+            pass.CorrelationId,
+            sessionId,
+            pass.ObservedAtUtc,
+            ActivityEventSource.Topology,
+
+            // Naming is not a window event either, and it follows a
+            // reconciliation sweep, so it takes the same closest-available
+            // trigger the topology and recovery records take.
+            WindowEventKind.StartupReconciliation,
+            activityResult,
+            resultCode,
+            summary,
+            Application: null,
+            Identity: null,
+            RuleId: null,
+            targetDesktopKey,
+            Duration: null,
+            EventSequence: null,
+            error);
 
     /// <summary>
     /// Projects one shell or machine recovery pass into the steps it took.

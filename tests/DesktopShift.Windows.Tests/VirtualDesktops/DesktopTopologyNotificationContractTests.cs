@@ -61,6 +61,14 @@ public sealed class DesktopTopologyNotificationContractTests
                 "DesktopShiftNative_GetDesktopCount",
                 "DesktopShiftNative_GetDesktop",
                 "DesktopShiftNative_GetCurrentDesktopId",
+
+                // Reaching SetDesktopName means declaring the manager vtable
+                // four slots further into private territory, one of which is
+                // RemoveDesktop. This export is how that declaration is checked
+                // before it is trusted: it resolves a desktop by identity and
+                // nothing else, so a layout that has shifted fails a harmless
+                // lookup instead of a destructive call.
+                "DesktopShiftNative_ProbeDesktopLookup",
             })
             {
                 Assert.IsTrue(
@@ -69,9 +77,18 @@ public sealed class DesktopTopologyNotificationContractTests
                 Assert.AreNotEqual(0, entryPoint);
             }
 
-            // Recovery re-resolves and recreates; it never removes. The absence
-            // of a delete export is part of how "unrelated desktops are never
-            // deleted" is enforced, so it is asserted rather than assumed.
+            // Recovery re-resolves, recreates, and names; it never removes and
+            // never reorders. Naming used to be on this list, and is not any
+            // more — DesktopShiftNative_SetDesktopName exists deliberately, and
+            // NativeBridgeOptInContractTests asserts it is exported.
+            //
+            // What has not changed is the part that matters: nothing here can
+            // destroy or reorder a desktop. Those two slots are declared in
+            // ShellVirtualDesktopAbi.h only to place naming at its true offset,
+            // are named DoNotCall, take signatures that cannot be invoked
+            // meaningfully, and reach no export. The absence below is what
+            // enforces "an unrelated desktop is never deleted", so it is
+            // asserted rather than assumed.
             Assert.IsFalse(
                 NativeLibrary.TryGetExport(
                     library,
@@ -80,12 +97,16 @@ public sealed class DesktopTopologyNotificationContractTests
             Assert.IsFalse(
                 NativeLibrary.TryGetExport(
                     library,
-                    "DesktopShiftNative_RenameDesktop",
+                    "DesktopShiftNative_MoveDesktop",
                     out _));
+
+            // The old name stays asserted absent so a future rename export
+            // cannot quietly reappear under the wording this file used to
+            // forbid.
             Assert.IsFalse(
                 NativeLibrary.TryGetExport(
                     library,
-                    "DesktopShiftNative_MoveDesktop",
+                    "DesktopShiftNative_RenameDesktop",
                     out _));
         }
         finally
@@ -318,6 +339,25 @@ public sealed class DesktopTopologyNotificationContractTests
         {
             _ = windowHandle;
             _ = desktopId;
+            MutatingCallCount++;
+            return NativeBridgeResult.Succeeded;
+        }
+
+        /// <summary>
+        /// Answers the read-only vtable layout probe.
+        /// </summary>
+        /// <remarks>
+        /// Not counted as a mutation, because it is not one — the probe exists
+        /// precisely because looking a desktop up is the one thing in that
+        /// region of the vtable that costs nothing when it lands wrong.
+        /// </remarks>
+        public NativeBridgeResult ProbeDesktopLookup() =>
+            NativeBridgeResult.Succeeded;
+
+        public NativeBridgeResult SetDesktopName(Guid desktopId, string name)
+        {
+            _ = desktopId;
+            _ = name;
             MutatingCallCount++;
             return NativeBridgeResult.Succeeded;
         }

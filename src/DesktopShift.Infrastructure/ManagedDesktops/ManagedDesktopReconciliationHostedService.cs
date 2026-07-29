@@ -1,5 +1,6 @@
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.ManagedDesktops;
 using Microsoft.Extensions.Hosting;
 
@@ -20,7 +21,9 @@ internal sealed class ManagedDesktopReconciliationHostedService(
     ICompatibilityCoordinator compatibilityCoordinator,
     IDesktopTopologyProvider topologyProvider,
     IManagedDesktopReconciliationService reconciliationService,
-    IManagedDesktopTopologyRecoveryService topologyRecoveryService) :
+    IManagedDesktopTopologyRecoveryService topologyRecoveryService,
+    IManagedDesktopNamingService? namingService = null,
+    IActivityJournal? activityJournal = null) :
     IHostedService,
     IDisposable
 {
@@ -45,6 +48,10 @@ internal sealed class ManagedDesktopReconciliationHostedService(
             started = true;
             compatibilityCoordinator.StatusChanged += OnCompatibilityChanged;
             topologyProvider.TopologyChanged += OnTopologyChanged;
+            if (namingService is not null)
+            {
+                reconciliationService.Changed += OnReconciled;
+            }
         }
 
         _ = await configurationService.LoadAsync(cancellationToken)
@@ -67,6 +74,7 @@ internal sealed class ManagedDesktopReconciliationHostedService(
             started = false;
             compatibilityCoordinator.StatusChanged -= OnCompatibilityChanged;
             topologyProvider.TopologyChanged -= OnTopologyChanged;
+            reconciliationService.Changed -= OnReconciled;
             lifetimeCancellation.Cancel();
             pending = pendingReconciliation;
         }
@@ -90,8 +98,56 @@ internal sealed class ManagedDesktopReconciliationHostedService(
         disposed = true;
         compatibilityCoordinator.StatusChanged -= OnCompatibilityChanged;
         topologyProvider.TopologyChanged -= OnTopologyChanged;
+        reconciliationService.Changed -= OnReconciled;
         lifetimeCancellation.Cancel();
         lifetimeCancellation.Dispose();
+    }
+
+    /// <summary>
+    /// Queues a naming pass behind the reconciliation that produced the
+    /// snapshot.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Naming runs after reconciliation rather than inside it, and on the same
+    /// serialized chain, so a pass always names bindings that have finished
+    /// being decided. Writing a name raises a Windows name-changed notification
+    /// which reconciles again — that converges, because the second pass sees the
+    /// name it just wrote and does nothing.
+    /// </para>
+    /// <para>
+    /// A naming failure is swallowed here on purpose. Nothing downstream of
+    /// reconciliation may be made conditional on a cosmetic label, so a pass
+    /// that throws must not break the chain that assigns windows.
+    /// </para>
+    /// </remarks>
+    private void OnReconciled(
+        object? sender,
+        ManagedDesktopReconciliationChangedEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        if (namingService is null)
+        {
+            return;
+        }
+
+        ManagedDesktopReconciliationSnapshot snapshot = args.Snapshot;
+        Queue(async token =>
+        {
+            try
+            {
+                ManagedDesktopNamingPass pass = await namingService
+                    .ApplyAsync(snapshot, token)
+                    .ConfigureAwait(false);
+                activityJournal?.Record(
+                    ActivityRecordFactory.FromNaming(pass, activityJournal.SessionId));
+            }
+            catch (Exception exception) when (
+                exception is not OperationCanceledException ||
+                !token.IsCancellationRequested)
+            {
+            }
+        });
     }
 
     private void OnCompatibilityChanged(

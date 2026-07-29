@@ -87,6 +87,29 @@
 
             <Border Style="{StaticResource DesktopShift.CardStyle}">
                 <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="DesktopsSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Desktops" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="Task View shows its own names. DesktopShift can keep those matching your Managed Desktops." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="NameWindowsDesktopsToggle"
+                        AutomationProperties.Name="Name Windows desktops to match Managed Desktops"
+                        Header="Name Windows desktops to match Managed Desktops"
+                        Toggled="OnPersistedBehaviorChanged" />
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        TextWrapping="Wrap"
+                        Text="Only the desktops DesktopShift is bound to are named, and only on Windows builds that proved they support it — check for &quot;Name desktops&quot; under Windows compatibility below. Renaming a desktop yourself in Task View is answered a few times, then left alone. Names are labels only; turning this off never changes which desktop a rule targets." />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

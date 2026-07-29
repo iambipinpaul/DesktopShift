@@ -555,6 +555,20 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public NativeBridgeResult MoveResult { get; init; } =
             NativeBridgeResult.Succeeded;
 
+        /// <summary>
+        /// What the read-only vtable layout probe answers.
+        /// </summary>
+        /// <remarks>
+        /// Defaults to success so existing tests describe a build that can be
+        /// named on. A test that wants the opposite sets this and asserts that
+        /// naming, and only naming, went away.
+        /// </remarks>
+        public NativeBridgeResult ProbeResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
+        public NativeBridgeResult RenameResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
         public ManualResetEventSlim? ValidationEntered { get; init; }
 
         public ManualResetEventSlim? MoveEntered { get; init; }
@@ -574,6 +588,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public Guid LastMovedDesktopId { get; private set; }
 
         public int MoveCount { get; private set; }
+
+        public int ProbeCount { get; private set; }
+
+        public Guid LastRenamedDesktopId { get; private set; }
+
+        public string? LastRequestedName { get; private set; }
 
         public NativeBridgeResult Validate()
         {
@@ -596,6 +616,23 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             MutationCount++;
             LastSwitchedDesktopId = desktopId;
             return SwitchResult;
+        }
+
+        // Looking a desktop up changes nothing, so this deliberately stays out
+        // of MutationCount. A probe that showed up as a mutation would hide the
+        // very thing that count exists to prove.
+        public NativeBridgeResult ProbeDesktopLookup()
+        {
+            ProbeCount++;
+            return ProbeResult;
+        }
+
+        public NativeBridgeResult SetDesktopName(Guid desktopId, string name)
+        {
+            MutationCount++;
+            LastRenamedDesktopId = desktopId;
+            LastRequestedName = name;
+            return RenameResult;
         }
 
         public NativeBridgeResult MoveWindowToDesktop(

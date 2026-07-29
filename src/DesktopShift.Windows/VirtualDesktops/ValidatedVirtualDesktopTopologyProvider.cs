@@ -20,6 +20,19 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         CanSwitchDesktop: true,
         CanObserveTopologyChanges: true);
 
+    /// <summary>
+    /// Full Mode on a build that also proved it lays the shell manager vtable
+    /// out where naming lives.
+    /// </summary>
+    /// <remarks>
+    /// This is a strict superset, and the difference is deliberately the only
+    /// difference. Failing to prove the naming layout costs naming and nothing
+    /// else — a machine that cannot be named on still enumerates, creates,
+    /// switches and moves exactly as before, and is still Full Mode.
+    /// </remarks>
+    private static readonly VirtualDesktopCapabilities FullCapabilitiesWithNaming =
+        FullManagedDesktopCapabilities with { CanRenameDesktop = true };
+
     private readonly object syncRoot = new();
     private readonly LimitedVirtualDesktopTopologyService limitedProvider;
     private readonly INativeVirtualDesktopBridgeFactory bridgeFactory;
@@ -168,6 +181,30 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             return DesktopTopologyProviderResult.Succeeded();
         }
 
+        // Naming needs manager slots past the validated prefix, so it is not
+        // inferred from Full Mode — it is asked for and answered. The bridge
+        // refuses outright on a build family that is not cleared for those
+        // slots, so an unrecognized build never reaches them, and the probe
+        // itself only ever performs a read-only lookup.
+        //
+        // A refusal here is not a fallback. It costs naming and leaves every
+        // other Full Mode capability standing.
+        bool canRename;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            canRename = bridge.ProbeDesktopLookup().IsSuccess;
+        }
+        catch (OperationCanceledException)
+        {
+            bridge.Dispose();
+            throw;
+        }
+        catch (Exception)
+        {
+            canRename = false;
+        }
+
         lock (syncRoot)
         {
             if (disposed)
@@ -178,7 +215,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             activeBridge?.Dispose();
             activeBridge = bridge;
             identity = CreateFullIdentity(build.Build);
-            capabilities = FullManagedDesktopCapabilities;
+            capabilities = canRename
+                ? FullCapabilitiesWithNaming
+                : FullManagedDesktopCapabilities;
             lastFallback = null;
         }
 
@@ -335,6 +374,68 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
                 DesktopTopologyProviderResult<Guid>.Failed(
                     "native.creation_exception",
                     "Virtual desktop creation failed unexpectedly.",
+                    exception.HResult));
+        }
+    }
+
+    public ValueTask<DesktopTopologyProviderResult> RenameDesktopAsync(
+        Guid desktopId,
+        string displayName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Asked and answered at activation. Reading the flag rather than
+        // trying and seeing keeps the call off a build whose layout was never
+        // established, which is the whole point of establishing it.
+        if (!Capabilities.CanRenameDesktop)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Unsupported(
+                    "native.rename_unsupported",
+                    "This Windows build did not prove it lays the shell manager out where desktop naming lives, so naming is unavailable."));
+        }
+
+        INativeVirtualDesktopBridge? bridge = GetActiveBridge();
+        if (bridge is null)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Unsupported(
+                    "native.rename_unsupported",
+                    "The validated adapter is no longer active, so desktop naming is unavailable."));
+        }
+
+        try
+        {
+            NativeBridgeResult result = bridge.SetDesktopName(desktopId, displayName);
+            if (result.IsSuccess)
+            {
+                return ValueTask.FromResult(
+                    DesktopTopologyProviderResult.Succeeded());
+            }
+
+            // A refused name is an operation failure, not a broken adapter, so
+            // this deliberately does not activate the fallback the way a failed
+            // enumeration does. Naming is cosmetic; losing it must never cost
+            // the caller its bindings.
+            DesktopTopologyProviderError error = ToProviderError(
+                result.Error,
+                "native.desktop_rename_failed",
+                "The validated adapter could not name the virtual desktop.");
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    error.Code,
+                    error.Message,
+                    error.HResult,
+                    error.NativeErrorCode));
+        }
+        catch (Exception exception)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    "native.rename_exception",
+                    "Virtual desktop naming failed unexpectedly.",
                     exception.HResult));
         }
     }

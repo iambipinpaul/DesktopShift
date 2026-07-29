@@ -14,8 +14,16 @@ catch. Everything that can be automated already is:
 | Reorder updates runtime mapping and changes no rule target | `ManagedDesktopTopologyRecoveryTests.ReorderingDesktops_UpdatesTheRuntimeMappingAndChangesNoRule` |
 | Unrelated desktops are never touched | `ManagedDesktopTopologyRecoveryTests.RecoveringOneDesktop_TouchesNoUnrelatedDesktop` |
 | Native notification ABI: exports, struct layout, callback marshalling | `tests/DesktopShift.Windows.Tests/VirtualDesktops/DesktopTopologyNotificationContractTests.cs` |
+| Naming: convergence, concede bound, readback guard, capability and setting gates | `tests/DesktopShift.Core.Tests/ManagedDesktops/ManagedDesktopNamingTests.cs` |
+| Naming and probe are exported; removal and reordering still are not | `DesktopTopologyNotificationContractTests` and `NativeBridgeOptInContractTests` |
 
 This matrix covers what those cannot: a real user rearranging real desktops.
+
+Naming is the one capability here that no automated test can fully prove. The
+managed tests drive a fake, and the native tests inspect exported symbols without
+calling them — neither can establish that `SetDesktopName` really is the
+fourteenth slot on the machine in front of you, or that Windows stores what it is
+handed. Section 6a exists for exactly that gap.
 
 ## Before each run
 
@@ -32,6 +40,11 @@ The shipped cooldown bounds are **3 recreations**, counted within a window of
 **16 topology events**, after which recreation is suppressed for **32 topology
 events**. The cooldown counts *events*, not seconds: waiting without touching
 the desktops will never lift it.
+
+Naming has its own separate bound: **3 corrections** per Managed Desktop, after
+which DesktopShift concedes and leaves the user's name alone. Unlike the
+recreation cooldown it does not decay, and it resets only when the application
+restarts.
 
 ## Matrix
 
@@ -87,13 +100,43 @@ already where they belong and only the index beneath them moved.
 
 ### 6. Renaming
 
+These rows assume **Settings → Desktops → Name Windows desktops** is on, which is
+the shipped default. With it off, DesktopShift never writes a name and the first
+two rows reduce to "the binding survives and nothing else happens".
+
 | Step | Expected |
 | --- | --- |
-| Rename the Managed Desktop's runtime desktop in Task View | The binding survives; the desktop is not recreated and no duplicate appears |
+| Rename the Managed Desktop's runtime desktop in Task View | The binding survives — the desktop is not recreated and no duplicate appears. DesktopShift then puts its own name back, and Activity records `naming.applied` |
+| Rename it back three more times | It is corrected the first three times, then DesktopShift concedes and **your** name stays. Activity records `naming.conceded` |
 | Rename an unrelated desktop to exactly the Managed Desktop's expected name | **Two desktops now match one definition.** Nothing is recreated and nothing is rebound — Activity records the ambiguity instead of guessing |
 
-Row 6's second step is the ambiguity case. Picking either desktop would be a
-coin flip, so DesktopShift reports and stops.
+The third step is the ambiguity case. Picking either desktop would be a coin
+flip, so DesktopShift reports and stops. Note that naming can now *produce* this
+state itself: it applies the configured name without first checking whether
+another desktop already carries it, so a manually named spare and a managed
+desktop can end up sharing a name. The binding is by identity and is unaffected;
+the ambiguity only bites if the binding metadata is later lost.
+
+### 6a. Naming (needs a machine that supports it)
+
+Naming reaches a shell manager slot past the read-only prefix everything else
+uses, so it is gated twice: the build family must be marked
+`NamingValidated` in the native adapter profile table, **and** a read-only
+lookup probe must pass at activation. Confirm which applies before reading a
+failure as a bug.
+
+| Step | Expected |
+| --- | --- |
+| Open Settings → Windows compatibility | The capability list includes **Name desktops** on a supported build, and omits it otherwise. Everything else in the list is identical either way |
+| On a build where it is omitted, check the Desktops page and Activity | Bindings, creation, switching and window moves all still work. Activity records `naming.unavailable` once per pass, not once per desktop |
+| Let DesktopShift create a missing Managed Desktop | The new desktop appears in Task View already carrying its configured name rather than "Desktop 5" |
+| Give a Managed Desktop a very long display name, or one with unusual characters, and reconcile | Either Task View shows it exactly, or Activity records `naming.not_stored` and DesktopShift stops trying for that destination. It must **never** rewrite the name repeatedly |
+| Watch Task View for a few minutes after any naming | No flicker, no repeated renaming. One write per change, then silence |
+
+The fourth row is the one worth being slow about. Windows does not document a
+length or character limit for this call, so the readback guard is the only thing
+standing between an unstorable name and a rename on every topology notification
+for as long as the app runs.
 
 ### 7. Limited Mode
 
@@ -112,6 +155,12 @@ coin flip, so DesktopShift reports and stops.
 ## Recording a run
 
 For each row, note the reconciliation outcome, whether a window pass ran, and the
-suppression code when one appears. The two failures worth an issue immediately
-are **a desktop or window changing that no row above predicts**, and **a
-recreation loop that does not converge**.
+suppression code when one appears. Record the Windows build, and whether **Name
+desktops** appeared in the capability list, since every row in 6a depends on it.
+
+The failures worth an issue immediately are **a desktop or window changing that
+no row above predicts**, **a recreation loop that does not converge**, and **a
+naming loop that does not converge**. Treat any desktop being deleted or
+reordered by DesktopShift as urgent rather than as a bug report: nothing in the
+application is supposed to be able to do either, and the native bridge exports no
+entry point for it.

@@ -128,6 +128,9 @@ public sealed partial class SettingsPage : Page
         requested = SettingsBehaviorEditor.WithAssignment(
             requested,
             StartAssignmentPausedToggle.IsOn);
+        requested = SettingsBehaviorEditor.WithDesktopNaming(
+            requested,
+            NameWindowsDesktopsToggle.IsOn);
         requested = SettingsBehaviorEditor.WithNotifications(
             requested,
             AssignmentFailureNotificationToggle.IsOn,
@@ -225,6 +228,7 @@ public sealed partial class SettingsPage : Page
             CloseToTrayToggle.IsOn = currentBehavior.CloseToTray;
             StartAssignmentPausedToggle.IsOn =
                 currentBehavior.StartAssignmentPaused;
+            NameWindowsDesktopsToggle.IsOn = currentBehavior.NameWindowsDesktops;
             AssignmentFailureNotificationToggle.IsOn =
                 currentBehavior.NotifyOnAssignmentFailure;
             CompatibilityWarningNotificationToggle.IsOn =

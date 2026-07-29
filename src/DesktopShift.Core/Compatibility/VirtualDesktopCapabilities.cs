@@ -2,6 +2,13 @@ using System.Collections.Immutable;
 
 namespace DesktopShift.Core.Compatibility;
 
+/// <param name="CanRenameDesktop">
+/// Whether this provider may name a runtime desktop, which needs shell manager
+/// slots well past the ones every other capability lives in. It trails the
+/// required members and defaults to false so that a provider which has not
+/// proved that layout is described as unable to name, rather than silently
+/// assumed able.
+/// </param>
 public sealed record VirtualDesktopCapabilities(
     bool CanGetWindowDesktopId,
     bool CanMoveWindowToDesktop,
@@ -9,7 +16,8 @@ public sealed record VirtualDesktopCapabilities(
     bool CanGetCurrentDesktop,
     bool CanCreateDesktop,
     bool CanSwitchDesktop,
-    bool CanObserveTopologyChanges)
+    bool CanObserveTopologyChanges,
+    bool CanRenameDesktop = false)
 {
     public static VirtualDesktopCapabilities DocumentedLimited { get; } = new(
         CanGetWindowDesktopId: true,
@@ -18,14 +26,16 @@ public sealed record VirtualDesktopCapabilities(
         CanGetCurrentDesktop: false,
         CanCreateDesktop: false,
         CanSwitchDesktop: false,
-        CanObserveTopologyChanges: false);
+        CanObserveTopologyChanges: false,
+        CanRenameDesktop: false);
 
     public bool HasPrivateTopologyCapabilities =>
         CanEnumerateDesktops ||
         CanGetCurrentDesktop ||
         CanCreateDesktop ||
         CanSwitchDesktop ||
-        CanObserveTopologyChanges;
+        CanObserveTopologyChanges ||
+        CanRenameDesktop;
 
     public ImmutableArray<string> AvailableCapabilityNames
     {
@@ -40,6 +50,7 @@ public sealed record VirtualDesktopCapabilities(
             AddIfAvailable(names, CanCreateDesktop, "Create desktops");
             AddIfAvailable(names, CanSwitchDesktop, "Switch desktops");
             AddIfAvailable(names, CanObserveTopologyChanges, "Observe topology changes");
+            AddIfAvailable(names, CanRenameDesktop, "Name desktops");
 
             return names.ToImmutable();
         }

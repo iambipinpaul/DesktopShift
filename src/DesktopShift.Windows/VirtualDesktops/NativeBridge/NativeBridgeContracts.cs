@@ -50,6 +50,28 @@ internal interface INativeVirtualDesktopBridge : IDisposable
 
     NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
 
+    /// <summary>
+    /// Proves the shell manager lays its vtable out where this build family
+    /// expects, using a read-only lookup that changes nothing.
+    /// </summary>
+    /// <remarks>
+    /// Naming a desktop needs a slot well past the read-only prefix every other
+    /// operation lives in, and a shifted layout would land that call on a
+    /// neighbour. This is how the layout is established by behaviour instead of
+    /// by assumption. A failure here means naming stays unavailable; it says
+    /// nothing about enumeration, creation, switching or window moves.
+    /// </remarks>
+    NativeBridgeResult ProbeDesktopLookup();
+
+    /// <summary>
+    /// Names an existing runtime desktop.
+    /// </summary>
+    /// <remarks>
+    /// There is deliberately no counterpart for removing or reordering a
+    /// desktop. Naming is the only desktop-targeted mutation the bridge offers.
+    /// </remarks>
+    NativeBridgeResult SetDesktopName(Guid desktopId, string name);
+
     NativeBridgeResult StartNotifications(Action<string> onTopologyChanged);
 }
 

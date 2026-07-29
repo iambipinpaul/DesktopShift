@@ -41,6 +41,11 @@ public static class SettingsBehaviorEditor
             NotifyOnCompatibilityWarning = notifyOnCompatibilityWarning,
         };
 
+    public static BehaviorSettings WithDesktopNaming(
+        BehaviorSettings current,
+        bool nameWindowsDesktops) =>
+        current with { NameWindowsDesktops = nameWindowsDesktops };
+
     public static BehaviorSettings WithAppearance(
         BehaviorSettings current,
         AppTheme theme) =>

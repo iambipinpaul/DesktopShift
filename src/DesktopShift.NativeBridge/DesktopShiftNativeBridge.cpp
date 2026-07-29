@@ -35,13 +35,21 @@ namespace
     {
         uint32_t Build;
         bool Validated;
+        // Whether this build family may reach the manager slots past
+        // CreateDesktop. Tracked separately from Validated because the two rest
+        // on different evidence: the read-only prefix has been exercised on
+        // real machines, whereas slots 10 to 14 are documented by published
+        // reverse-engineering and proved at runtime by the FindDesktop probe.
+        // A family only earns this once its layout is confirmed; unconfirmed
+        // families still enumerate, create, switch and move as before.
+        bool NamingValidated;
     };
 
     constexpr AdapterProfile Profiles[] = {
-        {22631, false},
-        {26100, true},
-        {26200, true},
-        {28000, false},
+        {22631, false, false},
+        {26100, true, true},
+        {26200, true, true},
+        {28000, false, false},
     };
 
     void ClearError(DesktopShiftNativeError* error) noexcept
@@ -255,8 +263,9 @@ namespace
     class NativeAdapter final
     {
     public:
-        NativeAdapter()
-            : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr))
+        explicit NativeAdapter(bool namingValidated)
+            : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
+              namingValidated_(namingValidated)
         {
             if (workEvent_ == nullptr)
             {
@@ -560,6 +569,267 @@ namespace
                 // creating a duplicate. Notifications or the next explicit read
                 // refresh the cached inventory.
                 *id = createdId;
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        /// Proves the manager vtable is laid out where this build family says
+        /// it is, without changing anything.
+        ///
+        /// FindDesktop is slot 12 and is a pure lookup, so a wrong answer costs
+        /// nothing while a wrong *slot* would. It is reached only after the
+        /// per-build naming gate, so an unrecognized family never calls into
+        /// this region at all — the ordering is the safety, not the probe on
+        /// its own.
+        HRESULT ProbeDesktopLookup(DesktopShiftNativeError* error)
+        {
+            return Invoke([this, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"The vtable layout probe is disabled until harmless adapter validation succeeds.");
+                }
+
+                if (!namingValidated_)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"This Windows build family is not cleared for the manager slots past desktop creation.");
+                }
+
+                HRESULT result = ReadSnapshot(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                // The current desktop is the safest possible subject: validation
+                // already proved it exists and that its identity round-trips.
+                const GUID knownId = currentDesktop_;
+                if (knownId == GUID_NULL)
+                {
+                    return SetError(
+                        error,
+                        HrContractMismatch,
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"The layout probe had no validated desktop to look up.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> found;
+                result = manager_->FindDesktop(
+                    &knownId,
+                    found.ReleaseAndGetAddressOf());
+                if (FAILED(result) || found == nullptr)
+                {
+                    return SetError(
+                        error,
+                        FAILED(result) ? result : HrContractMismatch,
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"Desktop lookup did not answer, so the manager vtable layout is not the one this build expects.");
+                }
+
+                GUID foundId{};
+                result = found->GetId(&foundId);
+                if (FAILED(result) || foundId != knownId)
+                {
+                    return SetError(
+                        error,
+                        FAILED(result) ? result : HrContractMismatch,
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"Desktop lookup returned a different desktop than it was asked for, so the manager vtable layout has moved.");
+                }
+
+                layoutProbed_ = true;
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        /// Names an existing desktop. The only mutation in this bridge that
+        /// targets a desktop rather than a window.
+        ///
+        /// The target is resolved by walking GetDesktops rather than through
+        /// FindDesktop, so naming leans on the enumeration path that every
+        /// other operation already uses. FindDesktop earns its keep as the
+        /// probe, not as a shortcut here.
+        HRESULT SetDesktopName(
+            const GUID& id,
+            const wchar_t* name,
+            DesktopShiftNativeError* error)
+        {
+            if (id == GUID_NULL)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageDesktopRename,
+                    L"A non-empty target desktop identifier is required.");
+            }
+
+            if (name == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_POINTER,
+                    DesktopShiftNativeStageDesktopRename,
+                    L"A desktop name was not provided.");
+            }
+
+            std::wstring requestedName(name);
+
+            return Invoke([this, id, requestedName, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"Desktop naming is disabled until harmless adapter validation succeeds.");
+                }
+
+                if (!namingValidated_)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+                        DesktopShiftNativeStageDesktopRename,
+                        L"This Windows build family is not cleared for desktop naming.");
+                }
+
+                if (!layoutProbed_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"Desktop naming is disabled until the vtable layout probe has succeeded.");
+                }
+
+                HRESULT result = ReadSnapshot(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                const bool isKnown = std::any_of(
+                    snapshot_.begin(),
+                    snapshot_.end(),
+                    [&id](const DesktopShiftNativeDesktop& desktop)
+                    {
+                        return desktop.Id == id;
+                    });
+                if (!isKnown)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The requested desktop was not present in the validated inventory.");
+                }
+
+                ComPtr<IObjectArray> desktops;
+                result = manager_->GetDesktops(desktops.ReleaseAndGetAddressOf());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The desktop inventory could not be resolved for naming.");
+                }
+
+                UINT count = 0;
+                result = desktops->GetCount(&count);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The desktop inventory could not be counted for naming.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> target;
+                for (UINT index = 0; index < count; ++index)
+                {
+                    ComPtr<IVirtualDesktop24H2> candidate;
+                    result = desktops->GetAt(
+                        index,
+                        __uuidof(IVirtualDesktop24H2),
+                        reinterpret_cast<void**>(candidate.ReleaseAndGetAddressOf()));
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopRename,
+                            L"A desktop entry could not be resolved for naming.");
+                    }
+
+                    GUID candidateId{};
+                    result = candidate->GetId(&candidateId);
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopRename,
+                            L"A desktop entry did not return its identifier for naming.");
+                    }
+
+                    if (candidateId == id)
+                    {
+                        target = std::move(candidate);
+                        break;
+                    }
+                }
+
+                if (target == nullptr)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The requested desktop changed before it could be named.");
+                }
+
+                HSTRING nameHandle = nullptr;
+                result = WindowsCreateString(
+                    requestedName.c_str(),
+                    static_cast<UINT32>(requestedName.size()),
+                    &nameHandle);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The desktop name could not be marshalled for the Windows Shell.");
+                }
+
+                result = manager_->SetDesktopName(target.Get(), nameHandle);
+                static_cast<void>(WindowsDeleteString(nameHandle));
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopRename,
+                        L"The Windows Shell rejected the virtual-desktop name.");
+                }
+
+                // The cached snapshot deliberately is not patched here. The
+                // caller reads the name back through a fresh snapshot to find
+                // out what Windows actually stored, and a locally patched cache
+                // would tell it what it hoped for instead.
                 ClearError(error);
                 return S_OK;
             });
@@ -1294,6 +1564,8 @@ namespace
         std::vector<DesktopShiftNativeDesktop> snapshot_;
         GUID currentDesktop_{};
         bool behaviorValidated_{false};
+        bool namingValidated_{false};
+        bool layoutProbed_{false};
     };
 
     NativeAdapter* AsAdapter(void* adapter) noexcept
@@ -1357,7 +1629,7 @@ extern "C"
 
         try
         {
-            auto value = std::make_unique<NativeAdapter>();
+            auto value = std::make_unique<NativeAdapter>(profile->NamingValidated);
             const HRESULT result = value->Activate(error);
             if (FAILED(result))
             {
@@ -1534,6 +1806,58 @@ extern "C"
         catch (...)
         {
             return SetUnexpectedError(error, DesktopShiftNativeStageDesktopSwitch);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_ProbeDesktopLookup(
+        void* adapter,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        try
+        {
+            return AsAdapter(adapter)->ProbeDesktopLookup(error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageLayoutProbe);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_SetDesktopName(
+        void* adapter,
+        const GUID* desktopId,
+        const wchar_t* name,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        if (desktopId == nullptr)
+        {
+            return SetError(
+                error,
+                E_POINTER,
+                DesktopShiftNativeStageDesktopRename,
+                L"A target desktop identifier was not provided.");
+        }
+
+        try
+        {
+            const GUID requestedDesktopId = *desktopId;
+            return AsAdapter(adapter)->SetDesktopName(requestedDesktopId, name, error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageDesktopRename);
         }
     }
 

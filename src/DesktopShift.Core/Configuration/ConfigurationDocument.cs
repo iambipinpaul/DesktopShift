@@ -178,6 +178,20 @@ public sealed record ApplicationRule(
 /// nothing is claimed until the user asks for it.
 /// </param>
 /// <param name="Hotkeys">The chord bound to each shortcut action.</param>
+/// <param name="NameWindowsDesktops">
+/// Whether DesktopShift names the Windows desktops it is bound to, so Task View
+/// shows Code and Web rather than Desktop 2 and Desktop 3.
+///
+/// On by default, unlike <paramref name="AreHotkeysEnabled"/>. A hotkey takes a
+/// combination away from every other application on the machine, so it has to
+/// be asked for. A desktop name is confined to the desktops this user has
+/// already told DesktopShift to manage, is visible the moment it happens, and
+/// is undone by renaming in Task View — so the reasoning that keeps hotkeys off
+/// does not carry across to it.
+///
+/// Turning this off never affects bindings. Naming is how a desktop is
+/// labelled, not how it is identified.
+/// </param>
 public sealed record BehaviorSettings(
     bool StartWithWindows,
     bool StartMinimized,
@@ -187,7 +201,8 @@ public sealed record BehaviorSettings(
     bool NotifyOnAssignmentFailure = true,
     bool NotifyOnCompatibilityWarning = true,
     bool AreHotkeysEnabled = false,
-    ImmutableArray<HotkeyBinding> Hotkeys = default)
+    ImmutableArray<HotkeyBinding> Hotkeys = default,
+    bool NameWindowsDesktops = true)
 {
     /// <summary>
     /// Hotkey bindings, normalized so an omitted collection is empty rather than
