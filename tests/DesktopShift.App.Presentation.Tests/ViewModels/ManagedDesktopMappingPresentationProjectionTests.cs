@@ -18,16 +18,16 @@ public sealed class ManagedDesktopMappingPresentationProjectionTests
             ManagedDesktopReconciliationOutcome.Succeeded,
             [
                 CreateMapping(
-                    "web",
-                    "Web",
+                    "run-observe",
+                    "Run & Observe",
                     preferredOrder: 2,
                     webId,
                     "Browsing",
                     runtimePosition: 3,
                     ManagedDesktopMappingStatus.ReusedCompatibleDesktop),
                 CreateMapping(
-                    "code",
-                    "Code",
+                    "ide-development",
+                    "IDE Development",
                     preferredOrder: 1,
                     codeId,
                     "Development",
@@ -43,7 +43,7 @@ public sealed class ManagedDesktopMappingPresentationProjectionTests
         Assert.AreEqual("Mapped", presentation.Outcome);
         Assert.AreEqual(2, presentation.MappedCount);
         Assert.AreEqual(0, presentation.AttentionCount);
-        Assert.AreEqual("code", presentation.Mappings[0].SemanticKey);
+        Assert.AreEqual("ide-development", presentation.Mappings[0].SemanticKey);
         Assert.AreEqual("Mapped to Development at position 1.", presentation.Mappings[0].RuntimeSummary);
         Assert.DoesNotContain(codeId.ToString("D"), presentation.Mappings[0].RuntimeSummary);
         Assert.Contains(codeId.ToString("D"), presentation.Mappings[0].AdvancedDetails);

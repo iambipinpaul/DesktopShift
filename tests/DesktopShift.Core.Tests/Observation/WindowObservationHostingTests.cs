@@ -48,8 +48,8 @@ public sealed class WindowObservationHostingTests
             TimeSpan.FromSeconds(3));
 
         Assert.AreEqual(WindowObservationOutcome.Matched, activity.Outcome);
-        Assert.AreEqual("vscode", activity.RuleId);
-        Assert.AreEqual("code", activity.TargetDesktopKey);
+        Assert.AreEqual("ide-development", activity.RuleId);
+        Assert.AreEqual("ide-development", activity.TargetDesktopKey);
         Assert.AreEqual(0, host.Services
             .GetRequiredService<IWindowEventQueue>()
             .Snapshot
@@ -206,8 +206,8 @@ public sealed class WindowObservationHostingTests
         IReadOnlyList<WindowObservationRule> rules =
             host.Services.GetRequiredService<IWindowRuleSource>().GetRules();
 
-        Assert.HasCount(4, rules);
-        Assert.IsTrue(rules.Any(rule => rule.Id == "vscode"));
+        Assert.HasCount(10, rules);
+        Assert.IsTrue(rules.Any(rule => rule.Id == "ide-development"));
         Assert.IsFalse(rules.Any(rule => rule.Id == "candidate-only"));
     }
 

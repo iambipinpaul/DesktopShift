@@ -12,7 +12,8 @@ public sealed class WindowAssignmentService(
     TimeProvider timeProvider,
     IDesktopSwitchCoordinator? switchCoordinator = null,
     IForegroundSwitchSuppression? suppression = null,
-    INewWindowActivationTracker? activationTracker = null) :
+    INewWindowActivationTracker? activationTracker = null,
+    IFirstDesktopLocator? firstDesktopLocator = null) :
     IWindowAssignmentService
 {
     public async ValueTask<WindowAssignmentActivity> AssignAsync(
@@ -64,13 +65,10 @@ public sealed class WindowAssignmentService(
                     request.WindowHandle) == true;
         }
 
-        ManagedDesktopRuntimeMapping? mapping =
-            reconciliationService.Current.Mappings.FirstOrDefault(
-                item => string.Equals(
-                    item.SemanticKey,
-                    request.Rule.TargetDesktopKey,
-                    StringComparison.OrdinalIgnoreCase));
-        if (mapping is not { IsBound: true, RuntimeDesktopId: Guid targetDesktopId })
+        DesktopResolution resolution = await ResolveTargetDesktopAsync(
+            request,
+            cancellationToken).ConfigureAwait(false);
+        if (!resolution.IsBound)
         {
             return await RecordAsync(
                 CreateActivity(
@@ -80,11 +78,13 @@ public sealed class WindowAssignmentService(
                     startedTimestamp,
                     WindowAssignmentOutcome.Skipped,
                     WindowAssignmentSkipReason.TargetDesktopUnresolved,
-                    mapping?.RuntimeDesktopId,
+                    resolution.DesktopId,
                     previousDesktopId: null,
-                    error: null),
+                    resolution.Error),
                 cancellationToken).ConfigureAwait(false);
         }
+
+        Guid targetDesktopId = resolution.DesktopId!.Value;
 
         DesktopTopologyProviderResult<Guid> currentDesktop;
         try
@@ -221,7 +221,9 @@ public sealed class WindowAssignmentService(
                         request.WindowHandle,
                         targetDesktopId,
                         request.Rule.SwitchPolicy,
-                        isFirstForegroundActivation),
+                        isFirstForegroundActivation,
+                        request.Rule.Destination ==
+                            WindowRuleDestination.FirstDesktop),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (
@@ -271,6 +273,71 @@ public sealed class WindowAssignmentService(
         // caller's token becomes cancelled immediately after an OS call returns.
         return await RecordAsync(activity, CancellationToken.None)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Where a request's rule sends the window, and whether that destination
+    /// resolved to a desktop that exists right now.
+    /// </summary>
+    /// <param name="DesktopId">
+    /// The runtime desktop, or the one a mapping named without being bound to
+    /// it, so an unresolved assignment can still say what it was aiming at.
+    /// </param>
+    /// <param name="IsBound">Whether the window can actually be moved there.</param>
+    /// <param name="Error">Why the destination did not resolve, when it did not.</param>
+    private readonly record struct DesktopResolution(
+        Guid? DesktopId,
+        bool IsBound,
+        WindowAssignmentError? Error = null);
+
+    /// <summary>
+    /// Resolves a rule's destination to a runtime desktop.
+    /// </summary>
+    /// <remarks>
+    /// The sweep resolves by position rather than through reconciliation, which
+    /// is the whole reason it is a dependable fallback: a Managed Desktop can
+    /// come back missing or ambiguous, and position 0 cannot stop existing.
+    /// </remarks>
+    private async ValueTask<DesktopResolution> ResolveTargetDesktopAsync(
+        WindowAssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Rule.Destination == WindowRuleDestination.FirstDesktop)
+        {
+            if (firstDesktopLocator is null)
+            {
+                return new DesktopResolution(
+                    null,
+                    IsBound: false,
+                    new WindowAssignmentError(
+                        "assignment.first_desktop_unavailable",
+                        "This host cannot locate the first desktop, so unmanaged windows are left where they opened."));
+            }
+
+            DesktopTopologyProviderResult<Guid> first = await firstDesktopLocator
+                .GetFirstDesktopIdAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return first.IsSuccess && first.Value != Guid.Empty
+                ? new DesktopResolution(first.Value, IsBound: true)
+                : new DesktopResolution(
+                    null,
+                    IsBound: false,
+                    ToAssignmentError(
+                        first.Error,
+                        "assignment.first_desktop_unresolved",
+                        "The first desktop could not be located."));
+        }
+
+        ManagedDesktopRuntimeMapping? mapping =
+            reconciliationService.Current.Mappings.FirstOrDefault(
+                item => string.Equals(
+                    item.SemanticKey,
+                    request.Rule.TargetDesktopKey,
+                    StringComparison.OrdinalIgnoreCase));
+
+        return mapping is { IsBound: true, RuntimeDesktopId: Guid bound }
+            ? new DesktopResolution(bound, IsBound: true)
+            : new DesktopResolution(mapping?.RuntimeDesktopId, IsBound: false);
     }
 
     private WindowAssignmentActivity CreateActivity(

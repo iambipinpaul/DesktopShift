@@ -30,21 +30,21 @@ public sealed class ApplicationRuleEditingTests
             // Created from a draft the editor would produce.
             ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
             {
-                Id = "notepad",
-                DisplayName = "Notepad",
-                TargetDesktopKey = "code",
-                ProcessNames = "notepad.exe",
+                Id = "paint",
+                DisplayName = "Paint",
+                TargetDesktopKey = "ide-development",
+                ProcessNames = "mspaint.exe",
             };
             Assert.IsEmpty(draft.Validate(document));
             document = draft.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.HasCount(5, document.ApplicationRules);
-            Assert.AreEqual("notepad", document.ApplicationRules[4].Id);
+            Assert.HasCount(11, document.ApplicationRules);
+            Assert.AreEqual("paint", document.ApplicationRules[10].Id);
 
             // Edited in place: the rule keeps its position, which is the
             // matcher's tie breaker.
             ApplicationRuleDraft edit = ApplicationRuleDraft.ForExistingRule(
-                ApplicationRuleCatalog.Find(document, "vscode")!) with
+                ApplicationRuleCatalog.Find(document, "ide-development")!) with
             {
                 DisplayName = "Visual Studio Code Insiders",
                 ProcessNames = $"Code.exe{Environment.NewLine}Code - Insiders.exe",
@@ -52,7 +52,7 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsEmpty(edit.Validate(document));
             document = edit.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.AreEqual("vscode", document.ApplicationRules[0].Id);
+            Assert.AreEqual("ide-development", document.ApplicationRules[0].Id);
             CollectionAssert.AreEqual(
                 new[] { "Code.exe", "Code - Insiders.exe" },
                 document.ApplicationRules[0].ProcessNames.ToArray());
@@ -60,31 +60,31 @@ public sealed class ApplicationRuleEditingTests
             // Duplicated: a free identifier, directly after the original, and
             // disabled so it claims nothing before it is narrowed.
             (document, ApplicationRule? duplicate) =
-                ApplicationRuleCatalog.Duplicate(document, "vscode");
+                ApplicationRuleCatalog.Duplicate(document, "ide-development");
             Assert.IsNotNull(duplicate);
-            Assert.AreEqual("vscode-copy", duplicate.Id);
+            Assert.AreEqual("ide-development-copy", duplicate.Id);
             Assert.IsFalse(duplicate.IsEnabled);
-            Assert.AreEqual("vscode-copy", document.ApplicationRules[1].Id);
+            Assert.AreEqual("ide-development-copy", document.ApplicationRules[1].Id);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
 
             // Disabled, then enabled again, without losing an identity.
-            document = ApplicationRuleCatalog.SetEnabled(document, "browsers", false);
+            document = ApplicationRuleCatalog.SetEnabled(document, "run-observe", false);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.IsFalse(ApplicationRuleCatalog.Find(document, "browsers")!.IsEnabled);
+            Assert.IsFalse(ApplicationRuleCatalog.Find(document, "run-observe")!.IsEnabled);
 
-            document = ApplicationRuleCatalog.SetEnabled(document, "browsers", true);
+            document = ApplicationRuleCatalog.SetEnabled(document, "run-observe", true);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
             ApplicationRule browsers =
-                ApplicationRuleCatalog.Find(document, "browsers")!;
+                ApplicationRuleCatalog.Find(document, "run-observe")!;
             Assert.IsTrue(browsers.IsEnabled);
             CollectionAssert.AreEqual(
-                new[] { "msedge.exe", "chrome.exe" },
+                new[] { "msedge.exe" },
                 browsers.ProcessNames.ToArray());
 
             // Deleted.
-            document = ApplicationRuleCatalog.Remove(document, "notepad");
+            document = ApplicationRuleCatalog.Remove(document, "paint");
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.IsNull(ApplicationRuleCatalog.Find(document, "notepad"));
+            Assert.IsNull(ApplicationRuleCatalog.Find(document, "paint"));
         }
 
         await using ServiceProvider reloaded = CreateProvider(storage);
@@ -95,7 +95,20 @@ public sealed class ApplicationRuleEditingTests
         Assert.IsEmpty(state.Issues);
         Assert.IsNotNull(state.Active);
         CollectionAssert.AreEqual(
-            new[] { "vscode", "vscode-copy", "browsers", "windows-terminal", "remote-desktop" },
+            new[]
+            {
+                "ide-development",
+                "ide-development-copy",
+                "run-observe",
+                "agent-development",
+                "infrastructure",
+                "remote",
+                "file-explorer",
+                "notepad",
+                "calculator",
+                "task-manager",
+                "settings",
+            },
             state.Active.ApplicationRules.Select(static rule => rule.Id).ToArray());
         Assert.AreEqual(
             "Visual Studio Code Insiders",
@@ -115,7 +128,7 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "windows-terminal")!;
+            ApplicationRuleCatalog.Find(document, "infrastructure")!;
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForExistingRule(terminal);
 
         Assert.Contains(
@@ -130,7 +143,7 @@ public sealed class ApplicationRuleEditingTests
         Assert.IsTrue(result.Accepted);
         ApplicationRule saved = ApplicationRuleCatalog.Find(
             result.State.Active!,
-            "windows-terminal")!;
+            "infrastructure")!;
         CollectionAssert.AreEqual(
             terminal.PackageFamilyNames.ToArray(),
             saved.PackageFamilyNames.ToArray());
@@ -145,9 +158,9 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
         {
-            Id = "VSCODE",
+            Id = "IDE-DEVELOPMENT",
             DisplayName = "Another editor",
-            TargetDesktopKey = "code",
+            TargetDesktopKey = "ide-development",
             ProcessNames = "code.exe",
         };
 
@@ -162,7 +175,7 @@ public sealed class ApplicationRuleEditingTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForExistingRule(
-            ApplicationRuleCatalog.Find(document, "vscode")!);
+            ApplicationRuleCatalog.Find(document, "ide-development")!);
 
         Assert.IsEmpty(draft.Validate(document));
     }
@@ -173,10 +186,10 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
         {
-            Id = "notepad",
-            DisplayName = "Notepad",
+            Id = "paint",
+            DisplayName = "Paint",
             TargetDesktopKey = "does-not-exist",
-            ProcessNames = "notepad.exe",
+            ProcessNames = "mspaint.exe",
         };
 
         AssertIssue(
@@ -216,10 +229,10 @@ public sealed class ApplicationRuleEditingTests
         ApplicationRuleDraft draft = WithField(
             ApplicationRuleDraft.ForNewRule(document) with
             {
-                Id = "notepad",
-                DisplayName = "Notepad",
-                TargetDesktopKey = "code",
-                ProcessNames = "notepad.exe",
+                Id = "paint",
+                DisplayName = "Paint",
+                TargetDesktopKey = "ide-development",
+                ProcessNames = "mspaint.exe",
             },
             fieldName,
             value);
@@ -276,10 +289,10 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
         {
-            Id = "notepad",
-            DisplayName = "Notepad",
-            TargetDesktopKey = "code",
-            ProcessNames = "notepad.exe",
+            Id = "paint",
+            DisplayName = "Paint",
+            TargetDesktopKey = "ide-development",
+            ProcessNames = "mspaint.exe",
             Triggers = [],
         };
 
@@ -300,10 +313,10 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
         {
-            Id = "notepad",
-            DisplayName = "Notepad",
-            TargetDesktopKey = "code",
-            ProcessNames = "notepad.exe",
+            Id = "paint",
+            DisplayName = "Paint",
+            TargetDesktopKey = "ide-development",
+            ProcessNames = "mspaint.exe",
             Triggers = [ApplicationRuleTrigger.WindowCreated],
             SwitchPolicy = policy,
         };
@@ -321,10 +334,10 @@ public sealed class ApplicationRuleEditingTests
         ApplicationRuleDraft foregroundOnly =
             ApplicationRuleDraft.ForNewRule(document) with
             {
-                Id = "notepad",
-                DisplayName = "Notepad",
-                TargetDesktopKey = "code",
-                ProcessNames = "notepad.exe",
+                Id = "paint",
+                DisplayName = "Paint",
+                TargetDesktopKey = "ide-development",
+                ProcessNames = "mspaint.exe",
                 Triggers = [ApplicationRuleTrigger.ForegroundActivated],
                 SwitchPolicy = DesktopSwitchPolicy.OnNewWindowActivation,
             };
@@ -360,8 +373,8 @@ public sealed class ApplicationRuleEditingTests
         {
             Id = "half-typed",
             DisplayName = "Half typed",
-            TargetDesktopKey = "code",
-            ProcessNames = "notepad.exe",
+            TargetDesktopKey = "ide-development",
+            ProcessNames = "mspaint.exe",
             PackageFamilyNames = "Microsoft.WindowsTerminal",
         };
 
@@ -369,8 +382,8 @@ public sealed class ApplicationRuleEditingTests
             await service.SaveCandidateAsync(draft.Apply(document));
 
         Assert.IsFalse(result.Accepted);
-        Assert.HasCount(5, result.State.Candidate.ApplicationRules);
-        Assert.HasCount(4, result.State.Active!.ApplicationRules);
+        Assert.HasCount(11, result.State.Candidate.ApplicationRules);
+        Assert.HasCount(10, result.State.Active!.ApplicationRules);
         Assert.IsTrue(result.State.Issues.Any(static issue =>
             issue.Code == ConfigurationValidationCode.InvalidIdentityPattern));
 
@@ -380,7 +393,7 @@ public sealed class ApplicationRuleEditingTests
             "Microsoft.WindowsTerminal",
             candidateJson,
             StringComparison.Ordinal);
-        Assert.Contains("notepad.exe", candidateJson, StringComparison.Ordinal);
+        Assert.Contains("mspaint.exe", candidateJson, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -486,13 +499,13 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
         (document, ApplicationRule? first) =
-            ApplicationRuleCatalog.Duplicate(document, "vscode");
+            ApplicationRuleCatalog.Duplicate(document, "ide-development");
         (document, ApplicationRule? second) =
-            ApplicationRuleCatalog.Duplicate(document, "vscode");
+            ApplicationRuleCatalog.Duplicate(document, "ide-development");
 
-        Assert.AreEqual("vscode-copy", first!.Id);
-        Assert.AreEqual("vscode-copy-2", second!.Id);
-        Assert.HasCount(6, document.ApplicationRules);
+        Assert.AreEqual("ide-development-copy", first!.Id);
+        Assert.AreEqual("ide-development-copy-2", second!.Id);
+        Assert.HasCount(12, document.ApplicationRules);
     }
 
     [TestMethod]

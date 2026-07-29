@@ -12,6 +12,17 @@ namespace DesktopShift.Core.Diagnostics;
 /// without a XAML host. It is also the single place the copy-one-event text is
 /// produced, which keeps what a user copies identical to what they can see.
 /// </remarks>
+/// <param name="CapturedIdentity">
+/// The privacy-safe identity the row was recorded with, so a row that offers to
+/// write a rule can pre-fill it from what was actually observed rather than from
+/// what the user retypes.
+/// </param>
+/// <param name="OffersRuleCreation">
+/// Whether this row is the decision that swept a window no rule named. Only the
+/// decision offers it: the move and the result that follow carry the same
+/// identity, and three buttons for one window would be three ways to do the same
+/// thing.
+/// </param>
 public sealed record ActivityRecordDisplay(
     Guid CorrelationId,
     Guid SessionId,
@@ -29,7 +40,9 @@ public sealed record ActivityRecordDisplay(
     string ErrorDetails,
     string Correlation,
     string AutomationName,
-    string CopyText)
+    string CopyText,
+    WindowSafeIdentity? CapturedIdentity = null,
+    bool OffersRuleCreation = false)
 {
     private const string NoIdentity =
         "No additional privacy-safe identity details were available.";
@@ -38,6 +51,7 @@ public sealed record ActivityRecordDisplay(
     {
         ArgumentNullException.ThrowIfNull(record);
 
+        bool isSwept = UnmanagedWindowSweep.IsSweptRuleId(record.RuleId);
         string timestamp = record.OccurredAt
             .ToLocalTime()
             .ToString("G", CultureInfo.CurrentCulture);
@@ -47,10 +61,15 @@ public sealed record ActivityRecordDisplay(
         string identity = FormatIdentity(record.Identity);
         string trigger = ActivityRecordFactory.Humanize(record.Trigger);
         string source = FormatSource(record.Source, record.RecoverySignal);
-        string target = ValueOrFallback(
-            record.TargetDesktopKey,
-            "No desktop assigned");
-        string rule = ValueOrFallback(record.RuleId, "No matching rule");
+
+        // The sweep's rule and destination are internal names, not things a
+        // user wrote, so they are said rather than shown.
+        string target = isSwept
+            ? "First desktop"
+            : ValueOrFallback(record.TargetDesktopKey, "No desktop assigned");
+        string rule = isSwept
+            ? "No rule names this app"
+            : ValueOrFallback(record.RuleId, "No matching rule");
         string resultLabel = ActivityRecordFactory.Humanize(record.Result);
         string summary = record.Summary;
         string duration = record.Duration is TimeSpan value
@@ -91,7 +110,11 @@ public sealed record ActivityRecordDisplay(
                 rule,
                 resultLabel,
                 duration,
-                errorDetails));
+                errorDetails),
+            record.Identity,
+            isSwept &&
+                record.Source == ActivityEventSource.Observation &&
+                record.Identity is not null);
     }
 
     public static string FormatDuration(TimeSpan duration)

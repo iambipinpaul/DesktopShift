@@ -84,6 +84,45 @@ public sealed class AutomaticAssignmentPauseTests
     }
 
     [TestMethod]
+    public async Task Pause_StopsTheSweepWithoutASwitchOfItsOwn()
+    {
+        // The sweep is part of assignment, so the existing pause already stops
+        // it. That is the whole point of putting it there: a user who paused
+        // DesktopShift because a task needs windows left alone must not find
+        // unmanaged windows still being moved.
+        using IHost host = CreateHost();
+        RecordedActivities recorded = new(
+            host.Services.GetRequiredService<IWindowObservationActivityProjection>());
+        IAutomaticAssignmentPauseController pause =
+            host.Services.GetRequiredService<IAutomaticAssignmentPauseController>();
+        IWindowEventQueue queue = host.Services.GetRequiredService<IWindowEventQueue>();
+        host.Services.GetRequiredService<FakeWindowIdentityResolver>()
+            .ProcessName = "Discord.exe";
+
+        await host.StartAsync();
+        FakeWindowEventSource source =
+            host.Services.GetRequiredService<FakeWindowEventSource>();
+        pause.Pause();
+
+        Assert.IsTrue(source.Publish(WindowEventKind.Created, (nint)30));
+        await WaitForReadCountAsync(queue, 1);
+
+        Assert.IsEmpty(recorded.Snapshot);
+
+        pause.Resume();
+        Assert.IsTrue(source.Publish(WindowEventKind.Created, (nint)31));
+        await recorded.WaitForCountAsync(1);
+
+        // Resumed, the same window is swept — which is what proves the pause was
+        // what stopped it rather than something else about the identity.
+        Assert.AreEqual(
+            UnmanagedWindowSweep.RuleId,
+            recorded.Snapshot[0].RuleId);
+
+        await host.StopAsync();
+    }
+
+    [TestMethod]
     public void PauseStateChanged_IsRaisedOnlyOnAnActualChange()
     {
         using IHost host = CreateHost();
@@ -133,7 +172,10 @@ public sealed class AutomaticAssignmentPauseTests
                 static serviceProvider =>
                     serviceProvider.GetRequiredService<FakeWindowEventSource>());
             services.AddSingleton<IWindowClassifier, FakeWindowClassifier>();
-            services.AddSingleton<IWindowIdentityResolver, FakeWindowIdentityResolver>();
+            services.AddSingleton<FakeWindowIdentityResolver>();
+            services.AddSingleton<IWindowIdentityResolver>(
+                static serviceProvider =>
+                    serviceProvider.GetRequiredService<FakeWindowIdentityResolver>());
             services.AddSingleton<
                 ITopLevelWindowEnumerator,
                 FakeTopLevelWindowEnumerator>();
@@ -213,6 +255,13 @@ public sealed class AutomaticAssignmentPauseTests
 
     private sealed class FakeWindowIdentityResolver : IWindowIdentityResolver
     {
+        /// <summary>
+        /// The process every window reports. Settable so a test can hand the
+        /// pipeline an application no rule names, which is the only way to reach
+        /// the sweep rather than a rule.
+        /// </summary>
+        public string ProcessName { get; set; } = "Code.exe";
+
         public ValueTask<WindowIdentityResolution> ResolveAsync(
             QualifiedWindow window,
             CancellationToken cancellationToken = default)
@@ -222,8 +271,8 @@ public sealed class AutomaticAssignmentPauseTests
                 WindowIdentityResolution.Succeeded(
                     new WindowIdentity(
                         window.ProcessId,
-                        "Code.exe",
-                        @"C:\Program Files\Microsoft VS Code\Code.exe",
+                        ProcessName,
+                        @$"C:\Program Files\Vendor\{ProcessName}",
                         null,
                         null,
                         window.WindowClass,

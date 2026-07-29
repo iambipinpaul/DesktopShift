@@ -24,7 +24,7 @@ public sealed class ConfigurationExportTests
             provider.GetRequiredService<IConfigurationService>();
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule vscode = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "vscode");
+            static rule => rule.Id == "ide-development");
         ConfigurationDocument active = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.Replace(

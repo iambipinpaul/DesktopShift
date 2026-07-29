@@ -64,6 +64,8 @@ public sealed record ManagedDesktopDefinition(
 /// <param name="IsEnabled">Whether the rule takes part in matching.</param>
 /// <param name="TargetDesktopKey">
 /// The semantic key of the Managed Desktop matched windows are assigned to.
+/// Ignored when <see cref="Action"/> is
+/// <see cref="ApplicationRuleAction.AllowAnywhere"/>.
 /// </param>
 /// <param name="ProcessNames">
 /// Executable file names. The weakest identity, and never proof that the
@@ -87,6 +89,12 @@ public sealed record ManagedDesktopDefinition(
 /// Optional exact window class refinement. A rule that declares one matches
 /// only windows carrying that class.
 /// </param>
+/// <param name="Action">
+/// What the rule does with the windows it claims. A document written before this
+/// member existed carries no <c>action</c> and reads as
+/// <see cref="ApplicationRuleAction.MoveToDesktop"/>, which is exactly how it
+/// behaved, so the schema version did not have to move.
+/// </param>
 public sealed record ApplicationRule(
     string Id,
     string DisplayName,
@@ -98,7 +106,8 @@ public sealed record ApplicationRule(
     ImmutableArray<string> PackageFamilyNames = default,
     ImmutableArray<string> AppUserModelIds = default,
     ImmutableArray<string> ExecutablePaths = default,
-    ImmutableArray<string> WindowClasses = default)
+    ImmutableArray<string> WindowClasses = default,
+    ApplicationRuleAction Action = ApplicationRuleAction.MoveToDesktop)
 {
     /// <summary>
     /// Packaged application identities, normalized so an omitted collection is
@@ -128,6 +137,18 @@ public sealed record ApplicationRule(
     /// </summary>
     public ImmutableArray<string> WindowClasses { get; init; } =
         WindowClasses.IsDefault ? [] : WindowClasses;
+
+    /// <summary>
+    /// Whether the rule exempts the windows it claims from placement, leaving
+    /// them wherever they opened.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TargetDesktopKey"/>, <see cref="Triggers"/>, and
+    /// <see cref="SwitchPolicy"/> all say when and where a window is moved, so
+    /// none of them means anything on a rule that never moves one. The editor
+    /// hides them, and the validator does not report them.
+    /// </remarks>
+    public bool AllowsAnywhere => Action == ApplicationRuleAction.AllowAnywhere;
 }
 
 /// <summary>
@@ -259,6 +280,43 @@ public sealed record BehaviorSettings(
             AreDesktopSwitchShortcutsEnabled,
             DesktopSwitchProfile,
             DesktopSwitchCustomModifiers);
+}
+
+/// <summary>
+/// What an Application Rule does with a window it claims.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The two actions live on one list of rules rather than in two separate lists.
+/// Two lists could both claim the same application, which would need a tie-break
+/// rule the user has to remember; one list already has one, because the matcher
+/// resolves a tie by match strength and then by document order.
+/// </para>
+/// <para>
+/// <see cref="AllowAnywhere"/> is expressed here rather than as a sentinel value
+/// in <see cref="ApplicationRule.TargetDesktopKey"/>, because a sentinel key
+/// could collide with a Managed Desktop the user actually named that.
+/// </para>
+/// </remarks>
+public enum ApplicationRuleAction
+{
+    /// <summary>
+    /// Move the window to the Managed Desktop named by
+    /// <see cref="ApplicationRule.TargetDesktopKey"/>.
+    /// </summary>
+    MoveToDesktop,
+
+    /// <summary>
+    /// Leave the window exactly where it opened.
+    /// </summary>
+    /// <remarks>
+    /// This is what exempts an application from the sweep that sends every
+    /// window no rule names to the first desktop. It is also the answer for a
+    /// user who wants DesktopShift to stop moving an application without
+    /// unmanaging it: disabling a rule makes its application unnamed, and an
+    /// unnamed application is swept.
+    /// </remarks>
+    AllowAnywhere,
 }
 
 public enum ApplicationRuleTrigger

@@ -110,21 +110,27 @@ internal static class ConfigurationValidator
                     rule.Id));
             }
 
-            if (string.IsNullOrWhiteSpace(rule.TargetDesktopKey))
+            // A rule that never moves a window has no destination, no useful
+            // trigger, and no reachable switch policy, so reporting any of the
+            // three would be reporting a member the matcher does not read.
+            if (!rule.AllowsAnywhere)
             {
-                issues.Add(RequiredValue(
-                    $"{path}.targetDesktopKey",
-                    ConfigurationEntryKind.ApplicationRule,
-                    rule.Id));
-            }
-            else if (!desktopKeys.Contains(rule.TargetDesktopKey))
-            {
-                issues.Add(new ConfigurationValidationIssue(
-                    ConfigurationValidationCode.UnknownDesktopReference,
-                    $"Application Rule '{rule.Id}' references unknown Managed Desktop '{rule.TargetDesktopKey}'.",
-                    $"{path}.targetDesktopKey",
-                    ConfigurationEntryKind.ApplicationRule,
-                    rule.Id));
+                if (string.IsNullOrWhiteSpace(rule.TargetDesktopKey))
+                {
+                    issues.Add(RequiredValue(
+                        $"{path}.targetDesktopKey",
+                        ConfigurationEntryKind.ApplicationRule,
+                        rule.Id));
+                }
+                else if (!desktopKeys.Contains(rule.TargetDesktopKey))
+                {
+                    issues.Add(new ConfigurationValidationIssue(
+                        ConfigurationValidationCode.UnknownDesktopReference,
+                        $"Application Rule '{rule.Id}' references unknown Managed Desktop '{rule.TargetDesktopKey}'.",
+                        $"{path}.targetDesktopKey",
+                        ConfigurationEntryKind.ApplicationRule,
+                        rule.Id));
+                }
             }
 
             // A rule may be identified by packaged identity or by executable
@@ -212,6 +218,11 @@ internal static class ConfigurationValidator
                 $"{path}.windowClasses",
                 "a window class",
                 rule.Id);
+
+            if (rule.AllowsAnywhere)
+            {
+                continue;
+            }
 
             if (rule.Triggers.IsDefaultOrEmpty)
             {

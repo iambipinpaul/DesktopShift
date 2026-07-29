@@ -35,8 +35,8 @@ public sealed class TerminalWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -54,8 +54,8 @@ public sealed class TerminalWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -74,8 +74,8 @@ public sealed class TerminalWindowMatchingTests
 
         Assert.IsNull(identity.PackageFamilyName);
         Assert.IsNull(identity.AppUserModelId);
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
 
@@ -98,8 +98,8 @@ public sealed class TerminalWindowMatchingTests
             DefaultRules);
 
         Assert.IsNull(identity.PackageFamilyName);
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.AppUserModelId, result.Strength);
     }
 
@@ -154,8 +154,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -169,8 +169,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("windows-terminal", result!.Rule.Id);
-        Assert.AreEqual("terminal", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", result!.Rule.Id);
+        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
 
@@ -202,8 +202,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("windows-terminal", first!.Rule.Id);
-        Assert.AreEqual("windows-terminal", second!.Rule.Id);
+        Assert.AreEqual("infrastructure", first!.Rule.Id);
+        Assert.AreEqual("infrastructure", second!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, first.Strength);
         Assert.AreEqual(WindowMatchStrength.ProcessName, second.Strength);
         Assert.AreEqual(first.Strength, firstAgain!.Strength);
@@ -211,15 +211,14 @@ public sealed class TerminalWindowMatchingTests
     }
 
     [TestMethod]
-    [DataRow("Code.exe", "Chrome_WidgetWin_1", "vscode", "code")]
-    [DataRow("msedge.exe", "Chrome_WidgetWin_1", "browsers", "web")]
-    [DataRow("chrome.exe", "Chrome_WidgetWin_1", "browsers", "web")]
-    [DataRow("mstsc.exe", "TscShellContainerClass", "remote-desktop", "remote")]
+    [DataRow("Code.exe", "Chrome_WidgetWin_1", "ide-development", "ide-development")]
+    [DataRow("msedge.exe", "Chrome_WidgetWin_1", "run-observe", "run-observe")]
+    [DataRow("mstsc.exe", "TscShellContainerClass", "remote", "remote")]
     [DataRow(
         TerminalProcessName,
         TerminalWindowClass,
-        "windows-terminal",
-        "terminal")]
+        "infrastructure",
+        "infrastructure")]
     public void Match_DefaultRulesDoNotClaimEachOthersWindows(
         string processName,
         string windowClass,

@@ -30,12 +30,7 @@ public sealed class BrowserWindowMatchingTests
     [DataRow("msedge.exe", WindowEventKind.ForegroundActivated)]
     [DataRow("msedge.exe", WindowEventKind.StartupReconciliation)]
     [DataRow("msedge.exe", WindowEventKind.ManualReassignment)]
-    [DataRow("chrome.exe", WindowEventKind.Created)]
-    [DataRow("chrome.exe", WindowEventKind.Shown)]
-    [DataRow("chrome.exe", WindowEventKind.ForegroundActivated)]
-    [DataRow("chrome.exe", WindowEventKind.StartupReconciliation)]
-    [DataRow("chrome.exe", WindowEventKind.ManualReassignment)]
-    public void Match_EdgeAndChromeTargetWebOnEveryDefaultTrigger(
+    public void Match_EdgeTargetsRunObserveOnEveryDefaultTrigger(
         string processName,
         WindowEventKind eventKind)
     {
@@ -44,14 +39,27 @@ public sealed class BrowserWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("browsers", result!.Rule.Id);
-        Assert.AreEqual("web", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("run-observe", result!.Rule.Id);
+        Assert.AreEqual("run-observe", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
 
     [TestMethod]
+    public void Match_ChromeIsNotNamedByAnyShippedRule()
+    {
+        // The shipped Run & Observe rule names Edge only, so a Chrome window is
+        // unmanaged: the sweep answers for it rather than a rule, and a user who
+        // wants it placed writes the rule themselves.
+        WindowIdentity chrome = CreateIdentity("chrome.exe");
+        WindowRuleMatcher matcher = new();
+
+        Assert.IsNull(matcher.Match(chrome, WindowEventKind.Shown, DefaultRules));
+        Assert.IsFalse(matcher.IsNamedByAnyRule(chrome, DefaultRules));
+    }
+
+    [TestMethod]
     [DataRow("MSEDGE.EXE")]
-    [DataRow("Chrome.EXE")]
+    [DataRow("msEdge.Exe")]
     public void Match_BrowserProcessNamesAreCaseInsensitive(string processName)
     {
         WindowRuleMatch? result = new WindowRuleMatcher().Match(
@@ -59,8 +67,8 @@ public sealed class BrowserWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("browsers", result!.Rule.Id);
-        Assert.AreEqual("web", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("run-observe", result!.Rule.Id);
+        Assert.AreEqual("run-observe", result.Rule.TargetDesktopKey);
     }
 
     [TestMethod]
@@ -85,8 +93,8 @@ public sealed class BrowserWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("browsers", first!.Rule.Id);
-        Assert.AreEqual("browsers", second!.Rule.Id);
+        Assert.AreEqual("run-observe", first!.Rule.Id);
+        Assert.AreEqual("run-observe", second!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.ProcessName, first.Strength);
         Assert.AreEqual(WindowMatchStrength.ProcessName, second.Strength);
         Assert.AreEqual(first.Rule.TargetDesktopKey, second.Rule.TargetDesktopKey);
@@ -118,8 +126,8 @@ public sealed class BrowserWindowMatchingTests
             DefaultRules);
 
         Assert.AreEqual("Chrome_WidgetWin_1", identity.WindowClass);
-        Assert.AreEqual("vscode", result!.Rule.Id);
-        Assert.AreEqual("code", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
     }
 
     [TestMethod]
@@ -212,7 +220,7 @@ public sealed class BrowserWindowMatchingTests
 
         Assert.AreEqual("browsers-work-profile", refined!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, refined.Strength);
-        Assert.AreEqual("browsers", fallback!.Rule.Id);
+        Assert.AreEqual("run-observe", fallback!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.ProcessName, fallback.Strength);
     }
 

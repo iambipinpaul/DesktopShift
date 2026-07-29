@@ -48,33 +48,53 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.AreEqual(1, defaults.SchemaVersion);
         CollectionAssert.AreEqual(
-            new[] { "code", "web", "terminal", "remote" },
+            new[]
+            {
+                "ide-development",
+                "run-observe",
+                "agent-development",
+                "infrastructure",
+                "remote",
+            },
             defaults.ManagedDesktops.Select(static desktop => desktop.SemanticKey).ToArray());
         CollectionAssert.AreEqual(
-            new[] { "Code", "Web", "Terminal", "Remote" },
+            new[]
+            {
+                "IDE Development",
+                "Run & Observe",
+                "Agent Development",
+                "Infrastructure",
+                "Remote",
+            },
             defaults.ManagedDesktops.Select(static desktop => desktop.DisplayName).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 1, 2, 3, 4 },
+            new[] { 1, 2, 3, 4, 5 },
             defaults.ManagedDesktops.Select(static desktop => desktop.PreferredOrder).ToArray());
         Assert.IsTrue(defaults.ManagedDesktops.All(static desktop => desktop.RecreateWhenMissing));
 
         AssertRule(
             defaults.ApplicationRules[0],
-            "vscode",
-            "Visual Studio Code",
-            "code",
-            ["Code.exe"]);
+            "ide-development",
+            "IDE Development",
+            "ide-development",
+            ["Code.exe", "devenv.exe"]);
         AssertRule(
             defaults.ApplicationRules[1],
-            "browsers",
-            "Microsoft Edge and Google Chrome",
-            "web",
-            ["msedge.exe", "chrome.exe"]);
+            "run-observe",
+            "Run & Observe",
+            "run-observe",
+            ["msedge.exe"]);
         AssertRule(
             defaults.ApplicationRules[2],
-            "windows-terminal",
-            "Windows Terminal",
-            "terminal",
+            "agent-development",
+            "Agent Development",
+            "agent-development",
+            ["claude.exe", "ChatGPT.exe", "codex.exe"]);
+        AssertRule(
+            defaults.ApplicationRules[3],
+            "infrastructure",
+            "Infrastructure",
+            "infrastructure",
             ["WindowsTerminal.exe"],
             [
                 "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
@@ -85,15 +105,98 @@ public sealed class ConfigurationAcceptanceTests
                 "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
             ]);
         AssertRule(
-            defaults.ApplicationRules[3],
-            "remote-desktop",
-            "Remote Desktop Connection",
+            defaults.ApplicationRules[4],
+            "remote",
+            "Remote",
             "remote",
             ["mstsc.exe"]);
 
         Assert.IsTrue(defaults.Behavior.StartWithWindows);
         Assert.IsTrue(defaults.Behavior.StartMinimized);
         Assert.IsTrue(defaults.Behavior.CloseToTray);
+
+        // Desktop switching still ships off. Ten global combinations must not be
+        // claimed before the user asks for them.
+        Assert.IsFalse(defaults.Behavior.AreDesktopSwitchShortcutsEnabled);
+    }
+
+    [TestMethod]
+    public void Defaults_ExemptTheShippedSystemUtilitiesFromTheSweep()
+    {
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        ImmutableArray<ApplicationRule> anywhere =
+        [
+            .. defaults.ApplicationRules.Where(static rule => rule.AllowsAnywhere),
+        ];
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "file-explorer",
+                "notepad",
+                "calculator",
+                "task-manager",
+                "settings",
+            },
+            anywhere.Select(static rule => rule.Id).ToArray());
+        Assert.IsTrue(anywhere.All(static rule => rule.IsEnabled));
+
+        // Paint and Photos both exist on a real Windows 11 install and are still
+        // left out: a shipped Anywhere rule unmanages an application for
+        // everybody, and these two are ordinary applications a user may want
+        // placed.
+        Assert.IsFalse(
+            defaults.ApplicationRules.Any(static rule =>
+                rule.PackageFamilyNames.Contains(
+                    "Microsoft.Paint_8wekyb3d8bbwe") ||
+                rule.PackageFamilyNames.Contains(
+                    "Microsoft.Windows.Photos_8wekyb3d8bbwe")));
+
+        Assert.Contains(
+            "explorer.exe",
+            GetDefaultRule("file-explorer").ProcessNames);
+        Assert.Contains(
+            @"C:\Windows\explorer.exe",
+            GetDefaultRule("file-explorer").ExecutablePaths);
+        Assert.Contains(
+            "Microsoft.WindowsNotepad_8wekyb3d8bbwe",
+            GetDefaultRule("notepad").PackageFamilyNames);
+        Assert.Contains("Notepad.exe", GetDefaultRule("notepad").ProcessNames);
+        Assert.Contains(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            GetDefaultRule("calculator").PackageFamilyNames);
+        Assert.Contains(
+            @"C:\Windows\System32\Taskmgr.exe",
+            GetDefaultRule("task-manager").ExecutablePaths);
+        Assert.Contains(
+            @"C:\Windows\ImmersiveControlPanel\SystemSettings.exe",
+            GetDefaultRule("settings").ExecutablePaths);
+    }
+
+    [TestMethod]
+    public void DefaultMoveRules_CarryEveryTriggerIncludingManualReassignment()
+    {
+        foreach (ApplicationRule rule in ConfigurationDefaults.Create()
+            .ApplicationRules
+            .Where(static rule => !rule.AllowsAnywhere))
+        {
+            CollectionAssert.AreEquivalent(
+                ConfigurationDefaults.DefaultTriggers.ToArray(),
+                rule.Triggers.ToArray(),
+                $"'{rule.Id}' does not declare every trigger.");
+        }
+    }
+
+    [TestMethod]
+    public void DefaultInfrastructureRule_DropsTheWindowlessConsoleHosts()
+    {
+        ApplicationRule rule = GetDefaultRule("infrastructure");
+
+        // Neither owns a top-level window: wt.exe forwards its command line to
+        // the running host and exits, and OpenConsole.exe is the windowless
+        // ConPTY host. Both could only ever be dead configuration.
+        Assert.DoesNotContain("wt.exe", rule.ProcessNames);
+        Assert.DoesNotContain("OpenConsole.exe", rule.ProcessNames);
     }
 
     [TestMethod]
@@ -102,7 +205,7 @@ public sealed class ConfigurationAcceptanceTests
     public void DefaultTerminalRule_IsIdentifiedByPackagedIdentity(
         string packageFamilyName)
     {
-        ApplicationRule rule = GetDefaultRule("windows-terminal");
+        ApplicationRule rule = GetDefaultRule("infrastructure");
 
         Assert.Contains(packageFamilyName, rule.PackageFamilyNames);
         Assert.Contains($"{packageFamilyName}!App", rule.AppUserModelIds);
@@ -111,7 +214,7 @@ public sealed class ConfigurationAcceptanceTests
     [TestMethod]
     public void DefaultTerminalRule_TreatsTheLauncherStubAsALaunchSignalOnly()
     {
-        ApplicationRule rule = GetDefaultRule("windows-terminal");
+        ApplicationRule rule = GetDefaultRule("infrastructure");
 
         Assert.DoesNotContain("wt.exe", rule.ProcessNames);
         Assert.HasCount(1, rule.ProcessNames);
@@ -149,7 +252,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsEmpty(reloaded.Issues);
         ApplicationRule terminal = reloaded.Active!.ApplicationRules.Single(
-            static rule => rule.Id == "windows-terminal");
+            static rule => rule.Id == "infrastructure");
         CollectionAssert.AreEqual(
             new[]
             {
@@ -165,7 +268,7 @@ public sealed class ConfigurationAcceptanceTests
             },
             terminal.AppUserModelIds.ToArray());
         ApplicationRule vscode = reloaded.Active.ApplicationRules.Single(
-            static rule => rule.Id == "vscode");
+            static rule => rule.Id == "ide-development");
         Assert.IsEmpty(vscode.PackageFamilyNames);
         Assert.IsEmpty(vscode.AppUserModelIds);
     }
@@ -196,6 +299,22 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsEmpty(rule.ExecutablePaths);
         Assert.IsEmpty(rule.WindowClasses);
 
+        // An absent action reads as moveToDesktop, which is exactly how such a
+        // document behaved before the member existed — so the schema version did
+        // not have to move.
+        Assert.AreEqual(ApplicationRuleAction.MoveToDesktop, rule.Action);
+        Assert.IsFalse(rule.AllowsAnywhere);
+        // The document declared version 1 and is current as it stands: adding
+        // action did not move the schema version, so nothing was migrated.
+        Assert.AreEqual(1, state.Active.SchemaVersion);
+        Assert.AreEqual(
+            ConfigurationDefaults.CurrentSchemaVersion,
+            state.Active.SchemaVersion);
+        Assert.DoesNotContain(
+            "action",
+            LegacyDocumentJson,
+            StringComparison.Ordinal);
+
         // The absent collections must read as empty, not as default arrays: a
         // default array cannot be enumerated and would fail to serialize.
         Assert.IsTrue(
@@ -203,9 +322,104 @@ public sealed class ConfigurationAcceptanceTests
     }
 
     [TestMethod]
+    public async Task AnAnywhereRule_SurvivesAPersistAndReloadRoundTrip()
+    {
+        using ConfigurationTestDirectory storage = new();
+
+        await using (ServiceProvider provider = CreateProvider(storage))
+        {
+            Assert.IsTrue((await provider
+                .GetRequiredService<IConfigurationService>()
+                .SaveCandidateAsync(ConfigurationDefaults.Create())).Accepted);
+        }
+
+        string json = await File.ReadAllTextAsync(
+            Path.Combine(storage.DirectoryPath, "configuration.json"));
+        Assert.Contains("\"allowAnywhere\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 1", json, StringComparison.Ordinal);
+
+        await using ServiceProvider reloadedProvider = CreateProvider(storage);
+        ConfigurationState reloaded = await reloadedProvider
+            .GetRequiredService<IConfigurationService>()
+            .LoadAsync();
+
+        Assert.IsEmpty(reloaded.Issues);
+        ApplicationRule explorer = reloaded.Active!.ApplicationRules.Single(
+            static rule => rule.Id == "file-explorer");
+        Assert.AreEqual(ApplicationRuleAction.AllowAnywhere, explorer.Action);
+        Assert.IsTrue(explorer.AllowsAnywhere);
+
+        // Its ignored destination survives untouched rather than being
+        // normalized to a sentinel that could collide with a real key.
+        Assert.IsEmpty(explorer.TargetDesktopKey);
+        Assert.AreEqual(
+            ApplicationRuleAction.MoveToDesktop,
+            reloaded.Active.ApplicationRules
+                .Single(static rule => rule.Id == "ide-development")
+                .Action);
+    }
+
+    [TestMethod]
+    public async Task AnAnywhereRuleWithNoDestinationOrTrigger_IsStillAccepted()
+    {
+        // Its target key, triggers, and switch policy are never read, so none of
+        // them may be reported against it.
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        ConfigurationSaveResult result = await provider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults with
+            {
+                ApplicationRules = defaults.ApplicationRules.Add(
+                    new ApplicationRule(
+                        "paint",
+                        "Paint",
+                        IsEnabled: true,
+                        TargetDesktopKey: string.Empty,
+                        ["mspaint.exe"],
+                        Triggers: [],
+                        DesktopSwitchPolicy.OnNewWindowActivation,
+                        Action: ApplicationRuleAction.AllowAnywhere)),
+            });
+
+        Assert.IsTrue(result.Accepted);
+        Assert.IsEmpty(result.State.Issues);
+    }
+
+    [TestMethod]
+    public async Task AMoveRuleWithNoDestination_IsStillReported()
+    {
+        // The exemption is for Anywhere rules only. A rule that says it moves
+        // windows still has to say where.
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        ConfigurationSaveResult result = await provider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults with
+            {
+                ApplicationRules = defaults.ApplicationRules.SetItem(
+                    0,
+                    defaults.ApplicationRules[0] with
+                    {
+                        TargetDesktopKey = string.Empty,
+                    }),
+            });
+
+        Assert.IsFalse(result.Accepted);
+        AssertHasIssue(
+            result.State.Issues,
+            ConfigurationValidationCode.RequiredValue,
+            "ide-development");
+    }
+
+    [TestMethod]
     public void DefaultRemoteDesktopRule_IsIdentifiedByTheClassicClientOnly()
     {
-        ApplicationRule rule = GetDefaultRule("remote-desktop");
+        ApplicationRule rule = GetDefaultRule("remote");
 
         Assert.AreEqual("remote", rule.TargetDesktopKey);
         CollectionAssert.AreEqual(
@@ -238,7 +452,7 @@ public sealed class ConfigurationAcceptanceTests
         using ConfigurationTestDirectory storage = new();
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "remote-desktop");
+            static rule => rule.Id == "remote");
         ConfigurationDocument refined = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.Replace(
@@ -273,7 +487,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsEmpty(reloaded.Issues);
         ApplicationRule reloadedRule = reloaded.Active!.ApplicationRules.Single(
-            static rule => rule.Id == "remote-desktop");
+            static rule => rule.Id == "remote");
         CollectionAssert.AreEqual(
             new[] { "TscShellContainerClass" },
             reloadedRule.WindowClasses.ToArray());
@@ -284,7 +498,7 @@ public sealed class ConfigurationAcceptanceTests
         // A rule that declares neither still reads as empty, not as a default
         // array that cannot be enumerated.
         ApplicationRule vscode = reloaded.Active.ApplicationRules.Single(
-            static rule => rule.Id == "vscode");
+            static rule => rule.Id == "ide-development");
         Assert.IsEmpty(vscode.WindowClasses);
         Assert.IsEmpty(vscode.ExecutablePaths);
     }
@@ -298,7 +512,7 @@ public sealed class ConfigurationAcceptanceTests
         await using ServiceProvider provider = CreateProvider(storage);
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "remote-desktop");
+            static rule => rule.Id == "remote");
 
         ConfigurationSaveResult result = await provider
             .GetRequiredService<IConfigurationService>()
@@ -326,7 +540,7 @@ public sealed class ConfigurationAcceptanceTests
         await using ServiceProvider provider = CreateProvider(storage);
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "remote-desktop");
+            static rule => rule.Id == "remote");
 
         ConfigurationSaveResult result = await provider
             .GetRequiredService<IConfigurationService>()
@@ -345,7 +559,7 @@ public sealed class ConfigurationAcceptanceTests
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.MissingApplicationIdentity,
-            "remote-desktop");
+            "remote");
     }
 
     [TestMethod]
@@ -360,8 +574,8 @@ public sealed class ConfigurationAcceptanceTests
         ConfigurationDocument packagedOnly = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.SetItem(
-                2,
-                defaults.ApplicationRules[2] with
+                3,
+                defaults.ApplicationRules[3] with
                 {
                     ProcessNames = [],
                     AppUserModelIds = [],
@@ -373,10 +587,10 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsTrue(result.Accepted);
         Assert.IsEmpty(result.State.Issues);
-        Assert.IsEmpty(result.State.Active!.ApplicationRules[2].ProcessNames);
+        Assert.IsEmpty(result.State.Active!.ApplicationRules[3].ProcessNames);
         Assert.HasCount(
             2,
-            result.State.Active.ApplicationRules[2].PackageFamilyNames);
+            result.State.Active.ApplicationRules[3].PackageFamilyNames);
     }
 
     [TestMethod]
@@ -391,8 +605,8 @@ public sealed class ConfigurationAcceptanceTests
         ConfigurationDocument unidentified = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.SetItem(
-                2,
-                defaults.ApplicationRules[2] with
+                3,
+                defaults.ApplicationRules[3] with
                 {
                     ProcessNames = [],
                     PackageFamilyNames = [],
@@ -408,7 +622,7 @@ public sealed class ConfigurationAcceptanceTests
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.MissingApplicationIdentity,
-            "windows-terminal");
+            "infrastructure");
     }
 
     [TestMethod]
@@ -478,7 +692,11 @@ public sealed class ConfigurationAcceptanceTests
         ConfigurationDocument invalid = defaults with
         {
             ManagedDesktops = defaults.ManagedDesktops.Add(
-                new ManagedDesktopDefinition("CODE", "Duplicate Code", 4, true)),
+                new ManagedDesktopDefinition(
+                    "IDE-DEVELOPMENT",
+                    "Duplicate Code",
+                    4,
+                    true)),
             ApplicationRules = defaults.ApplicationRules.Add(
                 defaults.ApplicationRules[0] with
                 {
@@ -491,20 +709,20 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(result.Accepted);
         Assert.IsNull(result.State.Active);
-        Assert.AreEqual(5, result.State.Candidate.ManagedDesktops.Length);
-        Assert.AreEqual(5, result.State.Candidate.ApplicationRules.Length);
+        Assert.AreEqual(6, result.State.Candidate.ManagedDesktops.Length);
+        Assert.AreEqual(11, result.State.Candidate.ApplicationRules.Length);
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateDesktopSemanticKey,
-            "CODE");
+            "IDE-DEVELOPMENT");
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateRuleId,
-            "vscode");
+            "ide-development");
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
-            "vscode");
+            "ide-development");
 
         string candidateJson = await File.ReadAllTextAsync(
             Path.Combine(storage.DirectoryPath, "configuration.candidate.json"));
@@ -527,8 +745,8 @@ public sealed class ConfigurationAcceptanceTests
             FirstRunState initial = await firstRun.GetStateAsync();
 
             Assert.IsFalse(initial.IsCompleted);
-            Assert.HasCount(4, initial.Candidate.ManagedDesktops);
-            Assert.HasCount(4, initial.Candidate.ApplicationRules);
+            Assert.HasCount(5, initial.Candidate.ManagedDesktops);
+            Assert.HasCount(10, initial.Candidate.ApplicationRules);
 
             ImmutableArray<ApplicationRule> editedRules =
                 initial.Candidate.ApplicationRules.SetItem(
@@ -563,8 +781,8 @@ public sealed class ConfigurationAcceptanceTests
             ConfigurationOverview overview = provider
                 .GetRequiredService<IOverviewConfigurationProjection>()
                 .GetSnapshot();
-            Assert.AreEqual(4, overview.ManagedDesktopCount);
-            Assert.AreEqual(3, overview.EnabledRuleCount);
+            Assert.AreEqual(5, overview.ManagedDesktopCount);
+            Assert.AreEqual(9, overview.EnabledRuleCount);
         }
 
         string json = await File.ReadAllTextAsync(
@@ -616,19 +834,19 @@ public sealed class ConfigurationAcceptanceTests
                 await service.SaveCandidateAsync(invalid);
 
             Assert.IsFalse(rejected.Accepted);
-            Assert.HasCount(5, rejected.State.Candidate.ApplicationRules);
-            Assert.HasCount(4, rejected.State.Active!.ApplicationRules);
+            Assert.HasCount(11, rejected.State.Candidate.ApplicationRules);
+            Assert.HasCount(10, rejected.State.Active!.ApplicationRules);
             Assert.AreEqual(
                 "Candidate duplicate",
-                rejected.State.Candidate.ApplicationRules[4].DisplayName);
+                rejected.State.Candidate.ApplicationRules[10].DisplayName);
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.DuplicateRuleId,
-                "vscode");
+                "ide-development");
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.UnknownDesktopReference,
-                "vscode");
+                "ide-development");
         }
 
         await using ServiceProvider reloadedProvider = CreateProvider(storage);
@@ -636,15 +854,15 @@ public sealed class ConfigurationAcceptanceTests
             .GetRequiredService<IConfigurationService>()
             .LoadAsync();
 
-        Assert.HasCount(5, reloaded.Candidate.ApplicationRules);
-        Assert.HasCount(4, reloaded.Active!.ApplicationRules);
+        Assert.HasCount(11, reloaded.Candidate.ApplicationRules);
+        Assert.HasCount(10, reloaded.Active!.ApplicationRules);
         Assert.AreEqual(
             "Candidate duplicate",
-            reloaded.Candidate.ApplicationRules[4].DisplayName);
+            reloaded.Candidate.ApplicationRules[10].DisplayName);
         AssertHasIssue(
             reloaded.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
-            "vscode");
+            "ide-development");
     }
 
     [TestMethod]
@@ -683,7 +901,7 @@ public sealed class ConfigurationAcceptanceTests
             .LoadAsync();
 
         Assert.IsNotNull(recovered.Active);
-        Assert.AreEqual("Code", recovered.Active.ManagedDesktops[0].DisplayName);
+        Assert.AreEqual("IDE Development", recovered.Active.ManagedDesktops[0].DisplayName);
         Assert.AreEqual(
             "Code Workspace",
             recovered.Candidate.ManagedDesktops[0].DisplayName);
@@ -719,7 +937,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(state.IsFirstRun);
         Assert.IsNotNull(state.Active);
-        Assert.HasCount(4, state.Candidate.ApplicationRules);
+        Assert.HasCount(10, state.Candidate.ApplicationRules);
         AssertHasIssue(
             state.Issues,
             ConfigurationValidationCode.CandidateUnreadable);
@@ -751,7 +969,7 @@ public sealed class ConfigurationAcceptanceTests
             () => service.SaveCandidateAsync(edited, cancellation.Token));
 
         Assert.AreEqual(
-            "Code",
+            "IDE Development",
             service.CurrentState.Active!.ManagedDesktops[0].DisplayName);
     }
 

@@ -72,6 +72,42 @@ public sealed record WindowMatchCriteria(
             []);
 }
 
+/// <summary>
+/// Where a rule sends the windows it claims.
+/// </summary>
+/// <remarks>
+/// The three values are the three answers window placement can give, and every
+/// window gets exactly one of them.
+/// </remarks>
+public enum WindowRuleDestination
+{
+    /// <summary>
+    /// The Managed Desktop named by
+    /// <see cref="WindowObservationRule.TargetDesktopKey"/>.
+    /// </summary>
+    ManagedDesktop,
+
+    /// <summary>Wherever the window opened. It is never moved.</summary>
+    Anywhere,
+
+    /// <summary>
+    /// The Windows desktop at position 0 — the one Task View calls "Desktop 1".
+    /// </summary>
+    /// <remarks>
+    /// Only <see cref="UnmanagedWindowSweep"/> produces this. It is located by
+    /// position rather than by name, and never enters the Managed Desktop
+    /// catalog: a Managed Desktop can end up unresolved after reconciliation,
+    /// and a fallback that can fail to resolve is not a fallback. Windows
+    /// refuses to delete the last virtual desktop, so position 0 always exists.
+    /// </remarks>
+    FirstDesktop,
+}
+
+/// <param name="Destination">
+/// Where the rule sends what it claims. Trailing and defaulted, so every
+/// existing construction site keeps working and a rule that says nothing about
+/// its destination is a Managed Desktop rule.
+/// </param>
 public sealed record WindowObservationRule(
     string Id,
     string DisplayName,
@@ -80,7 +116,8 @@ public sealed record WindowObservationRule(
     ImmutableArray<ApplicationRuleTrigger> Triggers,
     DesktopSwitchPolicy SwitchPolicy,
     WindowMatchCriteria Criteria,
-    int Order);
+    int Order,
+    WindowRuleDestination Destination = WindowRuleDestination.ManagedDesktop);
 
 public enum WindowMatchStrength
 {
@@ -123,6 +160,43 @@ public sealed class WindowRuleMatcher
             .ThenBy(static match => match.Rule.Order)
             .ThenBy(static match => match.Rule.Id, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Whether any enabled rule names the application this window belongs to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is deliberately not <see cref="Match"/> with the result ignored.
+    /// <see cref="Match"/> filters by trigger before it compares identity, so a
+    /// rule that omits the firing trigger produces no match — and if that
+    /// counted as "no rule names this app", narrowing a rule's triggers would
+    /// stop being a harmless no-op and start banishing the application's windows
+    /// to the first desktop. A rule missing
+    /// <see cref="ApplicationRuleTrigger.ManualReassignment"/> would fling its
+    /// windows away the moment the user pressed Reassign all.
+    /// </para>
+    /// <para>
+    /// <see cref="WindowObservationRule.Triggers"/>,
+    /// <see cref="WindowObservationRule.SwitchPolicy"/>, and
+    /// <see cref="WindowObservationRule.Destination"/> are therefore all ignored
+    /// here. Only <see cref="WindowObservationRule.IsEnabled"/> and the identity
+    /// criteria decide the answer: a disabled rule is inert everywhere else, so
+    /// making it half-alive here would be a special case with no explanation.
+    /// </para>
+    /// </remarks>
+    /// <param name="identity">The window identity being tested.</param>
+    /// <param name="rules">The rules in force.</param>
+    /// <returns>Whether the application is managed by name.</returns>
+    public bool IsNamedByAnyRule(
+        WindowIdentity identity,
+        IReadOnlyList<WindowObservationRule> rules)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(rules);
+
+        return rules.Any(rule =>
+            rule.IsEnabled && CreateMatch(rule, identity) is not null);
     }
 
     private static WindowRuleMatch? CreateMatch(
@@ -282,6 +356,9 @@ public sealed class ConfigurationWindowRuleSource : IWindowRuleSource
                         rule.WindowClasses,
                         TitleContains: [],
                         CommandLineContains: []),
-                    index))
+                    index,
+                    rule.Action == ApplicationRuleAction.AllowAnywhere
+                        ? WindowRuleDestination.Anywhere
+                        : WindowRuleDestination.ManagedDesktop))
             .ToArray();
 }

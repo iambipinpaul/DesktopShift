@@ -126,7 +126,7 @@ public sealed class WindowPlacementDiagnosticsTests
                 WindowHandle,
                 new ConfigurationWindowRuleSource(ConfigurationDefaults.Create)
                     .GetRules()
-                    .Single(static rule => rule.TargetDesktopKey == "code"),
+                    .Single(static rule => rule.TargetDesktopKey == "ide-development"),
                 new WindowSafeIdentity(
                     "Code.exe",
                     PackageFamilyName: null,
@@ -157,7 +157,7 @@ public sealed class WindowPlacementDiagnosticsTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "code",
+                "ide-development",
                 "Code",
                 1,
                 true,

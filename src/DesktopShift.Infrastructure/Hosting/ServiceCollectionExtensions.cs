@@ -241,6 +241,12 @@ public static class ServiceCollectionExtensions
             services.TryAddSingleton<IDesktopSwitchShortcutService>(
                 static serviceProvider => serviceProvider.GetRequiredService<
                     DesktopSwitchShortcutService>());
+
+            // Same condition again: the sweep's destination is a desktop
+            // position, and a position can only be read from an inventory. A
+            // host with no provider simply never sweeps, which is the right
+            // failure — it is the same host that cannot move a window either.
+            services.TryAddSingleton<IFirstDesktopLocator, FirstDesktopLocator>();
         }
         services.TryAddSingleton<IWindowAssignmentActivitySink>(
             static serviceProvider => serviceProvider.GetRequiredService<

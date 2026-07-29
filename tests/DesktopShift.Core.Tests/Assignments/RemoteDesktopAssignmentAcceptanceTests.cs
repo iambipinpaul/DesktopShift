@@ -17,11 +17,14 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
     private const string DialogWindowClass = "#32770";
     private const string RemoteDesktopProcessName = "mstsc.exe";
     private const string CredentialBrokerProcessName = "CredentialUIBroker.exe";
-    private const string UnrelatedProcessName = "notepad.exe";
-    private const string UnrelatedWindowClass = "Notepad";
+    // Named by no shipped rule at all — not even an Anywhere one — so it is
+    // genuinely unmanaged rather than deliberately exempt.
+    private const string UnrelatedProcessName = "mspaint.exe";
+    private const string UnrelatedWindowClass = "MSPaintApp";
 
     private static readonly Guid RemoteDesktopId = Guid.NewGuid();
     private static readonly Guid OtherDesktopId = Guid.NewGuid();
+    private static readonly Guid FirstDesktopId = Guid.NewGuid();
     private static readonly DateTimeOffset Now =
         new(2026, 7, 28, 15, 0, 0, TimeSpan.Zero);
 
@@ -40,7 +43,7 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
                 new WindowEvent(200, WindowEventKind.Created, (nint)901, Now));
 
         Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
-        Assert.AreEqual("remote-desktop", observation.RuleId);
+        Assert.AreEqual("remote", observation.RuleId);
         Assert.AreEqual("remote", observation.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, observation.MatchedOn);
         Assert.AreEqual(
@@ -88,7 +91,7 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
         Assert.IsTrue(assignments.All(
             static assignment =>
                 assignment.Outcome == WindowAssignmentOutcome.Succeeded &&
-                assignment.RuleId == "remote-desktop" &&
+                assignment.RuleId == "remote" &&
                 assignment.TargetDesktopId == RemoteDesktopId));
 
         // Three sessions, three correlations, three moves. One session never
@@ -136,8 +139,8 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
                 (nint)921,
                 Now.AddSeconds(30)));
 
-        Assert.AreEqual("remote-desktop", dialog.RuleId);
-        Assert.AreEqual("remote-desktop", session.RuleId);
+        Assert.AreEqual("remote", dialog.RuleId);
+        Assert.AreEqual("remote", session.RuleId);
 
         // The event named the dialog; Activity, identity and the move all name
         // the frame that owns it.
@@ -183,7 +186,7 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
                 new WindowEvent(230, WindowEventKind.Shown, (nint)932, Now));
 
         Assert.AreEqual(WindowObservationOutcome.Matched, prompt.Outcome);
-        Assert.AreEqual("remote-desktop", prompt.RuleId);
+        Assert.AreEqual("remote", prompt.RuleId);
         Assert.AreEqual((nint)931, prompt.WindowHandle);
         Assert.AreEqual(RemoteDesktopProcessName, prompt.Identity!.ProcessName);
         Assert.AreEqual(
@@ -196,10 +199,12 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
     }
 
     [TestMethod]
-    public async Task UnownedCredentialBrokerWindow_IsLeftWhereItIs()
+    public async Task UnownedCredentialBrokerWindow_IsNeverGuessedOntoRemote()
     {
         // Without an owner there is nothing tying the broker window to a
-        // session, so moving it would be a guess. It stays put.
+        // session, so putting it on Remote would be a guess. It is not guessed
+        // at — but it is not abandoned either: no rule names it, so it is swept
+        // to the first desktop like any other unmanaged window.
         RemoteDesktopHarness harness = new();
         harness.Classifier.SetWindowClass(941, DialogWindowClass);
         harness.IdentityResolver.SetProcess(941, CredentialBrokerProcessName);
@@ -212,10 +217,20 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
             .ProcessAsync(
                 new WindowEvent(240, WindowEventKind.Shown, (nint)941, Now));
 
-        Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
-        Assert.IsNull(observation.Assignment);
-        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
+        Assert.AreEqual(UnmanagedWindowSweep.RuleId, observation.RuleId);
+        Assert.AreEqual(FirstDesktopId, observation.Assignment!.TargetDesktopId);
+        Assert.AreEqual(
+            WindowAssignmentOutcome.Succeeded,
+            observation.Assignment.Outcome);
+        Assert.HasCount(1, harness.Placement.Moves);
+        Assert.AreEqual(FirstDesktopId, harness.Placement.Moves[0].DesktopId);
+        Assert.AreNotEqual(RemoteDesktopId, harness.Placement.Moves[0].DesktopId);
+
+        // Swept at open time, so the user is taken along rather than left
+        // wondering where the window went.
+        Assert.AreEqual(1, harness.Topology.SwitchCallCount);
+        Assert.AreEqual(FirstDesktopId, harness.Topology.CurrentDesktopId);
 
         await host.StopAsync();
     }
@@ -431,7 +446,7 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
             .ProcessAsync(
                 new WindowEvent(295, WindowEventKind.Shown, (nint)995, Now));
 
-        Assert.AreEqual("remote-desktop", observation.RuleId);
+        Assert.AreEqual("remote", observation.RuleId);
         Assert.AreEqual(
             WindowAssignmentOutcome.Skipped,
             observation.Assignment!.Outcome);
@@ -465,6 +480,8 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
                     (nint)996,
                     Now));
 
+        // The sweep never answers a foreground activation: a window must not be
+        // moved out from under a click.
         Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
         Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
         Assert.IsEmpty(harness.Placement.Moves);
@@ -799,11 +816,31 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
 
+        /// <summary>
+        /// Reports a two-desktop machine so the sweep can resolve position 0.
+        /// </summary>
+        /// <remarks>
+        /// The first desktop is deliberately not the one Remote is bound to, so
+        /// a swept window landing there is distinguishable from a rule-driven
+        /// assignment.
+        /// </remarks>
         public ValueTask<DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>>> EnumerateDesktopsAsync(
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(
                 DesktopTopologyProviderResult<IReadOnlyList<VirtualDesktopDescriptor>>.Succeeded(
-                    []));
+                    (IReadOnlyList<VirtualDesktopDescriptor>)
+                    [
+                        new VirtualDesktopDescriptor(
+                            FirstDesktopId,
+                            "Desktop 1",
+                            0,
+                            CurrentDesktopId == FirstDesktopId),
+                        new VirtualDesktopDescriptor(
+                            RemoteDesktopId,
+                            "Remote",
+                            3,
+                            CurrentDesktopId == RemoteDesktopId),
+                    ]));
 
         public ValueTask<DesktopTopologyProviderResult<Guid>> GetCurrentDesktopIdAsync(
             CancellationToken cancellationToken = default)

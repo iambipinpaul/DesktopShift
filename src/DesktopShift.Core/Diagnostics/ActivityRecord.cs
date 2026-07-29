@@ -153,13 +153,19 @@ public static class ActivityRecordFactory
     {
         ArgumentNullException.ThrowIfNull(activity);
 
+        // Three placement decisions have to stay tellable apart at a glance:
+        // claimed by a rule the user wrote, exempted by an Anywhere rule, and
+        // swept because nothing named the application at all.
         bool isMatched = activity.Outcome == WindowObservationOutcome.Matched;
+        bool isSwept = UnmanagedWindowSweep.IsSweptRuleId(activity.RuleId);
         string resultCode = isMatched
-            ? "observation.matched"
+            ? isSwept ? "observation.swept" : "observation.matched"
             : $"observation.skipped.{ToCode(activity.SkipReason)}";
         string summary = isMatched
             ? BuildMatchSummary(activity)
-            : $"Skipped: {Humanize(activity.SkipReason)}.";
+            : activity.SkipReason == WindowSkipReason.AllowedAnywhere
+                ? "An Anywhere rule names this application, so the window stays where it opened."
+                : $"Skipped: {Humanize(activity.SkipReason)}.";
         ActivityErrorDetail? error = activity.NativeErrorCode is int nativeErrorCode
             ? new ActivityErrorDetail(
                 "observation.native_error",
@@ -691,51 +697,76 @@ public static class ActivityRecordFactory
                 error.HResult,
                 error.NativeErrorCode);
 
+    /// <summary>
+    /// Names a destination the way a reader would say it out loud.
+    /// </summary>
+    /// <remarks>
+    /// The sweep's destination is a position rather than a Managed Desktop, so
+    /// it has no semantic key worth reading. Everywhere else the key is what the
+    /// user typed, and is shown as they typed it.
+    /// </remarks>
+    private static string DescribeDestination(string? targetDesktopKey) =>
+        UnmanagedWindowSweep.TargetDesktopKey.Equals(
+            targetDesktopKey,
+            StringComparison.Ordinal)
+            ? "the first desktop"
+            : targetDesktopKey ?? "its managed desktop";
+
     private static string BuildMatchSummary(WindowObservationActivity activity)
     {
+        string target = DescribeDestination(activity.TargetDesktopKey);
+        if (UnmanagedWindowSweep.IsSweptRuleId(activity.RuleId))
+        {
+            return $"No rule names this application, so the window is moved to {target}.";
+        }
+
         string rule = activity.RuleId ?? "a rule";
-        string target = activity.TargetDesktopKey ?? "its managed desktop";
         return activity.MatchedOn is WindowMatchStrength strength
             ? $"Matched {rule} to {target} by {Humanize(strength).ToLower(CultureInfo.InvariantCulture)}."
             : $"Matched {rule} to {target}.";
     }
 
-    private static string BuildMoveSummary(WindowAssignmentActivity activity) =>
-        activity.MoveOutcome switch
+    private static string BuildMoveSummary(WindowAssignmentActivity activity)
+    {
+        string target = DescribeDestination(activity.TargetDesktopKey);
+        return activity.MoveOutcome switch
         {
             WindowMoveOutcome.Succeeded =>
-                $"Moved the window to {activity.TargetDesktopKey}.",
+                $"Moved the window to {target}.",
             WindowMoveOutcome.AlreadyCorrect =>
-                $"The window was already on {activity.TargetDesktopKey}.",
+                $"The window was already on {target}.",
             WindowMoveOutcome.Failed =>
-                $"The window could not be moved to {activity.TargetDesktopKey}.",
+                $"The window could not be moved to {target}.",
             WindowMoveOutcome.WindowUnavailable =>
-                $"The window became unavailable before it could be moved to {activity.TargetDesktopKey}.",
+                $"The window became unavailable before it could be moved to {target}.",
             _ => "No move was attempted.",
         };
+    }
 
-    private static string BuildSwitchSummary(WindowAssignmentActivity activity) =>
-        activity.SwitchOutcome switch
+    private static string BuildSwitchSummary(WindowAssignmentActivity activity)
+    {
+        string target = DescribeDestination(activity.TargetDesktopKey);
+        return activity.SwitchOutcome switch
         {
-            DesktopSwitchOutcome.Succeeded =>
-                $"Switched to {activity.TargetDesktopKey}.",
+            DesktopSwitchOutcome.Succeeded => $"Switched to {target}.",
             DesktopSwitchOutcome.Failed =>
-                $"The switch to {activity.TargetDesktopKey} failed: {Humanize(activity.SwitchDecisionReason)}.",
+                $"The switch to {target} failed: {Humanize(activity.SwitchDecisionReason)}.",
             DesktopSwitchOutcome.Limited =>
                 "Desktop switching is unavailable in Limited Mode.",
             DesktopSwitchOutcome.Suppressed =>
                 $"The switch was suppressed: {Humanize(activity.SwitchDecisionReason)}.",
             _ => $"No switch was requested: {Humanize(activity.SwitchDecisionReason)}.",
         };
+    }
 
     private static string BuildAssignmentSummary(
         WindowAssignmentActivity activity) =>
         activity.Outcome switch
         {
             WindowAssignmentOutcome.Succeeded =>
-                $"Assigned {activity.Identity.ProcessName} to {activity.TargetDesktopKey}.",
+                $"Assigned {activity.Identity.ProcessName} to {DescribeDestination(activity.TargetDesktopKey)}.",
             WindowAssignmentOutcome.Failed =>
-                $"Could not assign {activity.Identity.ProcessName} to {activity.TargetDesktopKey}.",
+                $"Could not assign {activity.Identity.ProcessName} to {DescribeDestination(activity.TargetDesktopKey)}.",
             WindowAssignmentOutcome.Skipped
                 when activity.SkipReason == WindowAssignmentSkipReason.WindowNotTracked =>
                 $"Skipped an {activity.Identity.ProcessName} window that Windows was not tracking on a virtual desktop.",

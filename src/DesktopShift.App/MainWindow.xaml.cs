@@ -574,6 +574,12 @@ public sealed partial class MainWindow : Window
             activityPage.UpdateDiagnostics(
                 _diagnosticsCoordinator,
                 _lifetimeCancellation.Token);
+
+            // The same services the Rules page edits through, so a swept window
+            // can be turned into a rule from the row that reported it.
+            activityPage.UpdateRuleAuthoring(
+                _rulesPageServices,
+                _lifetimeCancellation.Token);
             activityPage.Update(_activityProjection);
             activityPage.UpdateAssignments(_assignmentActivityProjection);
         }

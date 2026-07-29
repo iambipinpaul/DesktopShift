@@ -10,13 +10,23 @@ using DesktopShift.Core.Configuration;
 namespace DesktopShift.App.Rules;
 
 /// <summary>
-/// One Managed Desktop as the editor's target picker shows it.
+/// One entry in the editor's destination picker.
 /// </summary>
-/// <param name="SemanticKey">The key stored on the rule.</param>
+/// <remarks>
+/// Anywhere sits in the same list as the Managed Desktops rather than in a
+/// control of its own. Two lists could both claim the same application, which
+/// would need a tie-break the user has to remember; one list already has one,
+/// because the matcher resolves a tie by strength and then by rule order.
+/// </remarks>
+/// <param name="SemanticKey">
+/// The key stored on the rule, empty for the Anywhere entry.
+/// </param>
 /// <param name="DisplayName">The name shown to the user.</param>
+/// <param name="Action">What choosing this entry makes the rule do.</param>
 public sealed record ManagedDesktopChoice(
     string SemanticKey,
-    string DisplayName);
+    string DisplayName,
+    ApplicationRuleAction Action = ApplicationRuleAction.MoveToDesktop);
 
 /// <summary>
 /// The rule editor's bindable surface.
@@ -71,6 +81,10 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
                 new ManagedDesktopChoice(
                     desktop.SemanticKey,
                     desktop.DisplayName)),
+            new ManagedDesktopChoice(
+                string.Empty,
+                "Anywhere — never move this app",
+                ApplicationRuleAction.AllowAnywhere),
         ];
         RunningApplications = [];
     }
@@ -113,12 +127,19 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
     {
         get
         {
+            if (draft.AllowsAnywhere)
+            {
+                return ManagedDesktops.Count - 1;
+            }
+
             for (int index = 0; index < ManagedDesktops.Count; index++)
             {
-                if (string.Equals(
-                    ManagedDesktops[index].SemanticKey,
-                    draft.TargetDesktopKey,
-                    StringComparison.OrdinalIgnoreCase))
+                if (ManagedDesktops[index].Action ==
+                        ApplicationRuleAction.MoveToDesktop &&
+                    string.Equals(
+                        ManagedDesktops[index].SemanticKey,
+                        draft.TargetDesktopKey,
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     return index;
                 }
@@ -129,15 +150,42 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
 
         set
         {
-            if (value >= 0 && value < ManagedDesktops.Count)
+            if (value < 0 || value >= ManagedDesktops.Count)
             {
-                SetDraft(draft with
-                {
-                    TargetDesktopKey = ManagedDesktops[value].SemanticKey,
-                });
+                return;
             }
+
+            ManagedDesktopChoice choice = ManagedDesktops[value];
+
+            // Choosing Anywhere leaves the previously selected Managed Desktop
+            // on the draft rather than clearing it, so a user who is only
+            // looking at the option can change their mind without losing it.
+            SetDraft(
+                choice.Action == ApplicationRuleAction.AllowAnywhere
+                    ? draft with { Action = choice.Action }
+                    : draft with
+                    {
+                        Action = choice.Action,
+                        TargetDesktopKey = choice.SemanticKey,
+                    });
+            Raise(nameof(AllowsAnywhere));
+            Raise(nameof(IsPlacementConfigurable));
         }
     }
+
+    /// <summary>
+    /// Whether the selected destination is Anywhere.
+    /// </summary>
+    public bool AllowsAnywhere => draft.AllowsAnywhere;
+
+    /// <summary>
+    /// Whether the trigger and switch policy controls apply at all.
+    /// </summary>
+    /// <remarks>
+    /// Both say when a window is moved, and an Anywhere rule never moves one, so
+    /// showing them would be offering settings that cannot take effect.
+    /// </remarks>
+    public bool IsPlacementConfigurable => !draft.AllowsAnywhere;
 
     public string ProcessNames
     {
@@ -408,10 +456,18 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         {
             details.Insert(
                 0,
-                "This rule is disabled, so it will not claim these windows until it is enabled.");
+                "This rule is disabled, so it does not name these windows at all — and a window no rule names is moved to the first desktop. To stop moving this app without moving it away, set its destination to Anywhere instead.");
         }
 
-        if (!result.SupportsManualReassignment)
+        // Triggers say when a move happens, so they have nothing to say about a
+        // rule that never moves anything.
+        if (draft.AllowsAnywhere)
+        {
+            details.Insert(
+                0,
+                "This rule sends these windows Anywhere, so they stay where they open and are never swept to the first desktop.");
+        }
+        else if (!result.SupportsManualReassignment)
         {
             details.Insert(
                 0,
@@ -464,6 +520,8 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         Raise(nameof(DisplayName));
         Raise(nameof(IsEnabled));
         Raise(nameof(SelectedDesktopIndex));
+        Raise(nameof(AllowsAnywhere));
+        Raise(nameof(IsPlacementConfigurable));
         Raise(nameof(ProcessNames));
         Raise(nameof(PackageFamilyNames));
         Raise(nameof(AppUserModelIds));

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Configuration;
 
@@ -113,6 +114,13 @@ public static class ApplicationRuleValidation
 /// colliding with itself, and what decides whether applying the draft replaces a
 /// rule in place or appends one.
 /// </param>
+/// <param name="Action">
+/// The selected destination: a Managed Desktop, or Anywhere. Selecting Anywhere
+/// keeps <paramref name="TargetDesktopKey"/>, <paramref name="Triggers"/>, and
+/// <paramref name="SwitchPolicy"/> untouched rather than clearing them, so
+/// changing the destination and changing it back does not discard what the user
+/// had chosen.
+/// </param>
 public sealed record ApplicationRuleDraft(
     string Id,
     string DisplayName,
@@ -125,7 +133,8 @@ public sealed record ApplicationRuleDraft(
     string WindowClasses,
     ImmutableArray<ApplicationRuleTrigger> Triggers,
     DesktopSwitchPolicy SwitchPolicy,
-    string? EditedRuleId = null)
+    string? EditedRuleId = null,
+    ApplicationRuleAction Action = ApplicationRuleAction.MoveToDesktop)
 {
     /// <summary>
     /// The selected triggers, normalized so an omitted collection is empty
@@ -138,6 +147,12 @@ public sealed record ApplicationRuleDraft(
     /// Whether the draft creates a rule rather than editing one.
     /// </summary>
     public bool IsNewRule => EditedRuleId is null;
+
+    /// <summary>
+    /// Whether the selected destination is Anywhere, which is what the editor
+    /// hides the trigger and switch policy controls on.
+    /// </summary>
+    public bool AllowsAnywhere => Action == ApplicationRuleAction.AllowAnywhere;
 
     /// <summary>
     /// Starts a new rule, pre-targeted at the document's first Managed Desktop
@@ -167,6 +182,53 @@ public sealed record ApplicationRuleDraft(
     }
 
     /// <summary>
+    /// Starts a new rule for a window DesktopShift already observed, so a user
+    /// who sees an application swept to the first desktop can write its rule
+    /// without hunting for it in a picker.
+    /// </summary>
+    /// <remarks>
+    /// Only the privacy-safe identity is available here, which is deliberate:
+    /// what the Activity view records never includes a window title, a URL, or a
+    /// command line. That leaves the packaged identities and the process name —
+    /// which is exactly the set that says which application a rule is about.
+    /// The window class is not adopted, because a class narrows a rule to one
+    /// window shape and narrowing is a decision rather than a detail of what was
+    /// observed.
+    /// </remarks>
+    /// <param name="document">The document the rule will be added to.</param>
+    /// <param name="identity">The identity captured from the observed window.</param>
+    /// <param name="displayName">
+    /// The rule name, or <see langword="null"/> to derive one from the process
+    /// name.
+    /// </param>
+    /// <returns>A draft carrying the observed identity.</returns>
+    public static ApplicationRuleDraft ForCapturedWindow(
+        ConfigurationDocument document,
+        WindowSafeIdentity identity,
+        string? displayName = null)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(identity);
+
+        string name = string.IsNullOrWhiteSpace(displayName)
+            ? Path.GetFileNameWithoutExtension(identity.ProcessName)
+            : displayName.Trim();
+
+        return ForNewRule(document) with
+        {
+            Id = ApplicationRuleCatalog.CreateUniqueId(
+                document,
+                ToRuleIdSeed(name)),
+            DisplayName = name,
+            ProcessNames = AppendEntry(string.Empty, identity.ProcessName),
+            PackageFamilyNames = AppendEntry(
+                string.Empty,
+                identity.PackageFamilyName),
+            AppUserModelIds = AppendEntry(string.Empty, identity.AppUserModelId),
+        };
+    }
+
+    /// <summary>
     /// Loads an existing rule into the editor.
     /// </summary>
     /// <param name="rule">The rule being edited.</param>
@@ -187,7 +249,8 @@ public sealed record ApplicationRuleDraft(
             ApplicationRuleShape.FormatEntries(rule.WindowClasses),
             rule.Triggers,
             rule.SwitchPolicy,
-            rule.Id);
+            rule.Id,
+            rule.Action);
     }
 
     /// <summary>
@@ -206,7 +269,8 @@ public sealed record ApplicationRuleDraft(
             ApplicationRuleShape.ParseEntries(PackageFamilyNames),
             ApplicationRuleShape.ParseEntries(AppUserModelIds),
             ApplicationRuleShape.ParseEntries(ExecutablePaths),
-            ApplicationRuleShape.ParseEntries(WindowClasses));
+            ApplicationRuleShape.ParseEntries(WindowClasses),
+            Action);
 
     /// <summary>
     /// Applies the draft to a document, replacing the edited rule in place or
@@ -375,24 +439,30 @@ public sealed record ApplicationRuleDraft(
                 "A name is required."));
         }
 
+        // An Anywhere rule never moves a window, so it has no destination to
+        // check. Its triggers and switch policy are skipped below for the same
+        // reason: they say when a move happens, and no move happens.
         string trimmedTarget = TargetDesktopKey.Trim();
-        if (string.IsNullOrWhiteSpace(trimmedTarget))
+        if (!AllowsAnywhere)
         {
-            issues.Add(new ApplicationRuleValidationIssue(
-                ApplicationRuleField.TargetDesktopKey,
-                ConfigurationValidationCode.RequiredValue,
-                "A target Managed Desktop is required."));
-        }
-        else if (!document.ManagedDesktops.Any(desktop =>
-            string.Equals(
-                desktop.SemanticKey,
-                trimmedTarget,
-                StringComparison.OrdinalIgnoreCase)))
-        {
-            issues.Add(new ApplicationRuleValidationIssue(
-                ApplicationRuleField.TargetDesktopKey,
-                ConfigurationValidationCode.UnknownDesktopReference,
-                $"No Managed Desktop uses the key '{trimmedTarget}'."));
+            if (string.IsNullOrWhiteSpace(trimmedTarget))
+            {
+                issues.Add(new ApplicationRuleValidationIssue(
+                    ApplicationRuleField.TargetDesktopKey,
+                    ConfigurationValidationCode.RequiredValue,
+                    "A target Managed Desktop is required."));
+            }
+            else if (!document.ManagedDesktops.Any(desktop =>
+                string.Equals(
+                    desktop.SemanticKey,
+                    trimmedTarget,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                issues.Add(new ApplicationRuleValidationIssue(
+                    ApplicationRuleField.TargetDesktopKey,
+                    ConfigurationValidationCode.UnknownDesktopReference,
+                    $"No Managed Desktop uses the key '{trimmedTarget}'."));
+            }
         }
 
         AddPatternIssues(
@@ -439,6 +509,11 @@ public sealed record ApplicationRuleDraft(
                     : "Add at least one process name, package family name, AppUserModelId, or executable path."));
         }
 
+        if (AllowsAnywhere)
+        {
+            return issues.ToImmutable();
+        }
+
         if (Triggers.IsDefaultOrEmpty)
         {
             issues.Add(new ApplicationRuleValidationIssue(
@@ -477,6 +552,27 @@ public sealed record ApplicationRuleDraft(
                     $"'{entry}' {explanation}."));
             }
         }
+    }
+
+    /// <summary>
+    /// Turns a display name into something
+    /// <see cref="ApplicationRuleShape.IsValidRuleId"/> accepts, so a
+    /// pre-filled rule opens with an identifier the user does not have to fix.
+    /// </summary>
+    private static string ToRuleIdSeed(string displayName)
+    {
+        string seed = new(
+        [
+            .. displayName
+                .ToLowerInvariant()
+                .Select(static character =>
+                    char.IsAsciiLetterOrDigit(character) ||
+                    character is '-' or '_' or '.'
+                        ? character
+                        : '-'),
+        ]);
+
+        return string.IsNullOrWhiteSpace(seed.Trim('-')) ? "rule" : seed.Trim('-');
     }
 
     private static bool HasAnyEntry(string text) =>

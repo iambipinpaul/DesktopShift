@@ -4,7 +4,10 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using DesktopShift.App.Rules;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
 using Microsoft.UI.Xaml;
@@ -36,6 +39,7 @@ public sealed partial class ActivityPage : Page
     private IWindowAssignmentActivityProjection? assignmentProjection;
     private IDiagnosticsCoordinator? diagnostics;
     private IActivityJournalProjection? journal;
+    private RulesPageServices? ruleAuthoring;
     private CancellationToken lifetimeToken = CancellationToken.None;
     private ImmutableArray<string> applicationOptions = [];
     private ImmutableArray<string> ruleOptions = [];
@@ -84,6 +88,28 @@ public sealed partial class ActivityPage : Page
         }
 
         RefreshSnapshot();
+    }
+
+    /// <summary>
+    /// Points the view at the services a swept window's rule is written
+    /// through.
+    /// </summary>
+    /// <remarks>
+    /// A window swept to the first desktop is the moment a user learns that
+    /// nothing names that application, so it is also the moment to offer them
+    /// the rule. Without this wiring the row still explains itself and the
+    /// button simply stays hidden.
+    /// </remarks>
+    /// <param name="pageServices">The services the rule editor reads and writes with.</param>
+    /// <param name="cancellationToken">The shell's lifetime token.</param>
+    public void UpdateRuleAuthoring(
+        RulesPageServices pageServices,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pageServices);
+
+        ruleAuthoring = pageServices;
+        lifetimeToken = cancellationToken;
     }
 
     public void Update(IWindowObservationActivityProjection activityProjection)
@@ -427,6 +453,65 @@ public sealed partial class ActivityPage : Page
             InfoBarSeverity.Success,
             "Event copied",
             "The selected event was copied to the clipboard.");
+    }
+
+    /// <summary>
+    /// Opens the rule editor pre-filled with the identity of a swept window.
+    /// </summary>
+    /// <remarks>
+    /// The draft is built from the privacy-safe identity the row already
+    /// carries, so the rule names the application the user actually saw move
+    /// rather than whichever entry in a picker looks closest to it.
+    /// </remarks>
+    private async void OnCreateRuleClick(object sender, RoutedEventArgs args)
+    {
+        if (ruleAuthoring is null ||
+            sender is not FrameworkElement { Tag: ActivityRecordDisplay row } ||
+            row.CapturedIdentity is not WindowSafeIdentity identity)
+        {
+            return;
+        }
+
+        ConfigurationDocument document =
+            ruleAuthoring.ConfigurationService.CurrentState.Candidate;
+        RulesPageServices services = ruleAuthoring;
+        RuleEditorDialog dialog = new(
+            new RuleEditorViewModel(
+                document,
+                ApplicationRuleDraft.ForCapturedWindow(document, identity)),
+            new RuleEditorDependencies(
+                services.RunningApplications,
+
+                // The Activity page has no file picker of its own, and adding
+                // one here would be a second way to do what the Rules page
+                // already does. A user who wants to pin the rule to an
+                // installation path types it.
+                static _ => Task.FromResult<string?>(null),
+                (applied, token) => SaveAsync(services, applied, document, token)),
+            lifetimeToken)
+        {
+            XamlRoot = XamlRoot,
+            RequestedTheme = ActualTheme,
+        };
+
+        _ = await dialog.ShowAsync();
+    }
+
+    private static async Task<string?> SaveAsync(
+        RulesPageServices services,
+        ApplicationRuleDraft draft,
+        ConfigurationDocument document,
+        CancellationToken cancellationToken)
+    {
+        ConfigurationSaveResult result = await services.ConfigurationService
+            .SaveCandidateAsync(draft.Apply(document), cancellationToken);
+
+        return result.Accepted
+            ? null
+            : string.Join(
+                Environment.NewLine,
+                result.State.Issues.Select(
+                    static issue => $"{issue.Path}: {issue.Message}"));
     }
 
     private void OnClearActivityClick(object sender, RoutedEventArgs args)

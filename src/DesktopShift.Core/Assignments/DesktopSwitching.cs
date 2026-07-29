@@ -4,13 +4,19 @@ using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Assignments;
 
+/// <param name="IsUnmanagedSweep">
+/// Whether the window is being moved because no rule names it. A swept window
+/// takes the user with it when it is swept at open time, which is what stops a
+/// launch from looking like a failure.
+/// </param>
 public sealed record DesktopSwitchRequest(
     Guid CorrelationId,
     WindowEventKind Trigger,
     nint WindowHandle,
     Guid TargetDesktopId,
     DesktopSwitchPolicy Policy,
-    bool IsFirstForegroundActivation);
+    bool IsFirstForegroundActivation,
+    bool IsUnmanagedSweep = false);
 
 public sealed record DesktopSwitchResult(
     DesktopSwitchOutcome Outcome,
@@ -290,7 +296,18 @@ public sealed class DesktopSwitchCoordinator(
     {
         if (request.Trigger != WindowEventKind.ForegroundActivated)
         {
-            return DesktopSwitchDecisionReason.BackgroundEventMoveOnly;
+            // A window swept at open time is the one exception to move-only on
+            // a background event. The user just launched the application, and
+            // moving it to the first desktop without taking them along would
+            // look like the launch had silently failed.
+            //
+            // Only at open time. A startup reconciliation would bounce the user
+            // across desktops at sign-in, and a manual reassignment batch would
+            // thrash.
+            return request.IsUnmanagedSweep &&
+                UnmanagedWindowSweep.FollowsWindow(request.Trigger)
+                ? null
+                : DesktopSwitchDecisionReason.BackgroundEventMoveOnly;
         }
 
         return request.Policy switch

@@ -431,8 +431,8 @@ public sealed class DiagnosticsHostingAcceptanceTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "code",
-                "Code",
+                "ide-development",
+                "IDE Development",
                 1,
                 true,
                 CodeDesktopId,

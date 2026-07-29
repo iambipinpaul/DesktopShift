@@ -28,11 +28,11 @@ public sealed class BrowserAssignmentAcceptanceTests
     {
         BrowserHarness harness = new([401, 402, 403]);
         harness.IdentityResolver.SetProcessName(301, "msedge.exe");
-        harness.IdentityResolver.SetProcessName(302, "chrome.exe");
+        harness.IdentityResolver.SetProcessName(302, "msedge.exe");
         harness.IdentityResolver.SetProcessName(303, "msedge.exe");
         harness.IdentityResolver.SetProcessName(401, "msedge.exe");
-        harness.IdentityResolver.SetProcessName(402, "chrome.exe");
-        harness.IdentityResolver.SetProcessName(403, "chrome.exe");
+        harness.IdentityResolver.SetProcessName(402, "msedge.exe");
+        harness.IdentityResolver.SetProcessName(403, "msedge.exe");
         using IHost host = CreateHost(harness);
         await host.StartAsync();
 
@@ -45,7 +45,7 @@ public sealed class BrowserAssignmentAcceptanceTests
 
         WindowObservationActivity edgeCreated = await processor.ProcessAsync(
             new WindowEvent(10, WindowEventKind.Created, (nint)301, Now));
-        WindowObservationActivity chromeShown = await processor.ProcessAsync(
+        WindowObservationActivity secondEdgeShown = await processor.ProcessAsync(
             new WindowEvent(11, WindowEventKind.Shown, (nint)302, Now));
         WindowObservationActivity secondEdgeCreated = await processor.ProcessAsync(
             new WindowEvent(12, WindowEventKind.Created, (nint)303, Now));
@@ -53,19 +53,19 @@ public sealed class BrowserAssignmentAcceptanceTests
         WindowAssignmentActivity[] eventAssignments =
         [
             edgeCreated.Assignment!,
-            chromeShown.Assignment!,
+            secondEdgeShown.Assignment!,
             secondEdgeCreated.Assignment!,
         ];
         Assert.IsTrue(eventAssignments.All(
             static assignment =>
                 assignment.Outcome == WindowAssignmentOutcome.Succeeded &&
-                assignment.RuleId == "browsers" &&
-                assignment.TargetDesktopKey == "web" &&
+                assignment.RuleId == "run-observe" &&
+                assignment.TargetDesktopKey == "run-observe" &&
                 assignment.TargetDesktopId == WebDesktopId));
         Assert.AreEqual(WindowEventKind.Created, edgeCreated.Assignment!.Trigger);
-        Assert.AreEqual(WindowEventKind.Shown, chromeShown.Assignment!.Trigger);
+        Assert.AreEqual(WindowEventKind.Shown, secondEdgeShown.Assignment!.Trigger);
         Assert.AreEqual("msedge.exe", edgeCreated.Identity!.ProcessName);
-        Assert.AreEqual("chrome.exe", chromeShown.Identity!.ProcessName);
+        Assert.AreEqual("msedge.exe", secondEdgeShown.Identity!.ProcessName);
         Assert.HasCount(
             3,
             eventAssignments
@@ -89,8 +89,8 @@ public sealed class BrowserAssignmentAcceptanceTests
             static assignment =>
                 assignment.Trigger == WindowEventKind.ManualReassignment &&
                 assignment.Outcome == WindowAssignmentOutcome.Succeeded &&
-                assignment.RuleId == "browsers" &&
-                assignment.TargetDesktopKey == "web" &&
+                assignment.RuleId == "run-observe" &&
+                assignment.TargetDesktopKey == "run-observe" &&
                 assignment.TargetDesktopId == WebDesktopId));
         Assert.HasCount(
             3,
@@ -107,8 +107,7 @@ public sealed class BrowserAssignmentAcceptanceTests
         Assert.IsTrue(projection.Snapshot.All(
             static assignment =>
                 assignment.Identity.WindowClass == BrowserWindowClass &&
-                (assignment.Identity.ProcessName == "msedge.exe" ||
-                    assignment.Identity.ProcessName == "chrome.exe") &&
+                assignment.Identity.ProcessName == "msedge.exe" &&
                 !assignment.Identity.ToString().Contains(
                     PrivateWindowTitle,
                     StringComparison.Ordinal) &&
@@ -138,7 +137,7 @@ public sealed class BrowserAssignmentAcceptanceTests
                 (nint)501,
                 Now.AddMilliseconds(500)));
 
-        Assert.AreEqual("browsers", first.RuleId);
+        Assert.AreEqual("run-observe", first.RuleId);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, first.AssignmentOutcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
@@ -204,8 +203,8 @@ public sealed class BrowserAssignmentAcceptanceTests
 
         Assert.AreEqual((nint)700, observation.WindowHandle);
         Assert.AreEqual((nint)700, observation.Assignment!.WindowHandle);
-        Assert.AreEqual("browsers", observation.Assignment.RuleId);
-        Assert.AreEqual("web", observation.Assignment.TargetDesktopKey);
+        Assert.AreEqual("run-observe", observation.Assignment.RuleId);
+        Assert.AreEqual("run-observe", observation.Assignment.TargetDesktopKey);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, observation.Assignment.Outcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
@@ -324,8 +323,8 @@ public sealed class BrowserAssignmentAcceptanceTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "web",
-                "Web",
+                "run-observe",
+                "Run & Observe",
                 2,
                 true,
                 WebDesktopId,

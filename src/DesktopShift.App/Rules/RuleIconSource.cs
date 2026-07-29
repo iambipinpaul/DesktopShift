@@ -62,6 +62,14 @@ public static class RuleIconSource
             : Visibility.Visible;
 
     /// <summary>
+    /// Shows an element only when a condition holds.
+    /// </summary>
+    /// <param name="isVisible">Whether the element applies.</param>
+    /// <returns>The element's visibility.</returns>
+    public static Visibility WhenTrue(bool isVisible) =>
+        isVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
     /// Shows an element only when there is something to say.
     /// </summary>
     /// <param name="text">The text the element would show.</param>

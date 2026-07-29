@@ -5,14 +5,15 @@ namespace DesktopShift.Core.Configuration;
 
 public static class ConfigurationDefaults
 {
-    // Still version 1: packageFamilyNames, appUserModelIds, executablePaths and
-    // windowClasses are optional trailing members, so a document written before
-    // they existed deserializes with them absent and they read as empty. The
-    // same is true of every setting added since — theme, the notification
-    // switches, the assignment pause, and the hotkey bindings all trail the
-    // required members of BehaviorSettings and read as their defaults when
-    // absent, so a version 1 document on disk is still a current document and
-    // nothing has to be migrated.
+    // Still version 1: packageFamilyNames, appUserModelIds, executablePaths,
+    // windowClasses and action are optional trailing members, so a document
+    // written before they existed deserializes with them absent and they read as
+    // empty, or in action's case as moveToDesktop — which is exactly how such a
+    // document behaved. The same is true of every setting added since — theme,
+    // the notification switches, the assignment pause, and the hotkey bindings
+    // all trail the required members of BehaviorSettings and read as their
+    // defaults when absent, so a version 1 document on disk is still a current
+    // document and nothing has to be migrated.
     public const int CurrentSchemaVersion = 1;
 
     private static readonly ImmutableArray<ApplicationRuleTrigger> AllTriggers =
@@ -32,34 +33,75 @@ public static class ConfigurationDefaults
     public static ImmutableArray<ApplicationRuleTrigger> DefaultTriggers =>
         AllTriggers;
 
+    /// <summary>
+    /// The configuration a first run starts from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A semantic key is durable identity written to the binding store; a
+    /// display name is a label the user can retype. They are kept separate even
+    /// where they read alike, because making them one value would mean renaming
+    /// a desktop lost its binding and stranded the user's windows on the old
+    /// one.
+    /// </para>
+    /// <para>
+    /// The Anywhere rules exist so the system utilities a user opens constantly
+    /// are exempt from the sweep that sends every unnamed window to the first
+    /// desktop. Every identity below was confirmed against a real Windows 11
+    /// install: an identity no running window can report is dead configuration,
+    /// so an unverified one is worse than an absent one.
+    /// </para>
+    /// </remarks>
+    /// <returns>The shipped document.</returns>
     public static ConfigurationDocument Create()
     {
         return new ConfigurationDocument(
             CurrentSchemaVersion,
             [
-                new ManagedDesktopDefinition("code", "Code", 1, true),
-                new ManagedDesktopDefinition("web", "Web", 2, true),
-                new ManagedDesktopDefinition("terminal", "Terminal", 3, true),
-                new ManagedDesktopDefinition("remote", "Remote", 4, true),
+                new ManagedDesktopDefinition(
+                    "ide-development",
+                    "IDE Development",
+                    1,
+                    true),
+                new ManagedDesktopDefinition("run-observe", "Run & Observe", 2, true),
+                new ManagedDesktopDefinition(
+                    "agent-development",
+                    "Agent Development",
+                    3,
+                    true),
+                new ManagedDesktopDefinition(
+                    "infrastructure",
+                    "Infrastructure",
+                    4,
+                    true),
+                new ManagedDesktopDefinition("remote", "Remote", 5, true),
             ],
             [
                 CreateRule(
-                    "vscode",
-                    "Visual Studio Code",
-                    "code",
-                    ["Code.exe"]),
+                    "ide-development",
+                    "IDE Development",
+                    "ide-development",
+                    ["Code.exe", "devenv.exe"]),
                 CreateRule(
-                    "browsers",
-                    "Microsoft Edge and Google Chrome",
-                    "web",
-                    ["msedge.exe", "chrome.exe"]),
+                    "run-observe",
+                    "Run & Observe",
+                    "run-observe",
+                    ["msedge.exe"]),
                 CreateRule(
-                    "windows-terminal",
-                    "Windows Terminal",
-                    "terminal",
-                    // wt.exe is a launch signal only. It forwards its command
+                    "agent-development",
+                    "Agent Development",
+                    "agent-development",
+                    ["claude.exe", "ChatGPT.exe", "codex.exe"]),
+                CreateRule(
+                    "infrastructure",
+                    "Infrastructure",
+                    "infrastructure",
+                    // wt.exe and OpenConsole.exe are deliberately absent.
+                    // wt.exe is a launch signal only: it forwards its command
                     // line to the already running WindowsTerminal.exe host and
                     // exits, so it never owns the window it opens.
+                    // OpenConsole.exe is the windowless ConPTY host. Neither
+                    // can ever match.
                     ["WindowsTerminal.exe"],
                     packageFamilyNames:
                     [
@@ -72,8 +114,8 @@ public static class ConfigurationDefaults
                         "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
                     ]),
                 CreateRule(
-                    "remote-desktop",
-                    "Remote Desktop Connection",
+                    "remote",
+                    "Remote",
                     "remote",
                     // The classic client is unpackaged, so a process name is the
                     // strongest identity it has. mstsc.exe owns every window a
@@ -98,6 +140,39 @@ public static class ConfigurationDefaults
                     // names could not be confirmed against an installed
                     // package, and an unverified identity is dead configuration.
                     ["mstsc.exe"]),
+
+                // Paint and Photos were both verified to exist, and are still
+                // left out on purpose. A shipped Anywhere rule takes an
+                // application out of the sweep for everybody, and these two are
+                // ordinary applications a user may well want placed. They are
+                // one click away in the rule editor for anyone who disagrees.
+                CreateAnywhereRule(
+                    "file-explorer",
+                    "File Explorer",
+                    ["explorer.exe"],
+                    executablePaths: [@"C:\Windows\explorer.exe"]),
+                CreateAnywhereRule(
+                    "notepad",
+                    "Notepad",
+                    ["Notepad.exe"],
+                    packageFamilyNames: ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"]),
+                CreateAnywhereRule(
+                    "calculator",
+                    "Calculator",
+                    [],
+                    packageFamilyNames:
+                        ["Microsoft.WindowsCalculator_8wekyb3d8bbwe"]),
+                CreateAnywhereRule(
+                    "task-manager",
+                    "Task Manager",
+                    [],
+                    executablePaths: [@"C:\Windows\System32\Taskmgr.exe"]),
+                CreateAnywhereRule(
+                    "settings",
+                    "Settings",
+                    [],
+                    executablePaths:
+                        [@"C:\Windows\ImmersiveControlPanel\SystemSettings.exe"]),
             ],
             new BehaviorSettings(
                 StartWithWindows: true,
@@ -133,5 +208,42 @@ public static class ConfigurationDefaults
             appUserModelIds,
             executablePaths,
             windowClasses);
+    }
+
+    /// <summary>
+    /// Creates a rule that exempts an application from placement entirely.
+    /// </summary>
+    /// <remarks>
+    /// The triggers and the switch policy are still filled in, with the same
+    /// values every other shipped rule carries. Neither is read while the
+    /// destination is Anywhere, and both are hidden in the editor — but a user
+    /// who switches the destination back to a Managed Desktop should find a
+    /// working rule rather than an empty trigger list.
+    /// </remarks>
+    private static ApplicationRule CreateAnywhereRule(
+        string id,
+        string displayName,
+        ImmutableArray<string> processNames,
+        ImmutableArray<string> packageFamilyNames = default,
+        ImmutableArray<string> appUserModelIds = default,
+        ImmutableArray<string> executablePaths = default)
+    {
+        return new ApplicationRule(
+            id,
+            displayName,
+            IsEnabled: true,
+
+            // Never read. An Anywhere rule has no destination, and a sentinel
+            // key here could collide with a Managed Desktop a user really named
+            // that, so the member is simply left empty.
+            string.Empty,
+            processNames,
+            AllTriggers,
+            DesktopSwitchPolicy.OnForegroundActivation,
+            packageFamilyNames,
+            appUserModelIds,
+            executablePaths,
+            WindowClasses: default,
+            ApplicationRuleAction.AllowAnywhere);
     }
 }

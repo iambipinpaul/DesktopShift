@@ -40,7 +40,7 @@ public sealed class RemoteDesktopWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("remote-desktop", result!.Rule.Id);
+        Assert.AreEqual("remote", result!.Rule.Id);
         Assert.AreEqual("remote", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
@@ -65,7 +65,7 @@ public sealed class RemoteDesktopWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("remote-desktop", result!.Rule.Id);
+        Assert.AreEqual("remote", result!.Rule.Id);
         Assert.AreEqual("remote", result.Rule.TargetDesktopKey);
     }
 
@@ -80,7 +80,7 @@ public sealed class RemoteDesktopWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("remote-desktop", result!.Rule.Id);
+        Assert.AreEqual("remote", result!.Rule.Id);
         Assert.AreEqual("remote", result.Rule.TargetDesktopKey);
     }
 
@@ -156,8 +156,8 @@ public sealed class RemoteDesktopWindowMatchingTests
             WindowEventKind.ForegroundActivated,
             DefaultRules);
 
-        Assert.AreEqual("remote-desktop", firstMatch!.Rule.Id);
-        Assert.AreEqual("remote-desktop", secondMatch!.Rule.Id);
+        Assert.AreEqual("remote", firstMatch!.Rule.Id);
+        Assert.AreEqual("remote", secondMatch!.Rule.Id);
         Assert.AreEqual(
             firstMatch.Rule.TargetDesktopKey,
             secondMatch.Rule.TargetDesktopKey);
@@ -191,7 +191,7 @@ public sealed class RemoteDesktopWindowMatchingTests
             WindowEventKind.Shown,
             rules);
 
-        Assert.AreEqual("remote-desktop", matched!.Rule.Id);
+        Assert.AreEqual("remote", matched!.Rule.Id);
         Assert.AreEqual("remote", matched.Rule.TargetDesktopKey);
         Assert.IsNull(excluded);
     }
@@ -214,7 +214,7 @@ public sealed class RemoteDesktopWindowMatchingTests
             WindowEventKind.Shown,
             rules);
 
-        Assert.AreEqual("remote-desktop", result!.Rule.Id);
+        Assert.AreEqual("remote", result!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.ExecutablePath, result.Strength);
     }
 
@@ -261,14 +261,14 @@ public sealed class RemoteDesktopWindowMatchingTests
     }
 
     [TestMethod]
-    [DataRow("Code.exe", "Chrome_WidgetWin_1", "vscode", "code")]
-    [DataRow("msedge.exe", "Chrome_WidgetWin_1", "browsers", "web")]
+    [DataRow("Code.exe", "Chrome_WidgetWin_1", "ide-development", "ide-development")]
+    [DataRow("msedge.exe", "Chrome_WidgetWin_1", "run-observe", "run-observe")]
     [DataRow(
         "WindowsTerminal.exe",
         "CASCADIA_HOSTING_WINDOW_CLASS",
-        "windows-terminal",
-        "terminal")]
-    [DataRow(RemoteDesktopProcessName, SessionWindowClass, "remote-desktop", "remote")]
+        "infrastructure",
+        "infrastructure")]
+    [DataRow(RemoteDesktopProcessName, SessionWindowClass, "remote", "remote")]
     public void Match_DefaultRulesDoNotClaimEachOthersWindows(
         string processName,
         string windowClass,
@@ -304,7 +304,7 @@ public sealed class RemoteDesktopWindowMatchingTests
     {
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule remoteDesktop = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "remote-desktop");
+            static rule => rule.Id == "remote");
         ConfigurationDocument refined = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.Replace(

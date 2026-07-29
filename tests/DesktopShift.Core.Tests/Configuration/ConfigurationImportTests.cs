@@ -212,7 +212,7 @@ public sealed class ConfigurationImportTests
             sourceProvider.GetRequiredService<IConfigurationService>();
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
         ApplicationRule vscode = defaults.ApplicationRules.Single(
-            static rule => rule.Id == "vscode");
+            static rule => rule.Id == "ide-development");
         ConfigurationDocument sourceDocument = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.Replace(
@@ -243,10 +243,54 @@ public sealed class ConfigurationImportTests
 
         Assert.IsTrue(result.Accepted);
         ApplicationRule imported = result.State!.Active!.ApplicationRules.Single(
-            static rule => rule.Id == "vscode");
+            static rule => rule.Id == "ide-development");
         CollectionAssert.AreEqual(
             new[] { @"D:\Profiles\Bob\Apps\Code.exe" },
             imported.ExecutablePaths.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ExportThenImport_RoundTripsTheAnywhereDestination()
+    {
+        // An exported file that lost the destination would silently re-manage
+        // every utility the user had exempted on the machine it was carried to.
+        using TestConfigurationDirectory sourceStorage = new();
+        await using ServiceProvider sourceProvider =
+            Issue17ConfigurationTestSupport.CreateProvider(sourceStorage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+        Assert.IsTrue((await sourceProvider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults)).Accepted);
+
+        await using MemoryStream portable = new();
+        await sourceProvider.GetRequiredService<IConfigurationExchangeService>()
+            .ExportAsync(portable);
+        Assert.Contains(
+            "\"allowAnywhere\"",
+            Encoding.UTF8.GetString(portable.ToArray()));
+
+        using TestConfigurationDirectory targetStorage = new();
+        await using ServiceProvider targetProvider =
+            Issue17ConfigurationTestSupport.CreateProvider(targetStorage);
+        portable.Position = 0;
+        ConfigurationImportResult result = await targetProvider
+            .GetRequiredService<IConfigurationExchangeService>()
+            .ImportAsync(portable);
+
+        Assert.IsTrue(result.Accepted);
+        Assert.IsEmpty(result.Issues);
+        CollectionAssert.AreEqual(
+            defaults.ApplicationRules
+                .Select(static rule => rule.Action)
+                .ToArray(),
+            result.State!.Active!.ApplicationRules
+                .Select(static rule => rule.Action)
+                .ToArray());
+        Assert.HasCount(
+            5,
+            result.State.Active.ApplicationRules
+                .Where(static rule => rule.AllowsAnywhere)
+                .ToArray());
     }
 
     private static void AssertDocumentsEqual(

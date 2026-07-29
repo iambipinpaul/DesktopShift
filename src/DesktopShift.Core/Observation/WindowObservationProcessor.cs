@@ -301,19 +301,54 @@ public sealed class WindowObservationProcessor : IDisposable
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
+        // Every window gets one of three answers. A rule that names it and
+        // targets a Managed Desktop moves it; a rule that names it and says
+        // Anywhere leaves it alone; and a window no enabled rule names at all is
+        // swept to the first desktop, so an application nobody has thought about
+        // cannot pile up on whichever desktop happened to be in front.
         IReadOnlyList<WindowObservationRule> rules = ruleSource.GetRules();
         WindowRuleMatch? match = matcher.Match(identity, windowEvent.Kind, rules);
-        if (match is null)
+
+        if (match is { Rule.Destination: WindowRuleDestination.Anywhere })
         {
             return await RecordSkipAsync(
                 windowEvent,
                 window.RootWindowHandle,
-                rules.Any(static rule => rule.IsEnabled)
-                    ? WindowSkipReason.NoMatchingRule
-                    : WindowSkipReason.NoEnabledRules,
+                WindowSkipReason.AllowedAnywhere,
                 correlationId,
                 identity.ToSafeIdentity(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        WindowObservationRule rule;
+        WindowMatchStrength? matchedOn;
+        if (match is not null)
+        {
+            rule = match.Rule;
+            matchedOn = match.Strength;
+        }
+        else
+        {
+            // The sweep test asks whether any enabled rule names the
+            // application, never whether one matched this event. Reusing the
+            // match result would turn narrowing a rule's triggers into
+            // banishing its windows.
+            if (!UnmanagedWindowSweep.AnswersEvent(windowEvent.Kind) ||
+                matcher.IsNamedByAnyRule(identity, rules))
+            {
+                return await RecordSkipAsync(
+                    windowEvent,
+                    window.RootWindowHandle,
+                    rules.Any(static candidate => candidate.IsEnabled)
+                        ? WindowSkipReason.NoMatchingRule
+                        : WindowSkipReason.NoEnabledRules,
+                    correlationId,
+                    identity.ToSafeIdentity(),
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            rule = UnmanagedWindowSweep.Rule;
+            matchedOn = null;
         }
 
         WindowAssignmentActivity? assignment = null;
@@ -328,7 +363,7 @@ public sealed class WindowObservationProcessor : IDisposable
                 new WindowAssignmentRequest(
                     windowEvent.Kind,
                     window.RootWindowHandle,
-                    match.Rule,
+                    rule,
                     identity.ToSafeIdentity(),
                     correlationId),
                 cancellationToken).ConfigureAwait(false);
@@ -341,8 +376,8 @@ public sealed class WindowObservationProcessor : IDisposable
             window.RootWindowHandle,
             WindowObservationOutcome.Matched,
             WindowSkipReason.None,
-            match.Rule.Id,
-            match.Rule.TargetDesktopKey,
+            rule.Id,
+            rule.TargetDesktopKey,
             identity.ToSafeIdentity(),
             AssignmentCorrelationId: assignment?.CorrelationId,
             AssignmentOutcome: assignment?.Outcome,
@@ -350,7 +385,7 @@ public sealed class WindowObservationProcessor : IDisposable
             TargetRuntimeDesktopId: assignment?.TargetDesktopId,
             AssignmentError: assignment?.Error,
             Assignment: assignment,
-            MatchedOn: match.Strength,
+            MatchedOn: matchedOn,
             CorrelationId: correlationId);
         await activitySink
             .RecordAsync(activity, cancellationToken)

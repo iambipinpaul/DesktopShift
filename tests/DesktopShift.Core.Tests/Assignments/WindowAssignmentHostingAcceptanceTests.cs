@@ -67,8 +67,8 @@ public sealed class WindowAssignmentHostingAcceptanceTests
             WindowEventKind.ManualReassignment,
             manual.Assignments[0].Trigger);
         Assert.AreEqual(WindowAssignmentOutcome.Succeeded, manual.Assignments[0].Outcome);
-        Assert.AreEqual("vscode", manual.Assignments[0].RuleId);
-        Assert.AreEqual("code", manual.Assignments[0].TargetDesktopKey);
+        Assert.AreEqual("ide-development", manual.Assignments[0].RuleId);
+        Assert.AreEqual("ide-development", manual.Assignments[0].TargetDesktopKey);
         Assert.AreEqual(CodeDesktopId, manual.Assignments[0].TargetDesktopId);
         Assert.AreEqual(4, harness.Placement.Moves.Count);
         Assert.IsTrue(projection.Snapshot.All(
@@ -357,8 +357,8 @@ public sealed class WindowAssignmentHostingAcceptanceTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "code",
-                "Code",
+                "ide-development",
+                "IDE Development",
                 1,
                 true,
                 CodeDesktopId,

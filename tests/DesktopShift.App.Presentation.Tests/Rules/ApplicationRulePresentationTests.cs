@@ -25,8 +25,8 @@ public sealed class ApplicationRulePresentationTests
             new ApplicationIcon(1, 1, [.. new byte[4]]));
         ConfigurationDocument withPath = ApplicationRuleCatalog.Replace(
             document,
-            "remote-desktop",
-            ApplicationRuleCatalog.Find(document, "remote-desktop")! with
+            "remote",
+            ApplicationRuleCatalog.Find(document, "remote")! with
             {
                 ExecutablePaths = [@"C:\Windows\System32\mstsc.exe"],
             });
@@ -34,36 +34,67 @@ public sealed class ApplicationRulePresentationTests
         ImmutableArray<ApplicationRulePresentation> items =
             ApplicationRulePresentationProjection.Project(
                 withPath,
-                [Matched("vscode", Now.AddMinutes(-5))],
+                [Matched("ide-development", Now.AddMinutes(-5))],
                 Now,
                 icons);
 
-        Assert.HasCount(4, items);
+        Assert.HasCount(10, items);
 
-        ApplicationRulePresentation vscode = items[0];
-        Assert.AreEqual("vscode", vscode.RuleId);
-        Assert.AreEqual("Visual Studio Code", vscode.DisplayName);
-        Assert.AreEqual("Process: Code.exe", vscode.MatchSummary);
-        Assert.AreEqual("Process name only", vscode.IdentityStrengthLabel);
-        Assert.AreEqual("Assigns to Code", vscode.TargetSummary);
-        Assert.AreEqual("All triggers", vscode.TriggerSummary);
+        ApplicationRulePresentation ide = items[0];
+        Assert.AreEqual("ide-development", ide.RuleId);
+        Assert.AreEqual("IDE Development", ide.DisplayName);
+        Assert.AreEqual("Process: Code.exe, devenv.exe", ide.MatchSummary);
+        Assert.AreEqual("Process name only", ide.IdentityStrengthLabel);
+        Assert.AreEqual("Assigns to IDE Development", ide.TargetSummary);
+        Assert.AreEqual("All triggers", ide.TriggerSummary);
         Assert.AreEqual(
             "Switches on foreground activation",
-            vscode.SwitchPolicySummary);
-        Assert.IsTrue(vscode.IsEnabled);
-        Assert.AreEqual("Enabled", vscode.EnabledLabel);
-        Assert.AreEqual("Last match 5 minutes ago", vscode.LastMatchSummary);
+            ide.SwitchPolicySummary);
+        Assert.IsTrue(ide.IsEnabled);
+        Assert.AreEqual("Enabled", ide.EnabledLabel);
+        Assert.AreEqual("Last match 5 minutes ago", ide.LastMatchSummary);
 
         // No executable path, so no icon: the item falls back to a glyph rather
         // than rendering a hole.
-        Assert.IsNull(vscode.Icon);
+        Assert.IsNull(ide.Icon);
         Assert.AreEqual(
             ApplicationRulePresentationProjection.DefaultRuleGlyph,
-            vscode.FallbackGlyph);
+            ide.FallbackGlyph);
 
-        ApplicationRulePresentation remote = items[3];
+        ApplicationRulePresentation remote = items[4];
         Assert.IsNotNull(remote.Icon);
         Assert.AreEqual("No matches recorded", remote.LastMatchSummary);
+    }
+
+    [TestMethod]
+    public void AnAnywhereRule_ShowsItsDestinationAndHidesWhatItDoesNotUse()
+    {
+        // Triggers and the switch policy both say when a window is moved, and an
+        // Anywhere rule never moves one, so the row must not read as though it
+        // were about to.
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+        ApplicationRule explorer =
+            ApplicationRuleCatalog.Find(document, "file-explorer")!;
+
+        ApplicationRulePresentation item =
+            ApplicationRulePresentationProjection.Project(
+                explorer,
+                document,
+                lastMatchUtc: null,
+                Now);
+
+        Assert.IsTrue(explorer.AllowsAnywhere);
+        Assert.AreEqual("Anywhere — stays where it opens", item.TargetSummary);
+        Assert.AreEqual("Not used", item.TriggerSummary);
+        Assert.AreEqual("Never switches desktop", item.SwitchPolicySummary);
+        Assert.Contains(
+            "Destination: Anywhere",
+            item.AdvancedDetails,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Target key:",
+            item.AdvancedDetails,
+            StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -74,7 +105,7 @@ public sealed class ApplicationRulePresentationTests
         // Windows Terminal window.
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "windows-terminal")!;
+            ApplicationRuleCatalog.Find(document, "infrastructure")!;
 
         string summary = ApplicationRulePresentationProjection.DescribeMatch(terminal);
 
@@ -106,7 +137,7 @@ public sealed class ApplicationRulePresentationTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule refined =
-            ApplicationRuleCatalog.Find(document, "remote-desktop")! with
+            ApplicationRuleCatalog.Find(document, "remote")! with
             {
                 ExecutablePaths = [@"C:\Windows\System32\mstsc.exe"],
                 WindowClasses = ["TscShellContainerClass"],
@@ -132,7 +163,7 @@ public sealed class ApplicationRulePresentationTests
     {
         ConfigurationDocument document = ApplicationRuleCatalog.SetEnabled(
             ConfigurationDefaults.Create(),
-            "browsers",
+            "run-observe",
             false);
 
         ApplicationRulePresentation browsers =
@@ -141,7 +172,7 @@ public sealed class ApplicationRulePresentationTests
         Assert.IsFalse(browsers.IsEnabled);
         Assert.AreEqual("Disabled", browsers.EnabledLabel);
         Assert.Contains(
-            "msedge.exe, chrome.exe",
+            "msedge.exe",
             browsers.MatchSummary,
             StringComparison.Ordinal);
     }
@@ -151,7 +182,7 @@ public sealed class ApplicationRulePresentationTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule orphan =
-            ApplicationRuleCatalog.Find(document, "vscode")! with
+            ApplicationRuleCatalog.Find(document, "ide-development")! with
             {
                 TargetDesktopKey = "removed",
             };
@@ -200,14 +231,14 @@ public sealed class ApplicationRulePresentationTests
         ImmutableDictionary<string, DateTimeOffset> lastMatches =
             ApplicationRulePresentationProjection.ProjectLastMatches(
             [
-                Matched("vscode", Now.AddHours(-3)),
-                Matched("vscode", Now.AddMinutes(-30)),
-                Matched("browsers", Now.AddHours(-1)),
+                Matched("ide-development", Now.AddHours(-3)),
+                Matched("ide-development", Now.AddMinutes(-30)),
+                Matched("run-observe", Now.AddHours(-1)),
                 Skipped(Now),
             ]);
 
-        Assert.AreEqual(Now.AddMinutes(-30), lastMatches["vscode"]);
-        Assert.AreEqual(Now.AddHours(-1), lastMatches["browsers"]);
+        Assert.AreEqual(Now.AddMinutes(-30), lastMatches["ide-development"]);
+        Assert.AreEqual(Now.AddHours(-1), lastMatches["run-observe"]);
         Assert.HasCount(2, lastMatches);
     }
 
@@ -217,14 +248,14 @@ public sealed class ApplicationRulePresentationTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
         ApplicationRulePresentation terminal =
-            ApplicationRulePresentationProjection.Project(document, [], Now)[2];
+            ApplicationRulePresentationProjection.Project(document, [], Now)[3];
 
         foreach (string expected in new[]
         {
-            "Windows Terminal",
+            "Infrastructure",
             "Enabled",
             "Packaged identity",
-            "Assigns to Terminal",
+            "Assigns to Infrastructure",
             "All triggers",
             "No matches recorded",
         })
@@ -242,9 +273,12 @@ public sealed class ApplicationRulePresentationTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
         string details = ApplicationRulePresentationProjection.DescribeAdvancedDetails(
-            ApplicationRuleCatalog.Find(document, "vscode")!);
+            ApplicationRuleCatalog.Find(document, "ide-development")!);
 
-        Assert.Contains("Identifier: vscode", details, StringComparison.Ordinal);
+        Assert.Contains(
+            "Identifier: ide-development",
+            details,
+            StringComparison.Ordinal);
         Assert.Contains(
             "Package family names: none",
             details,
@@ -266,17 +300,17 @@ public sealed class ApplicationRulePresentationTests
             WindowEventKind.ManualReassignment,
             EnumeratedWindowCount: 12,
             [
-                Assignment("vscode", WindowMoveOutcome.Succeeded),
-                Assignment("vscode", WindowMoveOutcome.AlreadyCorrect),
+                Assignment("ide-development", WindowMoveOutcome.Succeeded),
+                Assignment("ide-development", WindowMoveOutcome.AlreadyCorrect),
                 Assignment(
-                    "vscode",
+                    "ide-development",
                     WindowMoveOutcome.Failed,
                     WindowAssignmentOutcome.Failed),
-                Assignment("browsers", WindowMoveOutcome.Succeeded),
+                Assignment("run-observe", WindowMoveOutcome.Succeeded),
             ]);
 
         ApplicationRuleReassignmentSummary summary =
-            ApplicationRulePresentationProjection.Summarize(batch, "vscode");
+            ApplicationRulePresentationProjection.Summarize(batch, "ide-development");
 
         Assert.AreEqual(12, summary.EnumeratedWindowCount);
         Assert.AreEqual(3, summary.MatchedWindowCount);
@@ -303,7 +337,7 @@ public sealed class ApplicationRulePresentationTests
         Assert.AreEqual(
             "No open window matched this rule. 7 windows were checked.",
             ApplicationRulePresentationProjection
-                .Summarize(batch, "vscode")
+                .Summarize(batch, "ide-development")
                 .Message);
     }
 

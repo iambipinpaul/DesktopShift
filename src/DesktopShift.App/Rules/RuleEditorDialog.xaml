@@ -125,9 +125,10 @@
                 <StackPanel Grid.Column="1" Spacing="4">
                     <ComboBox
                         HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="Target managed desktop"
+                        AutomationProperties.HelpText="Choose a Managed Desktop, or Anywhere to leave this app wherever it opens."
+                        AutomationProperties.Name="Rule destination"
                         DisplayMemberPath="DisplayName"
-                        Header="Managed desktop"
+                        Header="Destination"
                         ItemsSource="{x:Bind ViewModel.ManagedDesktops}"
                         SelectedIndex="{x:Bind ViewModel.SelectedDesktopIndex, Mode=TwoWay}" />
                     <TextBlock
@@ -139,6 +140,7 @@
                 <ToggleSwitch
                     Grid.Column="2"
                     VerticalAlignment="Bottom"
+                    AutomationProperties.HelpText="A disabled rule stops naming its app, and a window no rule names is moved to the first desktop. To leave an app alone instead, set its destination to Anywhere."
                     AutomationProperties.Name="Rule enabled"
                     IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"
                     OffContent="Disabled"
@@ -163,6 +165,11 @@
                         Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.ProcessNamesError), Mode=OneWay}" />
                 </StackPanel>
             </Grid>
+
+            <TextBlock
+                Style="{StaticResource DesktopShift.CaptionStyle}"
+                Text="A window that no enabled rule names is moved to the first desktop. Choose Anywhere to leave an app exactly where it opens — disabling a rule does not do that, it unmanages the app instead."
+                TextWrapping="Wrap" />
 
             <Expander
                 HorizontalAlignment="Stretch"
@@ -245,7 +252,7 @@
                             Text="{x:Bind ViewModel.IdError, Mode=OneWay}"
                             Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.IdError), Mode=OneWay}" />
                     </StackPanel>
-                    <StackPanel Spacing="4">
+                    <StackPanel Spacing="4" Visibility="{x:Bind rules:RuleIconSource.WhenTrue(ViewModel.IsPlacementConfigurable), Mode=OneWay}">
                         <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Triggers" />
                         <StackPanel AutomationProperties.Name="Rule triggers" Spacing="2">
                             <CheckBox Content="Window created" IsChecked="{x:Bind ViewModel.TriggerWindowCreated, Mode=TwoWay}" />
@@ -260,7 +267,7 @@
                             Text="{x:Bind ViewModel.TriggersError, Mode=OneWay}"
                             Visibility="{x:Bind rules:RuleIconSource.TextVisibility(ViewModel.TriggersError), Mode=OneWay}" />
                     </StackPanel>
-                    <StackPanel Spacing="4">
+                    <StackPanel Spacing="4" Visibility="{x:Bind rules:RuleIconSource.WhenTrue(ViewModel.IsPlacementConfigurable), Mode=OneWay}">
                         <ComboBox
                             HorizontalAlignment="Stretch"
                             AutomationProperties.Name="Desktop switch policy"

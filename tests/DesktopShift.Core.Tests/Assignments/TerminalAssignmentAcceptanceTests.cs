@@ -43,8 +43,8 @@ public sealed class TerminalAssignmentAcceptanceTests
                 new WindowEvent(100, WindowEventKind.Created, (nint)801, Now));
 
         Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
-        Assert.AreEqual("windows-terminal", observation.RuleId);
-        Assert.AreEqual("terminal", observation.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", observation.RuleId);
+        Assert.AreEqual("infrastructure", observation.TargetDesktopKey);
 
         // The packaged identity, not the executable name, selected the rule.
         Assert.AreEqual(
@@ -57,8 +57,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
             observation.Assignment!.Outcome);
-        Assert.AreEqual("windows-terminal", observation.Assignment.RuleId);
-        Assert.AreEqual("terminal", observation.Assignment.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", observation.Assignment.RuleId);
+        Assert.AreEqual("infrastructure", observation.Assignment.TargetDesktopKey);
         Assert.AreEqual(TerminalDesktopId, observation.Assignment.TargetDesktopId);
         Assert.AreEqual(WindowMoveOutcome.Succeeded, observation.Assignment.MoveOutcome);
         Assert.HasCount(1, harness.Placement.Moves);
@@ -99,8 +99,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.IsTrue(assignments.All(
             static assignment =>
                 assignment.Outcome == WindowAssignmentOutcome.Succeeded &&
-                assignment.RuleId == "windows-terminal" &&
-                assignment.TargetDesktopKey == "terminal" &&
+                assignment.RuleId == "infrastructure" &&
+                assignment.TargetDesktopKey == "infrastructure" &&
                 assignment.TargetDesktopId == TerminalDesktopId));
 
         // Each window carries its own correlation and its own move. One window
@@ -192,8 +192,15 @@ public sealed class TerminalAssignmentAcceptanceTests
     {
         // wt.exe forwards its command line to the already running
         // WindowsTerminal.exe host and exits, so it never owns a window. Only
-        // the host window may be claimed; the launcher and whatever the user was
-        // working in must be left exactly where they are.
+        // the host window may be claimed by the Infrastructure rule; nothing
+        // else may be dragged onto that desktop.
+        //
+        // The other two windows show the remaining tiers. The launcher is named
+        // by no rule, so the sweep answers for it — and because this host
+        // registers no topology provider it cannot locate the first desktop, so
+        // the sweep degrades exactly as a rule-driven assignment would and moves
+        // nothing. The window the user was working in is Notepad, which a
+        // shipped Anywhere rule names, so it is left alone by design.
         TerminalHarness harness = new([]);
         harness.Classifier.SetWindowClass(832, UnrelatedWindowClass);
         harness.IdentityResolver.SetUnpackagedProcess(831, LauncherProcessName);
@@ -218,21 +225,26 @@ public sealed class TerminalAssignmentAcceptanceTests
         WindowObservationActivity terminalHost = await processor.ProcessAsync(
             new WindowEvent(132, WindowEventKind.Shown, (nint)833, Now));
 
-        Assert.AreEqual(WindowObservationOutcome.Skipped, launcher.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, launcher.SkipReason);
-        Assert.IsNull(launcher.RuleId);
-        Assert.IsNull(launcher.TargetDesktopKey);
-        Assert.IsNull(launcher.Assignment);
+        // No rule names wt.exe, so the sweep answers rather than the terminal
+        // rule. It never claimed a match signal, because it matched nothing.
+        Assert.AreEqual(WindowObservationOutcome.Matched, launcher.Outcome);
+        Assert.AreEqual(UnmanagedWindowSweep.RuleId, launcher.RuleId);
         Assert.IsNull(launcher.MatchedOn);
+        Assert.AreEqual(
+            WindowAssignmentSkipReason.TargetDesktopUnresolved,
+            launcher.Assignment!.SkipReason);
+        Assert.AreEqual(
+            WindowMoveOutcome.NotAttempted,
+            launcher.Assignment.MoveOutcome);
 
         Assert.AreEqual(WindowObservationOutcome.Skipped, unrelated.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, unrelated.SkipReason);
+        Assert.AreEqual(WindowSkipReason.AllowedAnywhere, unrelated.SkipReason);
         Assert.IsNull(unrelated.RuleId);
         Assert.IsNull(unrelated.Assignment);
         Assert.AreEqual(UnrelatedProcessName, unrelated.Identity!.ProcessName);
 
         Assert.AreEqual(WindowObservationOutcome.Matched, terminalHost.Outcome);
-        Assert.AreEqual("windows-terminal", terminalHost.RuleId);
+        Assert.AreEqual("infrastructure", terminalHost.RuleId);
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
             terminalHost.Assignment!.Outcome);
@@ -270,8 +282,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.IsNull(observation.Identity!.PackageFamilyName);
         Assert.IsNull(observation.Identity.AppUserModelId);
         Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
-        Assert.AreEqual("windows-terminal", observation.RuleId);
-        Assert.AreEqual("terminal", observation.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", observation.RuleId);
+        Assert.AreEqual("infrastructure", observation.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, observation.MatchedOn);
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
@@ -304,14 +316,14 @@ public sealed class TerminalAssignmentAcceptanceTests
                 (nint)851,
                 Now.AddMilliseconds(500)));
 
-        Assert.AreEqual("windows-terminal", first.RuleId);
-        Assert.AreEqual("terminal", first.TargetDesktopKey);
+        Assert.AreEqual("infrastructure", first.RuleId);
+        Assert.AreEqual("infrastructure", first.TargetDesktopKey);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, first.AssignmentOutcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
             first.Assignment!.SkipReason);
         Assert.AreEqual(WindowMoveOutcome.AlreadyCorrect, first.Assignment.MoveOutcome);
-        Assert.AreEqual("windows-terminal", repeat.RuleId);
+        Assert.AreEqual("infrastructure", repeat.RuleId);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, repeat.AssignmentOutcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
@@ -429,8 +441,8 @@ public sealed class TerminalAssignmentAcceptanceTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "terminal",
-                "Terminal",
+                "infrastructure",
+                "Infrastructure",
                 3,
                 true,
                 TerminalDesktopId,

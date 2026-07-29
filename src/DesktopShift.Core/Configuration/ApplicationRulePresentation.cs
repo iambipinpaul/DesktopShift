@@ -159,8 +159,16 @@ public static class ApplicationRulePresentationProjection
         string matchSummary = DescribeMatch(rule);
         string strength = DescribeIdentityStrength(rule);
         string target = DescribeTarget(rule, document);
-        string triggers = DescribeTriggers(rule.Triggers);
-        string switchPolicy = DescribeSwitchPolicy(rule.SwitchPolicy);
+
+        // An Anywhere rule never moves a window, so neither the triggers that
+        // would start a move nor the policy that would follow one describes
+        // anything it does.
+        string triggers = rule.AllowsAnywhere
+            ? "Not used"
+            : DescribeTriggers(rule.Triggers);
+        string switchPolicy = rule.AllowsAnywhere
+            ? DescribeSwitchPolicy(DesktopSwitchPolicy.Never)
+            : DescribeSwitchPolicy(rule.SwitchPolicy);
         string enabledLabel = rule.IsEnabled ? "Enabled" : "Disabled";
         string lastMatch = DescribeLastMatch(lastMatchUtc, nowUtc);
 
@@ -305,7 +313,7 @@ public static class ApplicationRulePresentationProjection
     }
 
     /// <summary>
-    /// Names the Managed Desktop a rule assigns to.
+    /// Names the destination of a rule: a Managed Desktop, or Anywhere.
     /// </summary>
     /// <param name="rule">The rule being described.</param>
     /// <param name="document">The document holding the Managed Desktops.</param>
@@ -316,6 +324,11 @@ public static class ApplicationRulePresentationProjection
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(document);
+
+        if (rule.AllowsAnywhere)
+        {
+            return "Anywhere — stays where it opens";
+        }
 
         ManagedDesktopDefinition? desktop = document.ManagedDesktops.FirstOrDefault(
             candidate => string.Equals(
@@ -437,7 +450,9 @@ public static class ApplicationRulePresentationProjection
         List<string> lines =
         [
             $"Identifier: {rule.Id}",
-            $"Target key: {rule.TargetDesktopKey}",
+            rule.AllowsAnywhere
+                ? "Destination: Anywhere"
+                : $"Target key: {rule.TargetDesktopKey}",
             $"Package family names: {FormatList(rule.PackageFamilyNames)}",
             $"AppUserModelIds: {FormatList(rule.AppUserModelIds)}",
             $"Executable paths: {FormatList(rule.ExecutablePaths)}",

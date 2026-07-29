@@ -125,7 +125,7 @@ public sealed class RunningApplicationInventoryTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "windows-terminal")!;
+            ApplicationRuleCatalog.Find(document, "infrastructure")!;
 
         ApplicationRuleTestResult result = ApplicationRuleTester.Test(
             terminal,
@@ -148,7 +148,7 @@ public sealed class RunningApplicationInventoryTests
         // A test answers "which windows does this identity describe", so it must
         // not be silenced by the two things that decide when the rule runs.
         ConfigurationDocument document = ConfigurationDefaults.Create();
-        ApplicationRule rule = ApplicationRuleCatalog.Find(document, "vscode")! with
+        ApplicationRule rule = ApplicationRuleCatalog.Find(document, "ide-development")! with
         {
             IsEnabled = false,
             Triggers = [ApplicationRuleTrigger.WindowCreated],
@@ -169,7 +169,7 @@ public sealed class RunningApplicationInventoryTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule rule =
-            ApplicationRuleCatalog.Find(document, "remote-desktop")! with
+            ApplicationRuleCatalog.Find(document, "remote")! with
             {
                 WindowClasses = ["TscShellContainerClass"],
             };
@@ -202,7 +202,7 @@ public sealed class RunningApplicationInventoryTests
         };
 
         ApplicationRuleTestResult result = ApplicationRuleTester.Test(
-            ApplicationRuleCatalog.Find(document, "vscode")!,
+            ApplicationRuleCatalog.Find(document, "ide-development")!,
             [identity]);
 
         Assert.AreEqual(1, result.MatchCount);

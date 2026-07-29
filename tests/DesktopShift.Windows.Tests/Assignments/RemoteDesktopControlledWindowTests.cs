@@ -155,7 +155,7 @@ public sealed class RemoteDesktopControlledWindowTests
         // The dialog reaches the Remote rule only through its owner, which is
         // exactly the behavior that keeps a credential prompt with its session
         // even when another process hosts the prompt.
-        Assert.AreEqual("remote-desktop", match!.Rule.Id);
+        Assert.AreEqual("remote", match!.Rule.Id);
         Assert.AreEqual("remote", match.Rule.TargetDesktopKey);
     }
 
