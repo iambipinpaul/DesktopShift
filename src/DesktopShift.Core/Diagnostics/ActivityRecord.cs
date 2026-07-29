@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Diagnostics;
@@ -27,6 +28,18 @@ public enum ActivityEventSource
 
     /// <summary>The overall outcome of the assignment.</summary>
     Assignment,
+
+    /// <summary>
+    /// A decision taken because the Windows virtual-desktop topology changed:
+    /// the semantic reconciliation itself, a recreation that was suppressed, a
+    /// desktop that only moved position, and whether a window pass followed.
+    /// </summary>
+    /// <remarks>
+    /// These events are not about one window, so they carry no window identity.
+    /// They exist so a user who deleted a desktop can read why DesktopShift did
+    /// — or deliberately did not — put it back.
+    /// </remarks>
+    Topology,
 }
 
 /// <summary>
@@ -69,6 +82,13 @@ public sealed record ActivityErrorDetail(
 /// <see cref="WindowIdentity"/>: window titles, browser URLs, executable paths,
 /// and command lines have no member to travel in.
 /// </remarks>
+/// <param name="TopologyReason">
+/// Why Windows said the virtual-desktop topology changed — <c>Destroyed</c>,
+/// <c>Moved</c>, and so on — on the events
+/// <see cref="ActivityEventSource.Topology"/> produces, and null on every other
+/// event. It is a structured member rather than prose in the summary because a
+/// reader chasing a recreation loop filters on it.
+/// </param>
 public sealed record ActivityRecord(
     Guid CorrelationId,
     Guid SessionId,
@@ -84,7 +104,8 @@ public sealed record ActivityRecord(
     string? TargetDesktopKey,
     TimeSpan? Duration = null,
     long? EventSequence = null,
-    ActivityErrorDetail? Error = null);
+    ActivityErrorDetail? Error = null,
+    string? TopologyReason = null);
 
 /// <summary>
 /// Projects the pipeline's own activity records onto the privacy-safe
@@ -225,6 +246,133 @@ public static class ActivityRecordFactory
 
         return records.ToImmutable();
     }
+
+    /// <summary>
+    /// Projects one topology-driven recovery pass into its reconciliation,
+    /// suppression, reorder, and window-pass events.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every event shares the pass's correlation identifier, so a reader who
+    /// finds a suppressed recreation can see the reconciliation that decided it
+    /// and whether a window pass followed, without correlating by timestamp.
+    /// </para>
+    /// <para>
+    /// The events carry no <see cref="WindowSafeIdentity"/> because a topology
+    /// decision is about desktops, not windows. The only names in them are
+    /// semantic keys and configured display names, both of which the user typed.
+    /// </para>
+    /// </remarks>
+    /// <param name="result">The completed pass to project.</param>
+    /// <param name="sessionId">The application run the events belong to.</param>
+    /// <returns>The events the pass produced, in the order it decided them.</returns>
+    public static ImmutableArray<ActivityRecord> FromTopologyRecovery(
+        ManagedDesktopTopologyRecoveryResult result,
+        Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        ImmutableArray<ActivityRecord>.Builder records =
+            ImmutableArray.CreateBuilder<ActivityRecord>();
+
+        records.Add(
+            CreateTopologyRecord(
+                result,
+                sessionId,
+                result.Outcome switch
+                {
+                    ManagedDesktopTopologyRecoveryOutcome.Failed =>
+                        ActivityResult.Failed,
+                    ManagedDesktopTopologyRecoveryOutcome.Reconciled =>
+                        ActivityResult.Succeeded,
+                    _ => ActivityResult.Skipped,
+                },
+                $"topology.{ToCode(result.Outcome)}",
+                result.Summary,
+                targetDesktopKey: null));
+
+        foreach (ManagedDesktopRecreationSuppression suppression in result.Suppressions)
+        {
+            records.Add(
+                CreateTopologyRecord(
+                    result,
+                    sessionId,
+                    ActivityResult.Skipped,
+                    "topology.recreation_suppressed",
+                    suppression.Reason,
+                    suppression.SemanticKey,
+                    new ActivityErrorDetail(
+                        suppression.Code,
+                        suppression.Reason)));
+        }
+
+        foreach (ManagedDesktopRuntimeRemap remap in result.Remaps)
+        {
+            records.Add(
+                CreateTopologyRecord(
+                    result,
+                    sessionId,
+                    ActivityResult.Succeeded,
+                    "topology.runtime_position_changed",
+                    $"'{remap.SemanticKey}' still maps to the same Windows desktop, now at position " +
+                    $"{Describe(remap.Position)} instead of {Describe(remap.PreviousPosition)}. " +
+                    "No rule and no window changed.",
+                    remap.SemanticKey));
+        }
+
+        records.Add(
+            CreateTopologyRecord(
+                result,
+                sessionId,
+                result.WindowReconciliationRan
+                    ? ActivityResult.Succeeded
+                    : ActivityResult.Skipped,
+                result.WindowReconciliationRan
+                    ? "topology.window_reconciliation_ran"
+                    : "topology.window_reconciliation_skipped",
+                result.WindowReconciliationRan
+                    ? $"A managed destination changed, so one window reconciliation inspected {result.WindowsInspected} windows."
+                    : "No managed destination changed, so no window was inspected or moved.",
+                targetDesktopKey: null));
+
+        return records.ToImmutable();
+    }
+
+    private static ActivityRecord CreateTopologyRecord(
+        ManagedDesktopTopologyRecoveryResult result,
+        Guid sessionId,
+        ActivityResult activityResult,
+        string resultCode,
+        string summary,
+        string? targetDesktopKey,
+        ActivityErrorDetail? error = null) =>
+        new(
+            result.CorrelationId,
+            sessionId,
+            result.OccurredAtUtc,
+            ActivityEventSource.Topology,
+
+            // A topology notification is not a window event, and
+            // WindowEventKind has no member that says so. StartupReconciliation
+            // is the closest available: it is the only value that names a
+            // reconciliation sweep rather than one window's lifecycle.
+            WindowEventKind.StartupReconciliation,
+            activityResult,
+            resultCode,
+            summary,
+            Application: null,
+            Identity: null,
+            RuleId: null,
+            targetDesktopKey,
+            Duration: null,
+            EventSequence: null,
+            error,
+            result.Reason);
+
+    private static string Describe(int? position) =>
+        position is int value
+            ? value.ToString(CultureInfo.InvariantCulture)
+            : "unknown";
 
     private static ActivityRecord CreateAssignmentStage(
         WindowAssignmentActivity activity,

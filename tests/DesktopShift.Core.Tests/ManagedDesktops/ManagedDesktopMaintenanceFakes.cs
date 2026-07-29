@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.ManagedDesktops;
+using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Tests.ManagedDesktops;
 
@@ -70,6 +72,33 @@ internal sealed class MaintenanceTopologyProvider : IDesktopTopologyProvider
                 CanObserveTopologyChanges: true),
             desktops);
 
+    /// <summary>
+    /// A provider that can read the topology but was never cleared to change it.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape of a partly validated adapter, and it is the only way
+    /// to prove that recreation checks the create capability rather than
+    /// assuming enumeration implies it.
+    /// </remarks>
+    public static MaintenanceTopologyProvider EnumerateOnly(
+        params VirtualDesktopDescriptor[] desktops) =>
+        new(
+            new DesktopTopologyProviderIdentity(
+                "test.enumerate_only",
+                "Test Enumerate Only",
+                "1",
+                DesktopTopologyProviderMode.Full,
+                UsesPrivateApis: false),
+            new VirtualDesktopCapabilities(
+                CanGetWindowDesktopId: true,
+                CanMoveWindowToDesktop: true,
+                CanEnumerateDesktops: true,
+                CanGetCurrentDesktop: true,
+                CanCreateDesktop: false,
+                CanSwitchDesktop: false,
+                CanObserveTopologyChanges: true),
+            desktops);
+
     public static MaintenanceTopologyProvider Limited() =>
         new(
             new DesktopTopologyProviderIdentity(
@@ -97,6 +126,39 @@ internal sealed class MaintenanceTopologyProvider : IDesktopTopologyProvider
     public void SimulateUserDeleted(Guid desktopId)
     {
         _ = desktops.RemoveAll(desktop => desktop.Id == desktopId);
+    }
+
+    /// <summary>
+    /// Reorders the inventory the way a user dragging a desktop in Task View
+    /// would: the same desktops, the same identifiers, new positions.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is created, removed, or renamed. A reorder that changed an
+    /// identifier would be a different event, and would prove nothing about the
+    /// behavior this fake exists to test.
+    /// </remarks>
+    public void SimulateUserReordered(params Guid[] desktopIdsInNewOrder)
+    {
+        ArgumentNullException.ThrowIfNull(desktopIdsInNewOrder);
+
+        if (desktopIdsInNewOrder.Length != desktops.Count ||
+            desktopIdsInNewOrder.Distinct().Count() != desktops.Count ||
+            desktopIdsInNewOrder.Any(id => desktops.All(desktop => desktop.Id != id)))
+        {
+            throw new ArgumentException(
+                "A reorder must name every existing desktop exactly once.",
+                nameof(desktopIdsInNewOrder));
+        }
+
+        VirtualDesktopDescriptor[] reordered = desktopIdsInNewOrder
+            .Select(
+                (id, position) => desktops.Single(desktop => desktop.Id == id) with
+                {
+                    Position = position,
+                })
+            .ToArray();
+        desktops.Clear();
+        desktops.AddRange(reordered);
     }
 
     public ValueTask<DesktopTopologyProviderResult> TestCompatibilityAsync(
@@ -267,4 +329,45 @@ internal sealed class MaintenanceConfigurationService : IConfigurationService
 internal sealed class MaintenanceTimeProvider(DateTimeOffset utcNow) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => utcNow;
+}
+
+/// <summary>
+/// A window reassignment pipeline that runs nothing and only counts.
+/// </summary>
+/// <remarks>
+/// The count is the point. "One relevant window reconciliation" is a claim about
+/// how many times this is called, and a fake that does no work cannot move a
+/// window even by accident.
+/// </remarks>
+internal sealed class RecordingWindowReassignmentService(
+    int enumeratedWindowCount = 0) : IWindowReassignmentService
+{
+    public int ReassignAllCallCount { get; private set; }
+
+    public int StartupCallCount { get; private set; }
+
+    public Task<WindowReassignmentBatchResult> ReconcileStartupAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        StartupCallCount++;
+        return Task.FromResult(CreateBatch(WindowEventKind.StartupReconciliation));
+    }
+
+    public Task<WindowReassignmentBatchResult> ReassignAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReassignAllCallCount++;
+        return Task.FromResult(CreateBatch(WindowEventKind.ManualReassignment));
+    }
+
+    private WindowReassignmentBatchResult CreateBatch(WindowEventKind trigger) =>
+        new(
+            Guid.NewGuid(),
+            DateTimeOffset.UnixEpoch,
+            TimeSpan.Zero,
+            trigger,
+            enumeratedWindowCount,
+            []);
 }

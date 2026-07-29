@@ -83,6 +83,16 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers semantic managed-desktop reconciliation and the topology
+    /// recovery that keeps it correct when the user edits their desktops.
+    /// </summary>
+    /// <remarks>
+    /// The window pass and the activity journal are resolved optionally. A test
+    /// host that wants mapping behavior alone registers this without the
+    /// assignment pipeline or diagnostics, and recovery degrades to reconciling
+    /// mappings rather than refusing to start.
+    /// </remarks>
     public static IServiceCollection AddDesktopShiftManagedDesktopReconciliation(
         this IServiceCollection services)
     {
@@ -91,10 +101,23 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<
             IManagedDesktopBindingStore,
             JsonManagedDesktopBindingStore>();
+        services.TryAddSingleton(
+            static _ => ManagedDesktopRecreationCooldownOptions.Default);
+        services.TryAddSingleton<ManagedDesktopRecreationCooldown>();
+        services.TryAddSingleton<IManagedDesktopRecreationGate>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                ManagedDesktopRecreationCooldown>());
         services.TryAddSingleton<ManagedDesktopReconciliationService>();
         services.TryAddSingleton<IManagedDesktopReconciliationService>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 ManagedDesktopReconciliationService>());
+        services.TryAddSingleton<IManagedDesktopTopologyRecoveryService>(
+            static serviceProvider => new ManagedDesktopTopologyRecoveryService(
+                serviceProvider.GetRequiredService<IManagedDesktopReconciliationService>(),
+                serviceProvider.GetRequiredService<IManagedDesktopRecreationGate>(),
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetService<IWindowReassignmentService>(),
+                serviceProvider.GetService<IActivityJournal>()));
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<
                 IHostedService,

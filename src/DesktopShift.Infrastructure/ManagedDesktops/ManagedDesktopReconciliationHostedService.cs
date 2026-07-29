@@ -5,11 +5,22 @@ using Microsoft.Extensions.Hosting;
 
 namespace DesktopShift.Infrastructure.ManagedDesktops;
 
+/// <summary>
+/// Drives managed-desktop reconciliation from application lifetime, the
+/// compatibility check, and Windows virtual-desktop topology notifications.
+/// </summary>
+/// <remarks>
+/// Topology notifications arrive in bursts and off a native callback thread, so
+/// they are queued onto a single continuation chain. One notification is handled
+/// to completion before the next one starts, which is what lets the recovery
+/// pass reason about "what changed since last time" at all.
+/// </remarks>
 internal sealed class ManagedDesktopReconciliationHostedService(
     IConfigurationService configurationService,
     ICompatibilityCoordinator compatibilityCoordinator,
     IDesktopTopologyProvider topologyProvider,
-    IManagedDesktopReconciliationService reconciliationService) :
+    IManagedDesktopReconciliationService reconciliationService,
+    IManagedDesktopTopologyRecoveryService topologyRecoveryService) :
     IHostedService,
     IDisposable
 {
@@ -94,15 +105,28 @@ internal sealed class ManagedDesktopReconciliationHostedService(
         }
     }
 
+    /// <summary>
+    /// Hands a topology notification to the recovery pass rather than
+    /// reconciling directly.
+    /// </summary>
+    /// <remarks>
+    /// The pass does more than reconcile: it bounds recreation, notes reorders,
+    /// and decides whether a single window reconciliation is warranted. Calling
+    /// the reconciliation service straight from here would skip all three.
+    /// </remarks>
     private void OnTopologyChanged(
         object? sender,
         DesktopTopologyChangedEventArgs args)
     {
-        _ = args;
-        QueueReconciliation(ManagedDesktopReconciliationTrigger.TopologyChanged);
+        ArgumentNullException.ThrowIfNull(args);
+        string reason = args.Reason;
+        Queue(token => topologyRecoveryService.HandleTopologyChangedAsync(reason, token));
     }
 
-    private void QueueReconciliation(ManagedDesktopReconciliationTrigger trigger)
+    private void QueueReconciliation(ManagedDesktopReconciliationTrigger trigger) =>
+        Queue(token => reconciliationService.ReconcileAsync(trigger, token));
+
+    private void Queue(Func<CancellationToken, Task> work)
     {
         lock (syncRoot)
         {
@@ -113,9 +137,7 @@ internal sealed class ManagedDesktopReconciliationHostedService(
 
             pendingReconciliation = pendingReconciliation
                 .ContinueWith(
-                    _ => reconciliationService.ReconcileAsync(
-                        trigger,
-                        lifetimeCancellation.Token),
+                    _ => work(lifetimeCancellation.Token),
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default)

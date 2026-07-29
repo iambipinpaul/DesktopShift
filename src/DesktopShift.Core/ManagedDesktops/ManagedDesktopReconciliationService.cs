@@ -12,6 +12,7 @@ public sealed class ManagedDesktopReconciliationService :
     private readonly IDesktopTopologyProvider topologyProvider;
     private readonly IManagedDesktopBindingStore bindingStore;
     private readonly TimeProvider timeProvider;
+    private readonly IManagedDesktopRecreationGate? recreationGate;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<string, ManagedDesktopBinding> sessionBindings =
         new(StringComparer.OrdinalIgnoreCase);
@@ -19,11 +20,19 @@ public sealed class ManagedDesktopReconciliationService :
         ManagedDesktopReconciliationSnapshot.NotRun;
     private bool disposed;
 
+    /// <param name="recreationGate">
+    /// The bound on recreations nobody asked for, or null to leave recreation
+    /// ungated. The gate is consulted only for
+    /// <see cref="ManagedDesktopReconciliationTrigger.TopologyChanged"/> passes:
+    /// startup, a saved configuration, and an explicit user action are all
+    /// intent, and intent is never rate limited.
+    /// </param>
     public ManagedDesktopReconciliationService(
         IConfigurationService configurationService,
         IDesktopTopologyProvider topologyProvider,
         IManagedDesktopBindingStore bindingStore,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IManagedDesktopRecreationGate? recreationGate = null)
     {
         this.configurationService =
             configurationService ?? throw new ArgumentNullException(nameof(configurationService));
@@ -33,6 +42,7 @@ public sealed class ManagedDesktopReconciliationService :
             bindingStore ?? throw new ArgumentNullException(nameof(bindingStore));
         this.timeProvider =
             timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        this.recreationGate = recreationGate;
     }
 
     public ManagedDesktopReconciliationSnapshot Current =>
@@ -305,6 +315,25 @@ public sealed class ManagedDesktopReconciliationService :
                 continue;
             }
 
+            // Policy and validated capability both said yes. The last question
+            // is whether this key is in the middle of a fight with the user,
+            // and only a topology-driven pass can be.
+            if (trigger == ManagedDesktopReconciliationTrigger.TopologyChanged &&
+                recreationGate is not null)
+            {
+                ManagedDesktopRecreationDecision decision =
+                    recreationGate.Evaluate(definition.SemanticKey);
+                if (!decision.IsAllowed)
+                {
+                    mappings.Add(CreateMapping(
+                        definition,
+                        ManagedDesktopMappingStatus.Missing,
+                        decision.Code,
+                        decision.Reason));
+                    continue;
+                }
+            }
+
             if (!metadataWritable)
             {
                 mappings.Add(CreateMapping(
@@ -363,6 +392,11 @@ public sealed class ManagedDesktopReconciliationService :
                 ManagedDesktopMappingStatus.Created,
                 "managed_desktops.desktop_created",
                 "A missing managed destination was created in preferred configuration order."));
+            if (trigger == ManagedDesktopReconciliationTrigger.TopologyChanged)
+            {
+                recreationGate?.NoteRecreated(definition.SemanticKey);
+            }
+
             ManagedDesktopBinding createdBinding =
                 new(definition.SemanticKey, createdId);
             resolvedBindings.Add(createdBinding);
