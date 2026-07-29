@@ -29,6 +29,7 @@ internal static partial class NativeMethods
         WindowMove = 13,
         LayoutProbe = 14,
         DesktopRename = 15,
+        ApplicationViewLookup = 16,
     }
 
     internal enum NativeTopologyReason : uint

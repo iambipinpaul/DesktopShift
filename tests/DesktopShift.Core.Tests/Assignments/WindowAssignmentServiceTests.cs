@@ -152,6 +152,46 @@ public sealed class WindowAssignmentServiceTests
     }
 
     [TestMethod]
+    public async Task UnplacedWindowTheShellHasNotRegisteredYet_IsSkippedNotFailed()
+    {
+        // The window the Shell has not caught up with fails both calls: the
+        // query has no desktop to report, and the move has no view to move. The
+        // next event places it, so neither is a failure the user can act on, and
+        // Activity must not show one.
+        DesktopTopologyProviderError notTracked = new(
+            "window_placement.window_not_tracked",
+            "The Windows Shell had not registered this window yet, so it was left where it is.",
+            unchecked((int)0x8002802B));
+        StubPlacementService placement = new(
+            new DesktopTopologyProviderResult<Guid>(
+                DesktopTopologyResultOutcome.Failed,
+                Guid.Empty,
+                notTracked),
+            new DesktopTopologyProviderResult(
+                DesktopTopologyResultOutcome.Failed,
+                notTracked));
+        BoundedWindowAssignmentActivityStore activities = new();
+        WindowAssignmentService service = new(
+            placement,
+            new BoundReconciliationService(),
+            activities,
+            TimeProvider.System);
+
+        WindowAssignmentActivity result = await service.AssignAsync(
+            CreateRequest((nint)130));
+
+        Assert.AreEqual(1, placement.MoveCallCount);
+        Assert.AreEqual(WindowAssignmentOutcome.Skipped, result.Outcome);
+        Assert.AreEqual(
+            WindowAssignmentSkipReason.WindowNotTracked,
+            result.SkipReason);
+        Assert.AreEqual(
+            WindowMoveOutcome.WindowUnavailable,
+            result.MoveOutcome);
+        Assert.IsNull(result.PreviousDesktopId);
+    }
+
+    [TestMethod]
     public async Task WindowBecomesStaleDuringMove_IsSkippedWithDiagnostics()
     {
         const int hResult = unchecked((int)0x8002802B);

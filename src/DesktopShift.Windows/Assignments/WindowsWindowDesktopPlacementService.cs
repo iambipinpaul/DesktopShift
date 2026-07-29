@@ -15,6 +15,7 @@ public sealed class WindowsWindowDesktopPlacementService :
     private const int AccessDeniedHResult = unchecked((int)0x80070005);
     private const int WindowNotTrackedHResult = unchecked((int)0x8002802B);
     private const string ManagerActivationStage = "ManagerActivation";
+    private const string ApplicationViewLookupStage = "ApplicationViewLookup";
     private const string WindowNotTrackedMessage =
         "Windows was not tracking this window on a virtual desktop.";
 
@@ -207,6 +208,9 @@ public sealed class WindowsWindowDesktopPlacementService :
     /// mapping from a refusal to a cause is contractual. A full-screen remote
     /// session lands here: it is a window Windows is managing itself, and the
     /// honest report is that the move was refused, with the code Windows gave.
+    /// The one refusal that is not a refusal is a window the Shell has not yet
+    /// given an application view, which the native bridge reports under its own
+    /// stage so it can be told apart from the move itself being rejected.
     /// </remarks>
     /// <param name="windowHandle">The window whose move was refused.</param>
     /// <param name="result">The refusal the validated Shell bridge returned.</param>
@@ -278,6 +282,23 @@ public sealed class WindowsWindowDesktopPlacementService :
             return DesktopTopologyProviderResult.Failed(
                 "window_placement.stale_window_handle",
                 "The window closed before it could be moved to the requested virtual desktop.",
+                error.HResult);
+        }
+
+        if (string.Equals(
+            error.Stage,
+            ApplicationViewLookupStage,
+            StringComparison.Ordinal))
+        {
+            // The Shell has no application view for this window yet, which is
+            // the same answer the desktop query gives while a window is still
+            // being registered, and so it is reported under the same code. A
+            // window shown a few milliseconds before the Shell caught up is not
+            // a refusal, and reporting it as one puts a failure in Activity for
+            // a window the very next event places correctly.
+            return DesktopTopologyProviderResult.Failed(
+                "window_placement.window_not_tracked",
+                "The Windows Shell had not registered this window yet, so it was left where it is.",
                 error.HResult);
         }
 

@@ -305,6 +305,39 @@ public sealed class WindowsWindowDesktopPlacementServiceTests
     }
 
     [TestMethod]
+    public async Task Move_ForAWindowTheShellHasNotRegisteredYet_IsNotARefusal()
+    {
+        // A window shown a few milliseconds before the Shell registers an
+        // application view for it fails here. The very next event places it, so
+        // reporting a refusal would put a failure in Activity for a window that
+        // is about to be correct. The stage is what says so: the same HRESULT
+        // from the move itself stays a refusal.
+        int hResult = unchecked((int)0x8002802B);
+        FakeDesktopManagerApi desktopManager = new()
+        {
+            MoveResult = FailedMove(
+                hResult,
+                stage: "ApplicationViewLookup",
+                code: "native.application_view_lookup",
+                message:
+                    "The Windows Shell could not resolve an application view for the window."),
+        };
+        using WindowsWindowDesktopPlacementService service = CreateService(
+            new FakeWindowHandleApi(),
+            desktopManager);
+
+        DesktopTopologyProviderResult result =
+            await service.MoveWindowToDesktopAsync(WindowHandle, DesktopId);
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Failed, result.Outcome);
+        Assert.AreEqual(
+            "window_placement.window_not_tracked",
+            result.Error?.Code);
+        Assert.AreEqual(hResult, result.Error?.HResult);
+        Assert.AreEqual(1, desktopManager.MoveCount);
+    }
+
+    [TestMethod]
     public async Task Move_PreservesTheManagerActivationStage()
     {
         int hResult = unchecked((int)0x80040154);

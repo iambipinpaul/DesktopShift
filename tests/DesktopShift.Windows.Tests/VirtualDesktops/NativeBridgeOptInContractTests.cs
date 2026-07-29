@@ -60,6 +60,7 @@ public sealed class NativeBridgeOptInContractTests
             Assert.AreEqual(13U, stages["WindowMove"]);
             Assert.AreEqual(14U, stages["LayoutProbe"]);
             Assert.AreEqual(15U, stages["DesktopRename"]);
+            Assert.AreEqual(16U, stages["ApplicationViewLookup"]);
         }
         finally
         {

@@ -1121,10 +1121,14 @@ namespace
                     view.ReleaseAndGetAddressOf());
                 if (FAILED(result) || view == nullptr)
                 {
+                    // Its own stage, because this is the one step in a move that
+                    // a window can fail simply by being too new. The Shell
+                    // registers a view shortly after the window is shown, so a
+                    // caller can read this as "not yet" rather than "refused".
                     return SetError(
                         error,
                         FAILED(result) ? result : HrContractMismatch,
-                        DesktopShiftNativeStageWindowMove,
+                        DesktopShiftNativeStageApplicationViewLookup,
                         L"The Windows Shell could not resolve an application view for the window.");
                 }
 

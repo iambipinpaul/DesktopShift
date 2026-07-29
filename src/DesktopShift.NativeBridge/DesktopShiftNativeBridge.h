@@ -29,6 +29,7 @@ extern "C"
         DesktopShiftNativeStageWindowMove = 13,
         DesktopShiftNativeStageLayoutProbe = 14,
         DesktopShiftNativeStageDesktopRename = 15,
+        DesktopShiftNativeStageApplicationViewLookup = 16,
     };
 
     enum DesktopShiftNativeTopologyReason : uint32_t
