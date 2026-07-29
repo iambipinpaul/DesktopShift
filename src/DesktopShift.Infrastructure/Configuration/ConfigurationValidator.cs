@@ -1,31 +1,54 @@
 using System.Collections.Immutable;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Hotkeys;
 
 namespace DesktopShift.Infrastructure.Configuration;
 
 internal static class ConfigurationValidator
 {
+    /// <summary>
+    /// Reports everything wrong with a document, without discarding any of it.
+    /// </summary>
+    /// <param name="candidate">The document as it was written or imported.</param>
+    /// <param name="expectedSchemaVersion">
+    /// The version a document has to declare by the time it reaches here. Passed
+    /// in rather than read from the constant because migrations run first, and a
+    /// validator that hard-coded the shipped version could never be shown to
+    /// accept a document that only a migration made current.
+    /// </param>
+    /// <returns>One issue per problem, in document order.</returns>
     public static ImmutableArray<ConfigurationValidationIssue> Validate(
-        ConfigurationDocument candidate)
+        ConfigurationDocument candidate,
+        int expectedSchemaVersion = ConfigurationDefaults.CurrentSchemaVersion)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
         ImmutableArray<ConfigurationValidationIssue>.Builder issues =
             ImmutableArray.CreateBuilder<ConfigurationValidationIssue>();
 
-        if (candidate.SchemaVersion != ConfigurationDefaults.CurrentSchemaVersion)
+        if (candidate.SchemaVersion != expectedSchemaVersion)
         {
             issues.Add(new ConfigurationValidationIssue(
                 ConfigurationValidationCode.UnsupportedSchemaVersion,
-                $"Schema version {candidate.SchemaVersion} is not supported. Expected version {ConfigurationDefaults.CurrentSchemaVersion}.",
+                $"Schema version {candidate.SchemaVersion} is not supported. Expected version {expectedSchemaVersion}.",
                 "$.schemaVersion",
                 ConfigurationEntryKind.Document));
         }
 
-        HashSet<string> desktopKeys = new(StringComparer.OrdinalIgnoreCase);
-        for (int index = 0; index < candidate.ManagedDesktops.Length; index++)
+        if (candidate.Behavior is null)
         {
-            ManagedDesktopDefinition desktop = candidate.ManagedDesktops[index];
+            issues.Add(RequiredValue(
+                "$.behavior",
+                ConfigurationEntryKind.Behavior,
+                entryId: null));
+        }
+
+        HashSet<string> desktopKeys = new(StringComparer.OrdinalIgnoreCase);
+        ImmutableArray<ManagedDesktopDefinition> managedDesktops =
+            candidate.ManagedDesktops.IsDefault ? [] : candidate.ManagedDesktops;
+        for (int index = 0; index < managedDesktops.Length; index++)
+        {
+            ManagedDesktopDefinition desktop = managedDesktops[index];
             string path = $"$.managedDesktops[{index}]";
 
             if (string.IsNullOrWhiteSpace(desktop.SemanticKey))
@@ -55,9 +78,11 @@ internal static class ConfigurationValidator
         }
 
         HashSet<string> ruleIds = new(StringComparer.OrdinalIgnoreCase);
-        for (int index = 0; index < candidate.ApplicationRules.Length; index++)
+        ImmutableArray<ApplicationRule> applicationRules =
+            candidate.ApplicationRules.IsDefault ? [] : candidate.ApplicationRules;
+        for (int index = 0; index < applicationRules.Length; index++)
         {
-            ApplicationRule rule = candidate.ApplicationRules[index];
+            ApplicationRule rule = applicationRules[index];
             string path = $"$.applicationRules[{index}]";
 
             if (string.IsNullOrWhiteSpace(rule.Id))
@@ -209,6 +234,15 @@ internal static class ConfigurationValidator
                     rule.Id));
             }
         }
+
+        // Hotkey problems are ordinary validation issues, reported here rather
+        // than only by the Settings page. A conflicting chord that reached the
+        // document would otherwise become active configuration and be discovered
+        // as two shortcuts that silently do one thing.
+        issues.AddRange(
+            HotkeyValidation.Validate(
+                candidate.Behavior is null ? [] : candidate.Behavior.Hotkeys,
+                requireComplete: candidate.Behavior?.AreHotkeysEnabled == true));
 
         return issues.ToImmutable();
     }

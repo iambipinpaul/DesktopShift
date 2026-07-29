@@ -2,17 +2,21 @@ using System.Diagnostics;
 using DesktopShift.App.Tray;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Activation;
+using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Hosting;
+using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Recovery;
+using DesktopShift.Infrastructure.Configuration;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
 using DesktopShift.Windows.Assignments;
 using DesktopShift.Windows.Compatibility;
+using DesktopShift.Windows.Hotkeys;
 using DesktopShift.Windows.Observation;
 using DesktopShift.Windows.Recovery;
 using DesktopShift.Windows.VirtualDesktops;
@@ -29,6 +33,8 @@ public partial class App : Application
     private DispatcherQueue? _dispatcherQueue;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
     private NotificationAreaCoordinator? _notificationArea;
+    private IGlobalHotkeyCoordinator? _hotkeyCoordinator;
+    private HotkeyCommandDispatcher? _hotkeyDispatcher;
     private ApplicationShutdownSequence? _shutdownSequence;
     private MainWindow? _window;
     private int _shutdownStarted;
@@ -45,6 +51,13 @@ public partial class App : Application
             // Registered after AddDesktopShiftFoundation, so this replaces the
             // in-memory default the foundation installs for tests.
             services.AddSingleton<IStartupRegistration, StartupTaskRegistration>();
+            services.AddDesktopShiftConfigurationExchange();
+            services.AddSingleton<
+                IGlobalHotkeyRegistrar,
+                WindowsGlobalHotkeyRegistrar>();
+            services.AddSingleton<
+                IForegroundWindowProvider,
+                WindowsForegroundWindowProvider>();
             services.AddSingleton<IWindowsBuildInfoProvider, EnvironmentWindowsBuildInfoProvider>();
             services.AddSingleton<ValidatedVirtualDesktopTopologyProvider>();
             services.AddSingleton<IDesktopTopologyProvider>(
@@ -116,8 +129,30 @@ public partial class App : Application
 
             _singleInstanceCoordinator.ActivationRequested += OnActivationRequested;
 
+            ConfigurationState startupConfiguration = await _host.Services
+                .GetRequiredService<IConfigurationService>()
+                .LoadAsync()
+                .ConfigureAwait(true);
+            BehaviorSettings startupBehavior =
+                BehaviorSettingsCommand.ResolveBehavior(startupConfiguration);
+            _host.Services
+                .GetRequiredService<IThemePreferenceService>()
+                .SetTheme(startupBehavior.Theme);
+            IAutomaticAssignmentPauseController startupPause =
+                _host.Services.GetRequiredService<
+                    IAutomaticAssignmentPauseController>();
+            if (startupBehavior.StartAssignmentPaused)
+            {
+                startupPause.Pause();
+            }
+            else
+            {
+                startupPause.Resume();
+            }
+
             await _host.StartAsync().ConfigureAwait(true);
-            await StartNotificationAreaAsync().ConfigureAwait(true);
+            await StartNotificationAreaAsync(startupConfiguration)
+                .ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -127,30 +162,41 @@ public partial class App : Application
         }
     }
 
-    private async Task StartNotificationAreaAsync()
+    private async Task StartNotificationAreaAsync(
+        ConfigurationState configuration)
     {
         MainWindow window = CreateMainWindow();
+        BehaviorSettings behavior =
+            BehaviorSettingsCommand.ResolveBehavior(configuration);
+        IAutomaticAssignmentPauseController pauseController =
+            _host.Services.GetRequiredService<
+                IAutomaticAssignmentPauseController>();
+
         NotificationAreaCoordinator notificationArea = new(
             new ShellNotifyIconHost(),
             new MainWindowShellSurface(window),
-            _host.Services.GetRequiredService<IAutomaticAssignmentPauseController>(),
+            pauseController,
             _host.Services.GetRequiredService<IWindowReassignmentService>(),
             _host.Services.GetRequiredService<IWindowAssignmentActivityProjection>(),
             _host.Services.GetRequiredService<ICompatibilityCoordinator>(),
-            ExitFromNotificationAreaAsync);
+            ExitFromNotificationAreaAsync,
+            new TrayNotificationPreferences(
+                behavior.NotifyOnAssignmentFailure,
+                behavior.NotifyOnCompatibilityWarning));
         _notificationArea = notificationArea;
         window.CloseRequestHandler = notificationArea.HandleWindowClosing;
+        window.AcceptedBehaviorHandler = accepted =>
+            notificationArea.UpdateNotificationPreferences(
+                new TrayNotificationPreferences(
+                    accepted.NotifyOnAssignmentFailure,
+                    accepted.NotifyOnCompatibilityWarning));
         _shutdownSequence = CreateShutdownSequence(notificationArea);
-
-        ConfigurationState configuration = await _host.Services
-            .GetRequiredService<IConfigurationService>()
-            .LoadAsync()
-            .ConfigureAwait(true);
         ShellLaunchDisposition disposition = ShellLifetimePolicy.ResolveLaunch(
-            BehaviorSettingsCommand.ResolveBehavior(configuration),
+            behavior,
             isFirstRunComplete: !configuration.IsFirstRun);
 
         notificationArea.Start(disposition);
+        StartHotkeys(behavior);
 
         if (disposition == ShellLaunchDisposition.StayInNotificationArea)
         {
@@ -163,6 +209,65 @@ public partial class App : Application
                 .RunCompatibilityTestAsync()
                 .ConfigureAwait(true);
         }
+    }
+
+    private void StartHotkeys(BehaviorSettings behavior)
+    {
+        IWindowReassignmentService reassignment =
+            _host.Services.GetRequiredService<IWindowReassignmentService>();
+        IForegroundWindowReassignment foreground =
+            _host.Services.GetRequiredService<IForegroundWindowReassignment>();
+        IAutomaticAssignmentPauseController pause =
+            _host.Services.GetRequiredService<
+                IAutomaticAssignmentPauseController>();
+
+        _hotkeyDispatcher = new HotkeyCommandDispatcher(
+            new HotkeyCommands(
+                async cancellationToken =>
+                {
+                    _ = await reassignment
+                        .ReassignAllAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                async cancellationToken =>
+                {
+                    _ = await foreground
+                        .ReassignForegroundWindowAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                cancellationToken =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _ = pause.TogglePause();
+                    return Task.CompletedTask;
+                },
+                OpenShellFromHotkeyAsync));
+
+        _hotkeyCoordinator =
+            _host.Services.GetRequiredService<IGlobalHotkeyCoordinator>();
+        _hotkeyCoordinator.Invoked += _hotkeyDispatcher.HandleInvoked;
+        _ = _hotkeyCoordinator.Apply(behavior.ToHotkeySettings());
+    }
+
+    private Task OpenShellFromHotkeyAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_dispatcherQueue?.HasThreadAccess is true)
+        {
+            _notificationArea?.HandleActivationRequested();
+            return Task.CompletedTask;
+        }
+
+        if (_dispatcherQueue?.TryEnqueue(
+            () => _notificationArea?.HandleActivationRequested()) is true)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.FromException(
+            new InvalidOperationException(
+                "DesktopShift could not return to its UI thread."));
     }
 
     private MainWindow CreateMainWindow()
@@ -184,6 +289,23 @@ public partial class App : Application
         // owns the WinEvent hooks and the topology provider registration.
         return new ApplicationShutdownSequence(
         [
+            new ShutdownStep(
+                "global hotkeys",
+                _ =>
+                {
+                    if (_hotkeyCoordinator is not null)
+                    {
+                        if (_hotkeyDispatcher is not null)
+                        {
+                            _hotkeyCoordinator.Invoked -=
+                                _hotkeyDispatcher.HandleInvoked;
+                        }
+
+                        _hotkeyCoordinator.Dispose();
+                    }
+
+                    return ValueTask.CompletedTask;
+                }),
             new ShutdownStep(
                 "notification area",
                 async _ => await notificationArea.DisposeAsync().ConfigureAwait(false)),
@@ -250,6 +372,7 @@ public partial class App : Application
         {
             _window.Closed -= OnMainWindowClosed;
             _window.CloseRequestHandler = null;
+            _window.AcceptedBehaviorHandler = null;
         }
 
         if (_shutdownSequence is not null)

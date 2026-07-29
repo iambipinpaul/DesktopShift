@@ -34,6 +34,15 @@
       Include="..\..\src\DesktopShift.App\ViewModels\BehaviorSettingsCommand.cs"
       Link="Production\BehaviorSettingsCommand.cs" />
     <Compile
+      Include="..\..\src\DesktopShift.App\Settings\HotkeyBindingEditor.cs"
+      Link="Production\HotkeyBindingEditor.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Settings\SettingsBehaviorEditor.cs"
+      Link="Production\SettingsBehaviorEditor.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\Settings\SettingsSectionCatalog.cs"
+      Link="Production\SettingsSectionCatalog.cs" />
+    <Compile
       Include="..\..\src\DesktopShift.App\Tray\TrayContracts.cs"
       Link="Production\TrayContracts.cs" />
     <Compile

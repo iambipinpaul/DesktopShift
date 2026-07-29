@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Hotkeys;
 
 namespace DesktopShift.Core.Configuration;
 
@@ -6,7 +7,12 @@ public static class ConfigurationDefaults
 {
     // Still version 1: packageFamilyNames, appUserModelIds, executablePaths and
     // windowClasses are optional trailing members, so a document written before
-    // they existed deserializes with them absent and they read as empty.
+    // they existed deserializes with them absent and they read as empty. The
+    // same is true of every setting added since — theme, the notification
+    // switches, the assignment pause, and the hotkey bindings all trail the
+    // required members of BehaviorSettings and read as their defaults when
+    // absent, so a version 1 document on disk is still a current document and
+    // nothing has to be migrated.
     public const int CurrentSchemaVersion = 1;
 
     private static readonly ImmutableArray<ApplicationRuleTrigger> AllTriggers =
@@ -96,7 +102,13 @@ public static class ConfigurationDefaults
             new BehaviorSettings(
                 StartWithWindows: true,
                 StartMinimized: true,
-                CloseToTray: true));
+                CloseToTray: true,
+                // The shipped chords are written into the document even though
+                // hotkeys start switched off, so the file says what the four
+                // shortcuts are instead of leaving a user to discover them in
+                // the UI. Nothing is claimed system-wide until
+                // AreHotkeysEnabled is turned on.
+                Hotkeys: HotkeyDefaults.Bindings));
     }
 
     private static ApplicationRule CreateRule(

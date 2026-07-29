@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Appearance;
+using DesktopShift.Core.Hotkeys;
 
 namespace DesktopShift.Core.Configuration;
 
@@ -128,10 +130,81 @@ public sealed record ApplicationRule(
         WindowClasses.IsDefault ? [] : WindowClasses;
 }
 
+/// <summary>
+/// Every preference the Settings page persists.
+/// </summary>
+/// <remarks>
+/// <para>
+/// One record rather than seven, because the configuration document is the only
+/// thing that is written atomically and recovered from a last-valid snapshot.
+/// A preference kept anywhere else would be the one that survives a crash
+/// differently from the rest.
+/// </para>
+/// <para>
+/// Every member added after the first three trails the originals and carries the
+/// value a document written before it existed should be read as. A schema
+/// version 1 document with no <c>theme</c>, no <c>hotkeys</c>, and no
+/// notification switches therefore still loads, and reads exactly as it behaved
+/// before those settings existed — which is why the schema version did not have
+/// to move.
+/// </para>
+/// </remarks>
+/// <param name="StartWithWindows">
+/// What the user asked for. Windows records separately what is actually
+/// registered, and the two can disagree.
+/// </param>
+/// <param name="StartMinimized">Launch to the notification area only.</param>
+/// <param name="CloseToTray">Closing the window hides it instead of exiting.</param>
+/// <param name="Theme">
+/// The appearance the shell starts in. Kept here rather than in a separate
+/// preference store so it survives the same way every other setting does.
+/// </param>
+/// <param name="StartAssignmentPaused">
+/// Whether automatic assignment starts paused. A user who pauses DesktopShift
+/// because a task needs windows left alone should not have to pause it again
+/// after every sign-in.
+/// </param>
+/// <param name="NotifyOnAssignmentFailure">
+/// Whether a failed assignment earns a notification-area balloon. Successes are
+/// silent by policy and are not configurable — see
+/// <c>TrayNotificationPolicy</c>.
+/// </param>
+/// <param name="NotifyOnCompatibilityWarning">
+/// Whether entering Limited Mode, or a failed compatibility test, interrupts.
+/// </param>
+/// <param name="AreHotkeysEnabled">
+/// The master switch for global shortcuts. Off by default: a global hotkey
+/// takes its combination away from every other application on the machine, so
+/// nothing is claimed until the user asks for it.
+/// </param>
+/// <param name="Hotkeys">The chord bound to each shortcut action.</param>
 public sealed record BehaviorSettings(
     bool StartWithWindows,
     bool StartMinimized,
-    bool CloseToTray);
+    bool CloseToTray,
+    AppTheme Theme = AppTheme.System,
+    bool StartAssignmentPaused = false,
+    bool NotifyOnAssignmentFailure = true,
+    bool NotifyOnCompatibilityWarning = true,
+    bool AreHotkeysEnabled = false,
+    ImmutableArray<HotkeyBinding> Hotkeys = default)
+{
+    /// <summary>
+    /// Hotkey bindings, normalized so an omitted collection is empty rather than
+    /// a default array. A default array cannot be enumerated, so an unnormalized
+    /// value would fail to serialize.
+    /// </summary>
+    public ImmutableArray<HotkeyBinding> Hotkeys { get; init; } =
+        Hotkeys.IsDefault ? [] : Hotkeys;
+
+    /// <summary>
+    /// The hotkey configuration as the coordinator consumes it, with a binding
+    /// filled in for every action so a document written before hotkeys existed
+    /// still describes four shortcuts.
+    /// </summary>
+    public HotkeySettings ToHotkeySettings() =>
+        new(AreHotkeysEnabled, HotkeyDefaults.Complete(Hotkeys));
+}
 
 public enum ApplicationRuleTrigger
 {

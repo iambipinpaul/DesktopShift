@@ -4,11 +4,19 @@ using DesktopShift.Core.Hosting;
 namespace DesktopShift.App.ViewModels;
 
 public sealed record BehaviorSettingsPresentation(
-    bool StartWithWindows,
-    bool StartMinimized,
-    bool CloseToTray,
+    BehaviorSettings Behavior,
+    BehaviorSettings ActiveBehavior,
+    bool Accepted,
+    IReadOnlyList<ConfigurationValidationIssue> Issues,
     string StartupStateDescription,
-    bool IsStartupToggleEnabled);
+    bool IsStartupToggleEnabled)
+{
+    public bool StartWithWindows => Behavior.StartWithWindows;
+
+    public bool StartMinimized => Behavior.StartMinimized;
+
+    public bool CloseToTray => Behavior.CloseToTray;
+}
 
 /// <summary>
 /// Reads and applies the quiet-utility behavior settings.
@@ -47,7 +55,13 @@ public sealed class BehaviorSettingsCommand
             .GetStateAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return Present(ResolveBehavior(state), startupState);
+        return Present(
+            state.Candidate.Behavior ?? ResolveBehavior(state),
+            ResolveBehavior(state),
+            state.Issues.IsEmpty,
+            state.Issues,
+            startupState,
+            startupFailure: null);
     }
 
     public async Task<BehaviorSettingsPresentation> ApplyAsync(
@@ -57,16 +71,47 @@ public sealed class BehaviorSettingsCommand
         ArgumentNullException.ThrowIfNull(behavior);
 
         ConfigurationState state = _configurationService.CurrentState;
-        ConfigurationDocument source = state.Active ?? state.Candidate;
+        // Settings edits continue from the retained candidate. Starting from
+        // the active document would discard every invalid imported entry as
+        // soon as the user corrected the first field.
+        ConfigurationDocument source = state.Candidate;
         ConfigurationSaveResult result = await _configurationService
             .SaveCandidateAsync(source with { Behavior = behavior }, cancellationToken)
             .ConfigureAwait(false);
 
-        StartupRegistrationState startupState = await _startupRegistration
-            .SetEnabledAsync(behavior.StartWithWindows, cancellationToken)
-            .ConfigureAwait(false);
+        StartupRegistrationState startupState;
+        string? startupFailure = null;
+        try
+        {
+            startupState = result.Accepted
+                ? await _startupRegistration
+                    .SetEnabledAsync(behavior.StartWithWindows, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _startupRegistration
+                    .GetStateAsync(cancellationToken)
+                    .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Configuration is already accepted at this point. Keep that fact
+            // visible and let the other live settings apply; startup
+            // registration is an external Windows side effect that can be
+            // retried independently.
+            startupState = StartupRegistrationState.Unavailable;
+            startupFailure = exception.Message;
+        }
 
-        return Present(ResolveBehavior(result.State), startupState);
+        return Present(
+            result.State.Candidate.Behavior ?? ResolveBehavior(result.State),
+            ResolveBehavior(result.State),
+            result.Accepted,
+            result.State.Issues,
+            startupState,
+            startupFailure);
     }
 
     /// <summary>
@@ -80,16 +125,25 @@ public sealed class BehaviorSettingsCommand
     public static BehaviorSettings ResolveBehavior(ConfigurationState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return (state.Active ?? state.Candidate).Behavior;
+        return state.Active?.Behavior ??
+            state.Candidate.Behavior ??
+            ConfigurationDefaults.Create().Behavior;
     }
 
     private static BehaviorSettingsPresentation Present(
-        BehaviorSettings behavior,
-        StartupRegistrationState startupState) =>
+        BehaviorSettings candidate,
+        BehaviorSettings active,
+        bool accepted,
+        IReadOnlyList<ConfigurationValidationIssue> issues,
+        StartupRegistrationState startupState,
+        string? startupFailure) =>
         new(
-            startupState.IsEnabled(),
-            behavior.StartMinimized,
-            behavior.CloseToTray,
-            startupState.Describe(),
+            candidate with { StartWithWindows = startupState.IsEnabled() },
+            active,
+            accepted,
+            issues,
+            startupFailure is null
+                ? startupState.Describe()
+                : $"Configuration was saved, but Windows startup registration failed: {startupFailure}",
             !startupState.IsLocked());
 }

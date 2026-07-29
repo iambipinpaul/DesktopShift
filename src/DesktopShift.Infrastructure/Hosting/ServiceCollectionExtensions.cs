@@ -4,6 +4,7 @@ using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
+using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Recovery;
@@ -11,6 +12,7 @@ using DesktopShift.Infrastructure.Appearance;
 using DesktopShift.Infrastructure.Assignments;
 using DesktopShift.Infrastructure.Configuration;
 using DesktopShift.Infrastructure.Diagnostics;
+using DesktopShift.Infrastructure.Hotkeys;
 using DesktopShift.Infrastructure.ManagedDesktops;
 using DesktopShift.Infrastructure.Observation;
 using DesktopShift.Infrastructure.Recovery;
@@ -42,6 +44,13 @@ public static class ServiceCollectionExtensions
             static serviceProvider => serviceProvider.GetRequiredService<ApplicationRuntimeState>());
         services.TryAddSingleton<IAutomaticAssignmentPauseController>(
             static serviceProvider => serviceProvider.GetRequiredService<ApplicationRuntimeState>());
+        services.TryAddSingleton<
+            IGlobalHotkeyRegistrar,
+            InMemoryGlobalHotkeyRegistrar>();
+        services.TryAddSingleton<GlobalHotkeyCoordinator>();
+        services.TryAddSingleton<IGlobalHotkeyCoordinator>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<GlobalHotkeyCoordinator>());
 
         // The in-memory registration is the safe default: it is what every test
         // host gets, so no test can write the machine's real login state. The
@@ -226,6 +235,15 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IWindowReassignmentService>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 WindowReassignmentService>());
+        if (services.Any(
+            static descriptor =>
+                descriptor.ServiceType == typeof(IForegroundWindowProvider)))
+        {
+            services.TryAddSingleton<ForegroundWindowReassignment>();
+            services.TryAddSingleton<IForegroundWindowReassignment>(
+                static serviceProvider => serviceProvider.GetRequiredService<
+                    ForegroundWindowReassignment>());
+        }
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<
                 IHostedService,

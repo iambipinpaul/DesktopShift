@@ -3,77 +3,85 @@
     x:Class="DesktopShift.App.Pages.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:settings="using:DesktopShift.App.Settings"
     AutomationProperties.Name="Settings page"
     Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="960" Margin="32,28" HorizontalAlignment="Left" Spacing="20">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="960"
+            Margin="32,28"
+            HorizontalAlignment="Left"
+            Spacing="20">
             <StackPanel Spacing="5">
                 <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Settings" />
-                <TextBlock Style="{StaticResource DesktopShift.PageSubtitleStyle}" Text="Review appearance and the exact capabilities available on this Windows build." />
+                <TextBlock
+                    Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                    Text="Control how DesktopShift starts, assigns windows, reports problems, and responds to global shortcuts." />
             </StackPanel>
 
+            <InfoBar
+                x:Name="SettingsStatus"
+                AutomationProperties.LiveSetting="Polite"
+                IsClosable="True"
+                IsOpen="False" />
+
             <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <Grid ColumnSpacing="20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="5">
-                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Appearance" />
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
                         <TextBlock
-                            MaxWidth="560"
+                            x:Name="StartupSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Startup and window behavior" />
+                        <TextBlock
                             Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                            Text="Choose System, Light, or Dark from the appearance control at the bottom of the navigation pane. The preference is saved for the next launch." />
+                            Text="Decide when DesktopShift starts and what its shell window does." />
                     </StackPanel>
-                    <FontIcon
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource DesktopShift.EmptyStateIconStyle}"
-                        Glyph="&#xE790;" />
-                </Grid>
+                    <ToggleSwitch
+                        x:Name="StartWithWindowsToggle"
+                        AutomationProperties.Name="Start with Windows"
+                        Header="Start with Windows"
+                        Toggled="OnPersistedBehaviorChanged" />
+                    <TextBlock x:Name="StartupStateValue" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                    <ToggleSwitch
+                        x:Name="StartMinimizedToggle"
+                        AutomationProperties.Name="Start minimized to the notification area"
+                        Header="Start minimized to the notification area"
+                        Toggled="OnPersistedBehaviorChanged" />
+                    <ToggleSwitch
+                        x:Name="CloseToTrayToggle"
+                        AutomationProperties.Name="Close to the notification area"
+                        Header="Close to the notification area"
+                        Toggled="OnPersistedBehaviorChanged" />
+                </StackPanel>
             </Border>
 
             <Border Style="{StaticResource DesktopShift.CardStyle}">
                 <StackPanel Spacing="16">
                     <StackPanel Spacing="4">
-                        <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Startup and window behavior" />
                         <TextBlock
-                            MaxWidth="560"
+                            x:Name="AssignmentSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Assignment" />
+                        <TextBlock
                             Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                            Text="DesktopShift runs from the notification area. These settings decide when it starts and what closing its window does." />
+                            Text="Pause automatic window events without disabling explicit reassignment." />
                     </StackPanel>
-
                     <ToggleSwitch
-                        x:Name="StartWithWindowsToggle"
-                        AutomationProperties.HelpText="Registers DesktopShift as a per-user startup app so it runs after you sign in."
-                        AutomationProperties.Name="Start with Windows"
-                        Header="Start with Windows"
-                        Toggled="OnBehaviorToggled" />
-                    <TextBlock
-                        x:Name="StartupStateValue"
-                        MaxWidth="560"
-                        Style="{StaticResource DesktopShift.CaptionStyle}" />
-
+                        x:Name="StartAssignmentPausedToggle"
+                        AutomationProperties.Name="Start automatic assignment paused"
+                        Header="Start automatic assignment paused"
+                        Toggled="OnPersistedBehaviorChanged" />
                     <ToggleSwitch
-                        x:Name="StartMinimizedToggle"
-                        AutomationProperties.HelpText="Starts DesktopShift in the notification area without opening its window."
-                        AutomationProperties.Name="Start minimized to the notification area"
-                        Header="Start minimized to the notification area"
-                        Toggled="OnBehaviorToggled" />
-
-                    <ToggleSwitch
-                        x:Name="CloseToTrayToggle"
-                        AutomationProperties.HelpText="Closing the window hides DesktopShift instead of exiting it. Use Exit in the notification area menu to stop it."
-                        AutomationProperties.Name="Close to the notification area"
-                        Header="Close to the notification area"
-                        Toggled="OnBehaviorToggled" />
-
-                    <InfoBar
-                        x:Name="BehaviorMessage"
-                        IsClosable="False"
-                        IsOpen="False"
-                        Severity="Warning"
-                        Title="Startup setting" />
+                        x:Name="AssignmentPausedToggle"
+                        AutomationProperties.Name="Automatic assignment paused now"
+                        Header="Pause automatic assignment now"
+                        Toggled="OnLivePauseToggled" />
+                    <Button
+                        x:Name="ReassignAllButton"
+                        AutomationProperties.Name="Reassign all windows now"
+                        Click="OnReassignAllClick"
+                        Content="Reassign all windows now"
+                        HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
 
@@ -85,10 +93,13 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="4">
-                            <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Windows compatibility" />
+                            <TextBlock
+                                x:Name="CompatibilitySectionTitle"
+                                Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                Text="Windows compatibility" />
                             <TextBlock
                                 Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                                Text="DesktopShift reports only capabilities proven available through its selected provider." />
+                                Text="Capabilities are reported from the provider selected for this Windows build." />
                         </StackPanel>
                         <Border
                             Grid.Column="1"
@@ -96,17 +107,10 @@
                             VerticalAlignment="Top"
                             Background="{ThemeResource DesktopShift.AccentSoftBrush}"
                             CornerRadius="999">
-                            <TextBlock
-                                x:Name="ModeValue"
-                                FontSize="12"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}" />
+                            <TextBlock x:Name="ModeValue" FontSize="12" FontWeight="SemiBold" />
                         </Border>
                     </Grid>
-
-                    <Rectangle Height="1" Fill="{ThemeResource DesktopShift.BorderBrush}" />
-
-                    <Grid RowSpacing="10" ColumnSpacing="20">
+                    <Grid RowSpacing="9" ColumnSpacing="20">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -118,41 +122,186 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Windows build" />
-                        <TextBlock x:Name="BuildValue" Grid.Column="1" Style="{StaticResource DesktopShift.BodyStyle}" />
+                        <TextBlock x:Name="BuildValue" Grid.Column="1" TextWrapping="Wrap" />
                         <TextBlock Grid.Row="1" Style="{StaticResource DesktopShift.CaptionStyle}" Text="Build support" />
-                        <TextBlock x:Name="BuildSupportValue" Grid.Row="1" Grid.Column="1" Style="{StaticResource DesktopShift.BodyStyle}" />
-                        <TextBlock Grid.Row="2" Style="{StaticResource DesktopShift.CaptionStyle}" Text="Topology provider" />
-                        <TextBlock x:Name="ProviderValue" Grid.Row="2" Grid.Column="1" Style="{StaticResource DesktopShift.BodyStyle}" />
+                        <TextBlock x:Name="BuildSupportValue" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="2" Style="{StaticResource DesktopShift.CaptionStyle}" Text="Provider" />
+                        <TextBlock x:Name="ProviderValue" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap" />
                         <TextBlock Grid.Row="3" Style="{StaticResource DesktopShift.CaptionStyle}" Text="Capabilities" />
-                        <TextBlock x:Name="CapabilitiesValue" Grid.Row="3" Grid.Column="1" Style="{StaticResource DesktopShift.BodyStyle}" />
+                        <TextBlock x:Name="CapabilitiesValue" Grid.Row="3" Grid.Column="1" TextWrapping="Wrap" />
                     </Grid>
-
                     <InfoBar
                         x:Name="LimitedModeExplanation"
                         IsClosable="False"
-                        IsIconVisible="True"
                         IsOpen="True"
                         Severity="Warning"
-                        Title="Why capabilities are limited" />
-
+                        Title="Provider details" />
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="3">
-                            <TextBlock x:Name="TestOutcomeValue" Style="{StaticResource DesktopShift.BodyStyle}" />
-                            <TextBlock x:Name="TestSummaryValue" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                            <TextBlock x:Name="TestOutcomeValue" />
+                            <TextBlock x:Name="TestSummaryValue" Style="{StaticResource DesktopShift.CaptionStyle}" TextWrapping="Wrap" />
                             <TextBlock x:Name="TestedAtValue" Style="{StaticResource DesktopShift.CaptionStyle}" />
                         </StackPanel>
                         <Button
                             x:Name="RunCompatibilityTestButton"
                             Grid.Column="1"
-                            VerticalAlignment="Center"
-                            AutomationProperties.HelpText="Checks the currently selected provider and refreshes its reported result."
                             Click="OnRunCompatibilityTestClick"
-                            Content="Run compatibility test" />
+                            Content="Run compatibility test"
+                            VerticalAlignment="Center" />
                     </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="NotificationsSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Notifications" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="Successful assignments stay silent. Choose which problems may interrupt you." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="AssignmentFailureNotificationToggle"
+                        AutomationProperties.Name="Notify on assignment failure"
+                        Header="Notify when a window assignment fails"
+                        Toggled="OnPersistedBehaviorChanged" />
+                    <ToggleSwitch
+                        x:Name="CompatibilityWarningNotificationToggle"
+                        AutomationProperties.Name="Notify on compatibility warning"
+                        Header="Notify when compatibility is limited or a test fails"
+                        Toggled="OnPersistedBehaviorChanged" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="AppearanceSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Appearance" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="The theme is saved with the rest of your configuration and applied immediately." />
+                    </StackPanel>
+                    <ComboBox
+                        x:Name="ThemePicker"
+                        AutomationProperties.Name="Application theme"
+                        Header="Theme"
+                        SelectionChanged="OnThemeSelectionChanged">
+                        <ComboBoxItem Content="Use system setting" Tag="System" />
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                        <ComboBoxItem Content="Dark" Tag="Dark" />
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="DiagnosticsSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Diagnostics" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="Logs stay local. Exporting or clearing happens only when you request it." />
+                    </StackPanel>
+                    <TextBlock x:Name="DiagnosticLogLocation" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Click="OnOpenLogLocationClick" Content="Open log location" />
+                        <Button x:Name="ExportDiagnosticsButton" Click="OnExportDiagnosticsClick" Content="Export diagnostic bundle…" />
+                        <Button Click="OnClearActivityClick" Content="Clear local activity" />
+                    </StackPanel>
+                    <Rectangle Height="1" Fill="{ThemeResource DesktopShift.BorderBrush}" />
+                    <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Portable configuration" />
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        Text="Exported JSON contains editable settings and rules, but no runtime desktop bindings or account-specific profile path." />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="ImportConfigurationButton" Click="OnImportConfigurationClick" Content="Import configuration…" />
+                        <Button x:Name="ExportConfigurationButton" Click="OnExportConfigurationClick" Content="Export configuration…" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource DesktopShift.CardStyle}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            x:Name="HotkeysSectionTitle"
+                            Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                            Text="Global shortcuts" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                            Text="Nothing is claimed system-wide until the master switch is enabled and the settings are applied." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="HotkeysEnabledToggle"
+                        AutomationProperties.Name="Enable global shortcuts"
+                        Header="Enable global shortcuts" />
+                    <ListView
+                        x:Name="HotkeyList"
+                        IsItemClickEnabled="False"
+                        SelectionMode="None">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="settings:HotkeyBindingEditor">
+                                <Border
+                                    Margin="0,4"
+                                    Padding="12"
+                                    Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                                    CornerRadius="8">
+                                    <StackPanel Spacing="9">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="2">
+                                                <TextBlock FontWeight="SemiBold" Text="{x:Bind ActionLabel}" />
+                                                <TextBlock
+                                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                    Text="{x:Bind Explanation}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                AutomationProperties.Name="{x:Bind ActionLabel}"
+                                                IsOn="{x:Bind IsEnabled, Mode=TwoWay}" />
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <CheckBox Content="Ctrl" IsChecked="{x:Bind Control, Mode=TwoWay}" />
+                                            <CheckBox Content="Alt" IsChecked="{x:Bind Alt, Mode=TwoWay}" />
+                                            <CheckBox Content="Shift" IsChecked="{x:Bind Shift, Mode=TwoWay}" />
+                                            <CheckBox Content="Win" IsChecked="{x:Bind Windows, Mode=TwoWay}" />
+                                            <ComboBox
+                                                MinWidth="130"
+                                                ItemsSource="{x:Bind KeyOptions}"
+                                                SelectedItem="{x:Bind Key, Mode=TwoWay}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <Button
+                        x:Name="ApplyHotkeysButton"
+                        HorizontalAlignment="Left"
+                        Click="OnApplyHotkeysClick"
+                        Content="Apply shortcuts" />
+                    <InfoBar
+                        x:Name="HotkeyStatus"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning"
+                        Title="Shortcut settings" />
                 </StackPanel>
             </Border>
         </StackPanel>

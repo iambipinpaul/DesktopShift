@@ -80,6 +80,74 @@ public sealed class BehaviorSettingsCommandTests
     }
 
     [TestMethod]
+    public async Task ApplyAsync_KeepsAcceptedConfigurationWhenStartupRegistrationThrows()
+    {
+        StubConfigurationService configuration = CreateConfiguration(
+            new BehaviorSettings(false, false, true));
+        BehaviorSettingsCommand command =
+            new(configuration, new ThrowingStartupRegistration());
+
+        BehaviorSettingsPresentation presentation = await command.ApplyAsync(
+            new BehaviorSettings(
+                StartWithWindows: true,
+                StartMinimized: true,
+                CloseToTray: true));
+
+        Assert.IsTrue(presentation.Accepted);
+        Assert.IsTrue(configuration.CurrentState.Active?.Behavior.StartMinimized);
+        Assert.Contains(
+            "Windows startup registration failed",
+            presentation.StartupStateDescription);
+        Assert.Contains("registration test failure", presentation.StartupStateDescription);
+    }
+
+    [TestMethod]
+    public async Task ApplyAsync_CorrectsTheRetainedCandidateWithoutDiscardingIt()
+    {
+        ConfigurationDocument active = ConfigurationDefaults.Create();
+        ConfigurationDocument candidate = active with
+        {
+            ApplicationRules =
+            [
+                .. active.ApplicationRules,
+                active.ApplicationRules[0] with { Id = "invalid-duplicate" },
+                active.ApplicationRules[0] with { Id = "invalid-duplicate" },
+            ],
+            Behavior = active.Behavior with
+            {
+                Theme = DesktopShift.Core.Appearance.AppTheme.Dark,
+            },
+        };
+        StubConfigurationService configuration = new(
+            new ConfigurationState(
+                candidate,
+                active,
+                [
+                    new ConfigurationValidationIssue(
+                        ConfigurationValidationCode.DuplicateRuleId,
+                        "duplicate",
+                        "$.applicationRules[5].id",
+                        ConfigurationEntryKind.ApplicationRule),
+                ],
+                DateTimeOffset.UnixEpoch));
+        BehaviorSettingsCommand command =
+            new(configuration, new FakeStartupRegistration());
+
+        _ = await command.ApplyAsync(
+            candidate.Behavior with { NotifyOnAssignmentFailure = false });
+
+        Assert.AreEqual(
+            candidate.ApplicationRules.Length,
+            configuration.CurrentState.Candidate.ApplicationRules.Length);
+        Assert.AreEqual(
+            DesktopShift.Core.Appearance.AppTheme.Dark,
+            configuration.CurrentState.Candidate.Behavior.Theme);
+        Assert.IsFalse(
+            configuration.CurrentState.Candidate.Behavior
+                .NotifyOnAssignmentFailure);
+    }
+
+    [TestMethod]
     public void ResolveBehavior_PrefersTheAcceptedDocument()
     {
         ConfigurationDocument accepted = ConfigurationDefaults.Create() with
@@ -129,5 +197,18 @@ public sealed class BehaviorSettingsCommandTests
                 document,
                 ImmutableArray<ConfigurationValidationIssue>.Empty,
                 DateTimeOffset.UnixEpoch));
+    }
+
+    private sealed class ThrowingStartupRegistration : IStartupRegistration
+    {
+        public ValueTask<StartupRegistrationState> GetStateAsync(
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(StartupRegistrationState.Disabled);
+
+        public ValueTask<StartupRegistrationState> SetEnabledAsync(
+            bool isEnabled,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<StartupRegistrationState>(
+                new InvalidOperationException("registration test failure"));
     }
 }

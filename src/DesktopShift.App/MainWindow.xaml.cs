@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using DesktopShift.App.FirstRun;
 using DesktopShift.App.Pages;
 using DesktopShift.App.Rules;
+using DesktopShift.App.Settings;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core;
 using DesktopShift.Core.Appearance;
@@ -13,6 +15,7 @@ using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
+using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Navigation;
 using DesktopShift.Core.Observation;
@@ -51,6 +54,7 @@ public sealed partial class MainWindow : Window
     private readonly IStartupRegistration _startupRegistration;
     private readonly IDiagnosticsCoordinator _diagnosticsCoordinator;
     private readonly RulesPageServices _rulesPageServices;
+    private readonly SettingsPageServices _settingsPageServices;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private FirstRunState? _firstRunState;
     private bool _isApplyingTheme;
@@ -70,6 +74,9 @@ public sealed partial class MainWindow : Window
         IWindowReassignmentService windowReassignmentService,
         IStartupRegistration startupRegistration,
         IDiagnosticsCoordinator diagnosticsCoordinator,
+        IConfigurationExchangeService configurationExchangeService,
+        IGlobalHotkeyCoordinator globalHotkeyCoordinator,
+        IAutomaticAssignmentPauseController assignmentPauseController,
         IRunningApplicationInventory runningApplicationInventory,
         IApplicationIconReader applicationIconReader,
         TimeProvider timeProvider)
@@ -114,6 +121,20 @@ public sealed partial class MainWindow : Window
                 throw new ArgumentNullException(nameof(applicationIconReader)),
             _windowReassignmentService,
             timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
+        _settingsPageServices = new SettingsPageServices(
+            _behaviorSettingsCommand,
+            configurationExchangeService ??
+                throw new ArgumentNullException(nameof(configurationExchangeService)),
+            globalHotkeyCoordinator ??
+                throw new ArgumentNullException(nameof(globalHotkeyCoordinator)),
+            _compatibilityCoordinator,
+            _diagnosticsCoordinator,
+            assignmentPauseController ??
+                throw new ArgumentNullException(nameof(assignmentPauseController)),
+            _windowReassignmentService,
+            _themePreferenceService,
+            timeProvider,
+            ApplyAcceptedBehavior);
 
         InitializeComponent();
 
@@ -146,6 +167,12 @@ public sealed partial class MainWindow : Window
     /// the code-behind only carries the answer back to the close event.
     /// </remarks>
     public Func<BehaviorSettings, ShellCloseDisposition>? CloseRequestHandler { get; set; }
+
+    /// <summary>
+    /// Lets the application shell update services it owns outside this window,
+    /// such as notification-area preferences.
+    /// </summary>
+    public Action<BehaviorSettings>? AcceptedBehaviorHandler { get; set; }
 
     public void Show()
     {
@@ -192,7 +219,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnThemeSelectionChanged(object sender, SelectionChangedEventArgs args)
+    private async void OnThemeSelectionChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_isApplyingTheme || ThemeSelector.SelectedItem is not ComboBoxItem selectedItem)
         {
@@ -202,9 +229,45 @@ public sealed partial class MainWindow : Window
         if (selectedItem.Tag is string themeName &&
             Enum.TryParse(themeName, ignoreCase: true, out AppTheme theme))
         {
-            _themePreferenceService.SetTheme(theme);
-            ApplyTheme(theme);
+            try
+            {
+                BehaviorSettings current =
+                    _configurationService.CurrentState.Candidate.Behavior ??
+                    BehaviorSettingsCommand.ResolveBehavior(
+                        _configurationService.CurrentState);
+                BehaviorSettingsPresentation saved =
+                    await _behaviorSettingsCommand.ApplyAsync(
+                        current with { Theme = theme },
+                        _lifetimeCancellation.Token);
+                if (saved.Accepted)
+                {
+                    ApplyAcceptedBehavior(saved.ActiveBehavior);
+                }
+                else
+                {
+                    ApplyTheme(saved.ActiveBehavior.Theme);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine(
+                    $"DesktopShift could not save the theme preference: {exception}");
+                ApplyTheme(
+                    BehaviorSettingsCommand.ResolveBehavior(
+                        _configurationService.CurrentState).Theme);
+            }
         }
+    }
+
+    private void ApplyAcceptedBehavior(BehaviorSettings behavior)
+    {
+        _themePreferenceService.SetTheme(behavior.Theme);
+        _ = _settingsPageServices.Hotkeys.Apply(
+            behavior.ToHotkeySettings());
+        AcceptedBehaviorHandler?.Invoke(behavior);
     }
 
     private void OnThemePreferenceChanged(object? sender, AppThemeChangedEventArgs args)
@@ -481,9 +544,9 @@ public sealed partial class MainWindow : Window
         else if (ContentFrame.Content is SettingsPage settingsPage)
         {
             settingsPage.Update(
+                _settingsPageServices,
                 compatibility,
                 RunCompatibilityTestAsync,
-                _behaviorSettingsCommand,
                 _lifetimeCancellation.Token);
         }
         else if (ContentFrame.Content is RulesPage rulesPage)

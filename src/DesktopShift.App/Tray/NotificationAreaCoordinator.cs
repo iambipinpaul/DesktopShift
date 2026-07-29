@@ -40,7 +40,7 @@ public sealed class NotificationAreaCoordinator : IAsyncDisposable
     private readonly IWindowAssignmentActivityProjection _assignmentActivity;
     private readonly ICompatibilityCoordinator _compatibilityCoordinator;
     private readonly WindowReassignmentCommand _reassignmentCommand;
-    private readonly TrayNotificationPreferences _notificationPreferences;
+    private TrayNotificationPreferences _notificationPreferences;
     private readonly Func<CancellationToken, Task> _exitAsync;
     private readonly object _syncRoot = new();
     private TrayMenuModel _currentMenu;
@@ -110,6 +110,22 @@ public sealed class NotificationAreaCoordinator : IAsyncDisposable
     }
 
     public bool IsPaused => _pauseController.IsPaused;
+
+    /// <summary>
+    /// Applies the persisted notification switches without recreating the tray
+    /// icon or its event subscriptions.
+    /// </summary>
+    public void UpdateNotificationPreferences(
+        TrayNotificationPreferences notificationPreferences)
+    {
+        ArgumentNullException.ThrowIfNull(notificationPreferences);
+
+        lock (_syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+            _notificationPreferences = notificationPreferences;
+        }
+    }
 
     /// <summary>
     /// Places the icon in the notification area and applies the launch
@@ -299,9 +315,15 @@ public sealed class NotificationAreaCoordinator : IAsyncDisposable
         object? sender,
         WindowAssignmentActivityRecordedEventArgs args)
     {
+        TrayNotificationPreferences preferences;
+        lock (_syncRoot)
+        {
+            preferences = _notificationPreferences;
+        }
+
         TrayNotification? notification = TrayNotificationPolicy.ForAssignment(
             args.Activity,
-            _notificationPreferences);
+            preferences);
         if (notification is not null)
         {
             _trayIconHost.Notify(notification);
@@ -314,9 +336,15 @@ public sealed class NotificationAreaCoordinator : IAsyncDisposable
         object? sender,
         CompatibilityStatusChangedEventArgs args)
     {
+        TrayNotificationPreferences preferences;
+        lock (_syncRoot)
+        {
+            preferences = _notificationPreferences;
+        }
+
         TrayNotification? notification = TrayNotificationPolicy.ForCompatibility(
             args.Status,
-            _notificationPreferences);
+            preferences);
         if (notification is not null)
         {
             _trayIconHost.Notify(notification);
