@@ -6,6 +6,31 @@ using Microsoft.Win32.SafeHandles;
 
 namespace DesktopShift.Windows.Observation;
 
+/// <summary>
+/// The only process access right DesktopShift ever asks Windows for.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <c>PROCESS_QUERY_LIMITED_INFORMATION</c> is the least right that satisfies
+/// every question DesktopShift asks about another process: its image file name,
+/// its package family name, and its application user model id. It is granted
+/// across integrity levels far more often than the wider query right, which is
+/// why an unelevated DesktopShift can classify most windows at all.
+/// </para>
+/// <para>
+/// It is deliberately a single named constant so that widening it — to
+/// <c>PROCESS_QUERY_INFORMATION</c>, to any memory right, or to full access —
+/// is a visible edit in one place rather than a changed literal at a call site.
+/// </para>
+/// </remarks>
+public static class ProcessAccessRights
+{
+    /// <summary>
+    /// <c>PROCESS_QUERY_LIMITED_INFORMATION</c>.
+    /// </summary>
+    public const uint QueryLimitedInformation = 0x1000;
+}
+
 public sealed record WindowIdentityResolutionOptions(
     bool IncludeWindowTitle = false,
     bool IncludeCommandLine = false);
@@ -37,10 +62,22 @@ public interface IWindowsCommandLineApi
         out uint requiredLength);
 }
 
+/// <summary>
+/// Reads a process's command line, and is used only when a caller explicitly
+/// asks for one.
+/// </summary>
+/// <remarks>
+/// A command line can carry a file path, a URL, or a credential, so it is never
+/// part of the identity DesktopShift matches rules on and has no member on
+/// <see cref="WindowSafeIdentity"/> to travel in. The default resolver does not
+/// construct this reader at all; see
+/// <see cref="WindowsProcessIdentityResolver"/>.
+/// </remarks>
 public sealed class WindowsProcessCommandLineReader :
     IProcessCommandLineReader
 {
-    private const uint QueryLimitedInformation = 0x1000;
+    private const uint QueryLimitedInformation =
+        ProcessAccessRights.QueryLimitedInformation;
     private readonly IWindowsCommandLineApi nativeApi;
 
     public WindowsProcessCommandLineReader(
@@ -165,9 +202,29 @@ public sealed class WindowsCommandLineApi : IWindowsCommandLineApi
     }
 }
 
+/// <summary>
+/// Resolves the identity DesktopShift matches rules on, using the least process
+/// access right that can answer the question.
+/// </summary>
+/// <remarks>
+/// <para>
+/// One handle is opened per window event, for
+/// <see cref="ProcessAccessRights.QueryLimitedInformation"/> only, and is closed
+/// before the method returns. No memory is read, no thread is touched, and no
+/// token is opened.
+/// </para>
+/// <para>
+/// A process running at a higher integrity level refuses even that handle.
+/// That is reported as
+/// <see cref="WindowIdentityResolutionFailure.AccessDenied"/> with the Windows
+/// error code intact, so the pipeline can skip the window and say why, rather
+/// than reaching for a wider right that would still be refused.
+/// </para>
+/// </remarks>
 public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
 {
-    private const uint QueryLimitedInformation = 0x1000;
+    private const uint QueryLimitedInformation =
+        ProcessAccessRights.QueryLimitedInformation;
     private const int ErrorAccessDenied = 5;
     private const int ErrorInvalidParameter = 87;
 
@@ -184,9 +241,16 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
     {
         this.windowApi = windowApi ?? new WindowsWindowNativeApi();
         this.processApi = processApi ?? new WindowsProcessIdentityApi();
-        this.commandLineReader =
-            commandLineReader ?? new WindowsProcessCommandLineReader();
         this.options = options ?? new WindowIdentityResolutionOptions();
+
+        // The shipping configuration asks for no command line, so the reader
+        // that would query one is not even constructed. A capability that is
+        // never built cannot be reached by a later accident.
+        this.commandLineReader =
+            commandLineReader ??
+            (this.options.IncludeCommandLine
+                ? new WindowsProcessCommandLineReader()
+                : new UnavailableProcessCommandLineReader());
     }
 
     public async ValueTask<WindowIdentityResolution> ResolveAsync(

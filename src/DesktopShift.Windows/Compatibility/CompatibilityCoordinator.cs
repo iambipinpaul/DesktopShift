@@ -7,16 +7,28 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
 {
     private readonly object syncRoot = new();
     private readonly IDesktopTopologyProvider provider;
+    private readonly PrivilegeBoundary privileges;
     private CompatibilityStatus current;
 
+    /// <param name="buildInfoProvider">The Windows build to classify.</param>
+    /// <param name="provider">The desktop topology provider to test.</param>
+    /// <param name="privilegeProvider">
+    /// Reads DesktopShift's own elevation state. It is optional so the
+    /// container can construct the coordinator without registering a probe that
+    /// only ever describes the current process.
+    /// </param>
     public CompatibilityCoordinator(
         IWindowsBuildInfoProvider buildInfoProvider,
-        IDesktopTopologyProvider provider)
+        IDesktopTopologyProvider provider,
+        IProcessPrivilegeProvider? privilegeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(buildInfoProvider);
         ArgumentNullException.ThrowIfNull(provider);
 
         this.provider = provider;
+        privileges = PrivilegeBoundary.ForProcess(
+            (privilegeProvider ?? new WindowsProcessPrivilegeProvider())
+                .IsCurrentProcessElevated());
 
         WindowsBuildInfo build = buildInfoProvider.GetCurrent();
         WindowsBuildAssessment assessment = WindowsBuildClassifier.Classify(build);
@@ -28,7 +40,8 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
                 provider.Capabilities,
                 DesktopTopologyProviderAvailability.NotTested,
                 GetProviderExplanation(provider)),
-            CompatibilityTestResult.NotRun);
+            CompatibilityTestResult.NotRun,
+            privileges);
     }
 
     public CompatibilityStatus Current
@@ -52,6 +65,7 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
             ImmutableArray.CreateBuilder<CompatibilityDiagnostic>();
 
         diagnostics.Add(BuildDetectedDiagnostic(before));
+        diagnostics.Add(PrivilegeBoundaryDiagnostic(privileges));
 
         DesktopTopologyProviderResult providerResult;
 
@@ -80,6 +94,7 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
                 Identity = provider.Identity,
                 Capabilities = provider.Capabilities,
             },
+            Privileges = privileges,
         };
         diagnostics.Add(ProviderSelectedDiagnostic(testedStatus));
         AddCapabilityDiagnostics(diagnostics, provider.Capabilities);
@@ -126,6 +141,30 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
             ("exactVersion", status.Build.ExactVersion),
             ("architecture", status.Build.Architecture.ToString()),
             ("support", status.BuildAssessment.Support.ToString()));
+
+    /// <summary>
+    /// States the privileges DesktopShift holds, which windows that leaves out
+    /// of reach, and that no elevated companion is implemented or required.
+    /// </summary>
+    /// <remarks>
+    /// This is emitted on every compatibility test, not only when something is
+    /// denied. A user who sees an access-denied row in Activity needs the
+    /// explanation to already be in the diagnostics they export, rather than
+    /// having to reproduce the denial to obtain it.
+    /// </remarks>
+    /// <param name="privileges">The boundary observed for this process.</param>
+    /// <returns>The diagnostic to record.</returns>
+    private static CompatibilityDiagnostic PrivilegeBoundaryDiagnostic(
+        PrivilegeBoundary privileges) =>
+        CompatibilityDiagnostic.Create(
+            "Compatibility.PrivilegeBoundary",
+            privileges.IsProcessElevated
+                ? CompatibilityDiagnosticSeverity.Warning
+                : CompatibilityDiagnosticSeverity.Information,
+            $"{privileges.Explanation} {privileges.ElevatedCompanionBoundary}",
+            ("processElevated", privileges.IsProcessElevated.ToString()),
+            ("requestsElevation", bool.FalseString),
+            ("elevatedCompanion", "not implemented; not required"));
 
     private static CompatibilityDiagnostic ProviderSelectedDiagnostic(CompatibilityStatus status) =>
         CompatibilityDiagnostic.Create(

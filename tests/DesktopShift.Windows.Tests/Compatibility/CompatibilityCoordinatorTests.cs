@@ -94,6 +94,96 @@ public sealed class CompatibilityCoordinatorTests
                 .Properties["code"]);
     }
 
+    [TestMethod]
+    public async Task RunCompatibilityTest_StatesThePrivilegeBoundaryAndTheCompanionThatDoesNotExist()
+    {
+        // The explanation is emitted on every run, not only after something is
+        // denied. A user who exports diagnostics after seeing an access-denied
+        // row must find the reason already in the bundle.
+        CompatibilityCoordinator coordinator = new(
+            new StubBuildInfoProvider(CreateBuild(26100)),
+            new StubProvider(DesktopTopologyProviderResult.Succeeded()),
+            new StubPrivilegeProvider(isElevated: false));
+
+        CompatibilityTestResult result =
+            await coordinator.RunCompatibilityTestAsync();
+
+        CompatibilityDiagnostic diagnostic = result.Diagnostics.Single(
+            static item => item.EventName == "Compatibility.PrivilegeBoundary");
+
+        Assert.AreEqual(
+            CompatibilityDiagnosticSeverity.Information,
+            diagnostic.Severity);
+        Assert.AreEqual(
+            bool.FalseString,
+            diagnostic.Properties["processElevated"]);
+        Assert.AreEqual(
+            bool.FalseString,
+            diagnostic.Properties["requestsElevation"]);
+        Assert.AreEqual(
+            "not implemented; not required",
+            diagnostic.Properties["elevatedCompanion"]);
+        StringAssert.Contains(diagnostic.Message, "0x80070005");
+        StringAssert.Contains(diagnostic.Message, "does not request elevation");
+        StringAssert.Contains(
+            diagnostic.Message,
+            "No such companion is implemented");
+        StringAssert.Contains(diagnostic.Message, "works without one");
+        Assert.IsFalse(coordinator.Current.Privileges!.IsProcessElevated);
+    }
+
+    [TestMethod]
+    public async Task RunCompatibilityTest_ElevatedProcess_IsWarnedAboutRatherThanRequired()
+    {
+        CompatibilityCoordinator coordinator = new(
+            new StubBuildInfoProvider(CreateBuild(26100)),
+            new StubProvider(DesktopTopologyProviderResult.Succeeded()),
+            new StubPrivilegeProvider(isElevated: true));
+
+        CompatibilityTestResult result =
+            await coordinator.RunCompatibilityTestAsync();
+
+        CompatibilityDiagnostic diagnostic = result.Diagnostics.Single(
+            static item => item.EventName == "Compatibility.PrivilegeBoundary");
+
+        Assert.AreEqual(
+            CompatibilityDiagnosticSeverity.Warning,
+            diagnostic.Severity);
+        Assert.AreEqual(
+            bool.TrueString,
+            diagnostic.Properties["processElevated"]);
+        Assert.AreEqual(
+            bool.FalseString,
+            diagnostic.Properties["requestsElevation"]);
+        StringAssert.Contains(diagnostic.Message, "neither requests nor needs");
+        Assert.IsTrue(coordinator.Current.Privileges!.IsProcessElevated);
+    }
+
+    [TestMethod]
+    public void Construction_PublishesThePrivilegeBoundaryBeforeAnyTestRuns()
+    {
+        // A user who never presses the compatibility button still gets the
+        // boundary, because it is stated as the coordinator is constructed.
+        CompatibilityCoordinator coordinator = new(
+            new StubBuildInfoProvider(CreateBuild(26100)),
+            new StubProvider(DesktopTopologyProviderResult.Succeeded()),
+            new StubPrivilegeProvider(isElevated: false));
+
+        PrivilegeBoundary? privileges = coordinator.Current.Privileges;
+
+        Assert.IsNotNull(privileges);
+        Assert.IsFalse(privileges.IsProcessElevated);
+        Assert.AreEqual(
+            PrivilegeBoundary.LeastPrivilegeExplanation,
+            privileges.Explanation);
+        Assert.AreEqual(
+            PrivilegeBoundary.ElevatedCompanionNotice,
+            privileges.ElevatedCompanionBoundary);
+        StringAssert.Contains(
+            privileges.Explanation,
+            "never asks Windows for more");
+    }
+
     private static WindowsBuildInfo CreateBuild(int buildNumber) =>
         new(
             isWindows: true,
@@ -102,6 +192,12 @@ public sealed class CompatibilityCoordinatorTests
             build: buildNumber,
             revision: 1,
             Architecture.X64);
+
+    private sealed class StubPrivilegeProvider(bool isElevated) :
+        IProcessPrivilegeProvider
+    {
+        public bool IsCurrentProcessElevated() => isElevated;
+    }
 
     private sealed class StubBuildInfoProvider : IWindowsBuildInfoProvider
     {

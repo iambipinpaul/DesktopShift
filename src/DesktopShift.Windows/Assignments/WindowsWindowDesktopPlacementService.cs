@@ -55,11 +55,7 @@ public sealed class WindowsWindowDesktopPlacementService :
             desktopManager.GetWindowDesktopId(windowHandle);
         if (!result.IsSuccess)
         {
-            return ValueTask.FromResult(
-                DesktopTopologyProviderResult<Guid>.Failed(
-                    GetFailureCode(result.Stage, "get_desktop_failed"),
-                    "Windows could not determine the window's virtual desktop.",
-                    result.HResult));
+            return ValueTask.FromResult(ClassifyQueryFailure(result));
         }
 
         if (result.DesktopId == Guid.Empty)
@@ -217,7 +213,8 @@ public sealed class WindowsWindowDesktopPlacementService :
         {
             return DesktopTopologyProviderResult.Failed(
                 "window_placement.move_access_denied",
-                "Windows denied access to the window, so it was not moved to the requested virtual desktop.",
+                "Windows denied access to the window, so it was not moved to the requested virtual desktop. " +
+                PrivilegeBoundary.DeniedWindowExplanation,
                 result.HResult);
         }
 
@@ -238,10 +235,47 @@ public sealed class WindowsWindowDesktopPlacementService :
             result.HResult);
     }
 
-    private static string GetFailureCode(string stage, string operation) =>
-        string.Equals(stage, ManagerActivationStage, StringComparison.Ordinal)
-            ? "window_placement.manager_activation_failed"
-            : $"window_placement.{operation}";
+    /// <summary>
+    /// Turns a refused desktop query into a failure a reader of Activity can act
+    /// on, using the same distinctions a refused move draws.
+    /// </summary>
+    /// <remarks>
+    /// An elevated application's window is refused here first, before any move
+    /// is attempted, so this is the path that most often carries the privilege
+    /// boundary to the user. It is reported as its own code rather than folded
+    /// into the generic query failure, because "denied" and "unknown" call for
+    /// different responses.
+    /// </remarks>
+    /// <param name="result">The refusal the documented manager returned.</param>
+    /// <returns>A failed result naming the most specific known cause.</returns>
+    private static DesktopTopologyProviderResult<Guid> ClassifyQueryFailure(
+        DocumentedDesktopIdResult result)
+    {
+        if (string.Equals(
+            result.Stage,
+            ManagerActivationStage,
+            StringComparison.Ordinal))
+        {
+            return DesktopTopologyProviderResult<Guid>.Failed(
+                "window_placement.manager_activation_failed",
+                "The virtual desktop manager could not be activated, so the window's virtual desktop is unknown.",
+                result.HResult);
+        }
+
+        if (result.HResult == AccessDeniedHResult)
+        {
+            return DesktopTopologyProviderResult<Guid>.Failed(
+                "window_placement.query_access_denied",
+                "Windows denied access to the window, so its virtual desktop could not be read and the window was left where it is. " +
+                PrivilegeBoundary.DeniedWindowExplanation,
+                result.HResult);
+        }
+
+        return DesktopTopologyProviderResult<Guid>.Failed(
+            "window_placement.get_desktop_failed",
+            "Windows could not determine the window's virtual desktop.",
+            result.HResult);
+    }
 }
 
 internal interface IWindowHandleApi

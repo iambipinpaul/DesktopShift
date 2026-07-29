@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.IO.Compression;
 using System.Text.Json;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Diagnostics;
 
 namespace DesktopShift.Core.Tests.Diagnostics;
@@ -55,6 +56,84 @@ public sealed class DiagnosticBundleTests
             root.GetProperty("privacyNotice").GetString());
         Assert.IsNotNull(
             root.GetProperty("environment").GetProperty("operatingSystem").GetString());
+    }
+
+    [TestMethod]
+    public void Manifest_StatesThePrivilegeBoundaryAndThatNoCompanionIsMissing()
+    {
+        // A maintainer reading an exported archive has to be able to tell a
+        // window DesktopShift was refused apart from a feature that failed to
+        // install. The boundary is therefore recorded on every export, whether
+        // or not anything was denied during the run.
+        using MemoryStream destination = new();
+        _ = DiagnosticBundleWriter.Write(destination, Contents());
+
+        using JsonDocument manifest = ReadJson(destination, "manifest.json");
+        string notice = manifest.RootElement
+            .GetProperty("securityNotice")
+            .GetString()!;
+
+        Assert.AreEqual(DiagnosticBundleWriter.SecurityNotice, notice);
+        StringAssert.Contains(notice, "never requests elevation");
+        StringAssert.Contains(notice, "0x80070005");
+        StringAssert.Contains(notice, "No such companion is implemented");
+        StringAssert.Contains(notice, "works without one");
+    }
+
+    [TestMethod]
+    public void Manifest_KeepsTheSecurityNoticeCurrentEvenIfTheCallerSuppliedAnOldOne()
+    {
+        using MemoryStream destination = new();
+        _ = DiagnosticBundleWriter.Write(
+            destination,
+            Contents() with
+            {
+                Manifest = Manifest() with
+                {
+                    SecurityNotice = "Stale text from an earlier release.",
+                },
+            });
+
+        using JsonDocument manifest = ReadJson(destination, "manifest.json");
+        Assert.AreEqual(
+            DiagnosticBundleWriter.SecurityNotice,
+            manifest.RootElement.GetProperty("securityNotice").GetString());
+    }
+
+    [TestMethod]
+    public void AccessDeniedFailure_KeepsItsHResultAndCarriesNothingSensitive()
+    {
+        // The failure a window owned by an elevated application produces is the
+        // one most likely to be exported, and it is raised at the exact moment
+        // the pipeline is holding a title, a path, and a command line.
+        using MemoryStream destination = new();
+        _ = DiagnosticBundleWriter.Write(
+            destination,
+            Contents() with
+            {
+                Activity =
+                [
+                    .. ActivityRecordFactory.FromAssignment(
+                        DiagnosticTestData.Assignment(
+                            outcome: WindowAssignmentOutcome.Failed,
+                            moveOutcome: WindowMoveOutcome.Failed,
+                            switchOutcome: DesktopSwitchOutcome.NotRequested,
+                            error: new WindowAssignmentError(
+                                "window_placement.move_access_denied",
+                                "Windows denied access to the window, so it was not moved to the requested virtual desktop.",
+                                unchecked((int)0x80070005))),
+                        DiagnosticTestData.Session),
+                ],
+            });
+
+        string text = ReadAllText(destination);
+        Assert.Contains("window_placement.move_access_denied", text);
+        Assert.Contains("0x80070005", text);
+        Assert.DoesNotContain(DiagnosticTestData.SecretTitle, text);
+        Assert.DoesNotContain(DiagnosticTestData.SecretCommandLine, text);
+        Assert.DoesNotContain(DiagnosticTestData.SecretExecutablePath, text);
+        Assert.DoesNotContain("hunter2", text);
+        Assert.DoesNotContain("marguerite", text);
     }
 
     [TestMethod]

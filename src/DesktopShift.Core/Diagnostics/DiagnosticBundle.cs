@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DesktopShift.Core.Compatibility;
 
 namespace DesktopShift.Core.Diagnostics;
 
@@ -24,6 +25,12 @@ public sealed record DiagnosticEnvironmentSummary(
     string RuntimeVersion);
 
 /// <summary>The bundle's self-description.</summary>
+/// <param name="SecurityNotice">
+/// The privilege boundary the run operated under. It is stored unconditionally,
+/// not only when something was denied, so a maintainer reading an archive can
+/// tell an unreachable window apart from a missing feature without having to
+/// reproduce the denial.
+/// </param>
 public sealed record DiagnosticBundleManifest(
     string Product,
     string Version,
@@ -36,7 +43,8 @@ public sealed record DiagnosticBundleManifest(
     int MaxLogFileCount,
     int ActivityRecordCount,
     int LogFileCount,
-    string PrivacyNotice);
+    string PrivacyNotice,
+    string SecurityNotice = DiagnosticBundleWriter.SecurityNotice);
 
 /// <summary>Everything a bundle is built from.</summary>
 public sealed record DiagnosticBundleContents(
@@ -83,6 +91,16 @@ public static class DiagnosticBundleWriter
         "recorded, and user profile directories are replaced with " +
         DiagnosticRedaction.UserProfileToken + ".";
 
+    /// <summary>
+    /// The privilege boundary stored in every manifest, so a reader of the
+    /// archive knows which windows were out of reach, why, and that nothing is
+    /// missing from the installation.
+    /// </summary>
+    public const string SecurityNotice =
+        "DesktopShift runs per-user with the signed-in user's own privileges " +
+        "and never requests elevation. " +
+        PrivilegeBoundary.ElevatedCompanionNotice;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -126,6 +144,7 @@ public static class DiagnosticBundleWriter
                         DiagnosticRedaction.Redact(contents.Manifest.LogLocation) ??
                         string.Empty,
                     PrivacyNotice = PrivacyNotice,
+                    SecurityNotice = SecurityNotice,
                 }));
             WriteEntry(
                 archive,
