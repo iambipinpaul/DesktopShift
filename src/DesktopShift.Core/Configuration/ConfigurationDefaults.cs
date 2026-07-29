@@ -141,11 +141,23 @@ public static class ConfigurationDefaults
                     // package, and an unverified identity is dead configuration.
                     ["mstsc.exe"]),
 
-                // Paint and Photos were both verified to exist, and are still
-                // left out on purpose. A shipped Anywhere rule takes an
-                // application out of the sweep for everybody, and these two are
-                // ordinary applications a user may well want placed. They are
-                // one click away in the rule editor for anyone who disagrees.
+                // Two exemptions ship, not a catalogue of utilities. Every
+                // shipped Anywhere rule takes an application out of the sweep
+                // for everybody, so each one has to earn its place. These two
+                // are opened *from* wherever the user already is, constantly,
+                // and expected to stay there: Explorer from a taskbar pin or a
+                // file dialog, Notepad for a scratch note.
+                //
+                // Calculator, Task Manager, and Settings were verified to exist
+                // and are still left out. They are opened occasionally rather
+                // than constantly, so collecting them on the first desktop is a
+                // reasonable default rather than an annoyance. Paint and Photos
+                // are out for the stronger reason that they are ordinary
+                // applications somebody may well want placed.
+                //
+                // All five are two clicks away in the rule editor for anyone who
+                // disagrees, and that is the point: an exemption the user chose
+                // is better than one chosen for them.
                 CreateAnywhereRule(
                     "file-explorer",
                     "File Explorer",
@@ -156,23 +168,6 @@ public static class ConfigurationDefaults
                     "Notepad",
                     ["Notepad.exe"],
                     packageFamilyNames: ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"]),
-                CreateAnywhereRule(
-                    "calculator",
-                    "Calculator",
-                    [],
-                    packageFamilyNames:
-                        ["Microsoft.WindowsCalculator_8wekyb3d8bbwe"]),
-                CreateAnywhereRule(
-                    "task-manager",
-                    "Task Manager",
-                    [],
-                    executablePaths: [@"C:\Windows\System32\Taskmgr.exe"]),
-                CreateAnywhereRule(
-                    "settings",
-                    "Settings",
-                    [],
-                    executablePaths:
-                        [@"C:\Windows\ImmersiveControlPanel\SystemSettings.exe"]),
             ],
             new BehaviorSettings(
                 StartWithWindows: true,

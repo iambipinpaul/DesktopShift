@@ -38,7 +38,7 @@ public sealed class ApplicationRulePresentationTests
                 Now,
                 icons);
 
-        Assert.HasCount(10, items);
+        Assert.HasCount(7, items);
 
         ApplicationRulePresentation ide = items[0];
         Assert.AreEqual("ide-development", ide.RuleId);

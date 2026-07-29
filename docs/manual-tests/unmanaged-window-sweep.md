@@ -21,7 +21,7 @@ rule cannot use.
 | Degrading when the first desktop cannot be located | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs`, `tests/DesktopShift.Core.Tests/Assignments/TerminalAssignmentAcceptanceTests.cs` |
 | A swept window never guessed onto a managed desktop | `tests/DesktopShift.Core.Tests/Assignments/RemoteDesktopAssignmentAcceptanceTests.cs` |
 | Pausing automatic assignment stopping the sweep | `tests/DesktopShift.Core.Tests/Hosting/AutomaticAssignmentPauseTests.cs` |
-| The shipped desktops, move rules, and five Anywhere rules | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationAcceptanceTests.cs` |
+| The shipped desktops, move rules, and two Anywhere rules | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationAcceptanceTests.cs` |
 | A version 1 document with no `action`, and the export/import round trip | `tests/DesktopShift.Core.Tests/Configuration/` |
 | Anywhere through the editor, the list, validation, and persistence | `tests/DesktopShift.App.Presentation.Tests/Rules/AnywhereDestinationTests.cs` |
 | Swept and Anywhere rows reading distinctly in Activity | `tests/DesktopShift.Core.Tests/Diagnostics/SweptWindowActivityTests.cs` |
@@ -57,8 +57,9 @@ This document covers what those cannot.
 | A batch does not thrash | Open the unnamed application on two different desktops, then press **Reassign all**. | Both windows end up on the first desktop and the current desktop never changes during the batch. |
 | Already correct | With a swept window already on the first desktop, press **Reassign all** again. | Activity reports the window was already on the first desktop. No move is attempted and no switch happens. |
 | Paused means paused | Pause automatic assignment. Launch the unnamed application from desktop 3. | It stays on desktop 3 and produces no decision row. Resume, relaunch, and it is swept again. |
-| Shipped exemptions | From desktop 3, open File Explorer, Notepad, Calculator, Task Manager, and Settings. | Each opens and stays on desktop 3. None is swept, and none is moved to a Managed Desktop. |
-| Paint and Photos are not exempt | From desktop 3, open Paint and Photos. | Both are swept to the first desktop. They are deliberately not shipped as Anywhere rules; adding them is the user's decision. |
+| Shipped exemptions | From desktop 3, open File Explorer and Notepad. | Both open and stay on desktop 3. Neither is swept, and neither is moved to a Managed Desktop. |
+| Nothing else is exempt | From desktop 3, open Calculator, Task Manager, Settings, Paint, and Photos. | Every one is swept to the first desktop. None ships as an Anywhere rule — exempting them is the user's decision, and the **Create a rule for this app** button on each swept row is how they make it. |
+| Adding an exemption | Use that button on the Calculator row, set the destination to Anywhere, and save. Relaunch Calculator from desktop 3. | It now stays on desktop 3, proving a user-added exemption behaves exactly like a shipped one. |
 
 ## The first desktop is borrowed, never owned
 

@@ -353,37 +353,28 @@ public enum ApplicationRuleAction
     /// </para>
     /// <para>
     /// It suits the applications a user opens from wherever they already are and
-    /// expects to stay there — a file dialog's neighbour, a scratch note, a quick
-    /// calculation. The shipped rules are the clearest examples of the shape, and
-    /// each one shows a different identity:
+    /// expects to stay there. Two ship, and between them they show both identity
+    /// shapes a user's own rule will need:
     /// </para>
     /// <list type="bullet">
-    /// <item><description>
-    /// <c>notepad</c> — package family <c>Microsoft.WindowsNotepad_8wekyb3d8bbwe</c>
-    /// plus process <c>Notepad.exe</c>. The packaged identity claims the Store
-    /// app; the process name still claims an older unpackaged install.
-    /// </description></item>
-    /// <item><description>
-    /// <c>calculator</c> — package family
-    /// <c>Microsoft.WindowsCalculator_8wekyb3d8bbwe</c> alone, because it only
-    /// ships packaged.
-    /// </description></item>
     /// <item><description>
     /// <c>file-explorer</c> — process <c>explorer.exe</c> plus the path
     /// <c>C:\Windows\explorer.exe</c>, so the shell's own windows are named
     /// twice over.
     /// </description></item>
     /// <item><description>
-    /// <c>task-manager</c> and <c>settings</c> — a full path each, which is the
-    /// strongest identity an unpackaged system tool has.
+    /// <c>notepad</c> — package family <c>Microsoft.WindowsNotepad_8wekyb3d8bbwe</c>
+    /// plus process <c>Notepad.exe</c>. The packaged identity claims the Store
+    /// app; the process name still claims an older unpackaged install.
     /// </description></item>
     /// </list>
     /// <para>
     /// A user adding their own follows the same shape: name the application by
-    /// its strongest available identity and choose Anywhere. Paint and Photos are
-    /// the obvious candidates and are deliberately not shipped — a shipped
-    /// Anywhere rule unmanages an application for everybody, and those two are
-    /// ordinary applications somebody may well want placed.
+    /// its strongest available identity — a package family name or a full path
+    /// beats a file name — and choose Anywhere. Calculator, Task Manager,
+    /// Settings, Paint, and Photos are all obvious candidates and none is
+    /// shipped, because a shipped Anywhere rule unmanages an application for
+    /// everybody while a rule the user added unmanages it only for them.
     /// </para>
     /// </remarks>
     AllowAnywhere,

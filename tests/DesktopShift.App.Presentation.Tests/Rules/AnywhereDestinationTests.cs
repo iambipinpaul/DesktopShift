@@ -246,21 +246,17 @@ public sealed class AnywhereDestinationTests
                 $"'{rule.Id}' would render with no destination.");
         }
 
-        // The three that carry no process name still say what they are.
+        // A rule identified by something other than a process name still says
+        // what it is, rather than rendering as a blank row.
         Assert.Contains(
-            "Package: Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Package: Microsoft.WindowsNotepad_8wekyb3d8bbwe",
             ApplicationRulePresentationProjection.DescribeMatch(
-                ApplicationRuleCatalog.Find(document, "calculator")!),
+                ApplicationRuleCatalog.Find(document, "notepad")!),
             StringComparison.Ordinal);
         Assert.Contains(
-            @"Path: C:\Windows\System32\Taskmgr.exe",
+            @"Path: C:\Windows\explorer.exe",
             ApplicationRulePresentationProjection.DescribeMatch(
-                ApplicationRuleCatalog.Find(document, "task-manager")!),
-            StringComparison.Ordinal);
-        Assert.Contains(
-            @"Path: C:\Windows\ImmersiveControlPanel\SystemSettings.exe",
-            ApplicationRulePresentationProjection.DescribeMatch(
-                ApplicationRuleCatalog.Find(document, "settings")!),
+                ApplicationRuleCatalog.Find(document, "file-explorer")!),
             StringComparison.Ordinal);
 
         // And every Anywhere rule says so rather than showing an empty desktop.

@@ -38,8 +38,8 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsEmpty(draft.Validate(document));
             document = draft.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.HasCount(11, document.ApplicationRules);
-            Assert.AreEqual("paint", document.ApplicationRules[10].Id);
+            Assert.HasCount(8, document.ApplicationRules);
+            Assert.AreEqual("paint", document.ApplicationRules[7].Id);
 
             // Edited in place: the rule keeps its position, which is the
             // matcher's tie breaker.
@@ -105,9 +105,6 @@ public sealed class ApplicationRuleEditingTests
                 "remote",
                 "file-explorer",
                 "notepad",
-                "calculator",
-                "task-manager",
-                "settings",
             },
             state.Active.ApplicationRules.Select(static rule => rule.Id).ToArray());
         Assert.AreEqual(
@@ -382,8 +379,8 @@ public sealed class ApplicationRuleEditingTests
             await service.SaveCandidateAsync(draft.Apply(document));
 
         Assert.IsFalse(result.Accepted);
-        Assert.HasCount(11, result.State.Candidate.ApplicationRules);
-        Assert.HasCount(10, result.State.Active!.ApplicationRules);
+        Assert.HasCount(8, result.State.Candidate.ApplicationRules);
+        Assert.HasCount(7, result.State.Active!.ApplicationRules);
         Assert.IsTrue(result.State.Issues.Any(static issue =>
             issue.Code == ConfigurationValidationCode.InvalidIdentityPattern));
 
@@ -505,7 +502,7 @@ public sealed class ApplicationRuleEditingTests
 
         Assert.AreEqual("ide-development-copy", first!.Id);
         Assert.AreEqual("ide-development-copy-2", second!.Id);
-        Assert.HasCount(12, document.ApplicationRules);
+        Assert.HasCount(9, document.ApplicationRules);
     }
 
     [TestMethod]

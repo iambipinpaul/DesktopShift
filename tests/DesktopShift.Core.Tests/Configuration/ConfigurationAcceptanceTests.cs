@@ -129,28 +129,14 @@ public sealed class ConfigurationAcceptanceTests
             .. defaults.ApplicationRules.Where(static rule => rule.AllowsAnywhere),
         ];
 
+        // Two, and only two. Every shipped Anywhere rule unmanages an
+        // application for everybody who installs DesktopShift, so the list is
+        // kept to the ones opened from wherever the user already is and expected
+        // to stay there.
         CollectionAssert.AreEqual(
-            new[]
-            {
-                "file-explorer",
-                "notepad",
-                "calculator",
-                "task-manager",
-                "settings",
-            },
+            new[] { "file-explorer", "notepad" },
             anywhere.Select(static rule => rule.Id).ToArray());
         Assert.IsTrue(anywhere.All(static rule => rule.IsEnabled));
-
-        // Paint and Photos both exist on a real Windows 11 install and are still
-        // left out: a shipped Anywhere rule unmanages an application for
-        // everybody, and these two are ordinary applications a user may want
-        // placed.
-        Assert.IsFalse(
-            defaults.ApplicationRules.Any(static rule =>
-                rule.PackageFamilyNames.Contains(
-                    "Microsoft.Paint_8wekyb3d8bbwe") ||
-                rule.PackageFamilyNames.Contains(
-                    "Microsoft.Windows.Photos_8wekyb3d8bbwe")));
 
         Assert.Contains(
             "explorer.exe",
@@ -162,15 +148,42 @@ public sealed class ConfigurationAcceptanceTests
             "Microsoft.WindowsNotepad_8wekyb3d8bbwe",
             GetDefaultRule("notepad").PackageFamilyNames);
         Assert.Contains("Notepad.exe", GetDefaultRule("notepad").ProcessNames);
-        Assert.Contains(
+    }
+
+    [TestMethod]
+    public void Defaults_ShipNoExemptionTheUserDidNotAskFor()
+    {
+        // Calculator, Task Manager, Settings, Paint, and Photos were all
+        // verified to exist and none is shipped. An exemption the user added
+        // unmanages an application for them; one shipped in the defaults
+        // unmanages it for everybody, and none of these five is opened often
+        // enough from an arbitrary desktop to earn that.
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        foreach (string identity in new[]
+        {
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
-            GetDefaultRule("calculator").PackageFamilyNames);
-        Assert.Contains(
+            "Microsoft.Paint_8wekyb3d8bbwe",
+            "Microsoft.Windows.Photos_8wekyb3d8bbwe",
+        })
+        {
+            Assert.IsFalse(
+                defaults.ApplicationRules.Any(
+                    rule => rule.PackageFamilyNames.Contains(identity)),
+                $"'{identity}' is exempted for every user by default.");
+        }
+
+        foreach (string path in new[]
+        {
             @"C:\Windows\System32\Taskmgr.exe",
-            GetDefaultRule("task-manager").ExecutablePaths);
-        Assert.Contains(
             @"C:\Windows\ImmersiveControlPanel\SystemSettings.exe",
-            GetDefaultRule("settings").ExecutablePaths);
+        })
+        {
+            Assert.IsFalse(
+                defaults.ApplicationRules.Any(
+                    rule => rule.ExecutablePaths.Contains(path)),
+                $"'{path}' is exempted for every user by default.");
+        }
     }
 
     [TestMethod]
@@ -710,7 +723,7 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsFalse(result.Accepted);
         Assert.IsNull(result.State.Active);
         Assert.AreEqual(6, result.State.Candidate.ManagedDesktops.Length);
-        Assert.AreEqual(11, result.State.Candidate.ApplicationRules.Length);
+        Assert.AreEqual(8, result.State.Candidate.ApplicationRules.Length);
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateDesktopSemanticKey,
@@ -746,7 +759,7 @@ public sealed class ConfigurationAcceptanceTests
 
             Assert.IsFalse(initial.IsCompleted);
             Assert.HasCount(5, initial.Candidate.ManagedDesktops);
-            Assert.HasCount(10, initial.Candidate.ApplicationRules);
+            Assert.HasCount(7, initial.Candidate.ApplicationRules);
 
             ImmutableArray<ApplicationRule> editedRules =
                 initial.Candidate.ApplicationRules.SetItem(
@@ -782,7 +795,7 @@ public sealed class ConfigurationAcceptanceTests
                 .GetRequiredService<IOverviewConfigurationProjection>()
                 .GetSnapshot();
             Assert.AreEqual(5, overview.ManagedDesktopCount);
-            Assert.AreEqual(9, overview.EnabledRuleCount);
+            Assert.AreEqual(6, overview.EnabledRuleCount);
         }
 
         string json = await File.ReadAllTextAsync(
@@ -834,11 +847,11 @@ public sealed class ConfigurationAcceptanceTests
                 await service.SaveCandidateAsync(invalid);
 
             Assert.IsFalse(rejected.Accepted);
-            Assert.HasCount(11, rejected.State.Candidate.ApplicationRules);
-            Assert.HasCount(10, rejected.State.Active!.ApplicationRules);
+            Assert.HasCount(8, rejected.State.Candidate.ApplicationRules);
+            Assert.HasCount(7, rejected.State.Active!.ApplicationRules);
             Assert.AreEqual(
                 "Candidate duplicate",
-                rejected.State.Candidate.ApplicationRules[10].DisplayName);
+                rejected.State.Candidate.ApplicationRules[7].DisplayName);
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.DuplicateRuleId,
@@ -854,11 +867,11 @@ public sealed class ConfigurationAcceptanceTests
             .GetRequiredService<IConfigurationService>()
             .LoadAsync();
 
-        Assert.HasCount(11, reloaded.Candidate.ApplicationRules);
-        Assert.HasCount(10, reloaded.Active!.ApplicationRules);
+        Assert.HasCount(8, reloaded.Candidate.ApplicationRules);
+        Assert.HasCount(7, reloaded.Active!.ApplicationRules);
         Assert.AreEqual(
             "Candidate duplicate",
-            reloaded.Candidate.ApplicationRules[10].DisplayName);
+            reloaded.Candidate.ApplicationRules[7].DisplayName);
         AssertHasIssue(
             reloaded.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
@@ -937,7 +950,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(state.IsFirstRun);
         Assert.IsNotNull(state.Active);
-        Assert.HasCount(10, state.Candidate.ApplicationRules);
+        Assert.HasCount(7, state.Candidate.ApplicationRules);
         AssertHasIssue(
             state.Issues,
             ConfigurationValidationCode.CandidateUnreadable);

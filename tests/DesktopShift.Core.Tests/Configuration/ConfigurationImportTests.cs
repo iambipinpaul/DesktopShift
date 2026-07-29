@@ -287,7 +287,7 @@ public sealed class ConfigurationImportTests
                 .Select(static rule => rule.Action)
                 .ToArray());
         Assert.HasCount(
-            5,
+            2,
             result.State.Active.ApplicationRules
                 .Where(static rule => rule.AllowsAnywhere)
                 .ToArray());
