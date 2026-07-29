@@ -375,6 +375,13 @@ public sealed partial class MainWindow : Window
                     rule.TargetDesktopKey,
                     StringComparison.OrdinalIgnoreCase));
 
+            // The destination and the full declared identity come from the same
+            // projection the Rules page uses, so first run cannot describe a rule
+            // differently from the page the user sees next. It matters most for
+            // the shipped Anywhere rules: Calculator, Task Manager, and Settings
+            // are identified by a package family name or a full path and carry no
+            // process name, so the executable field is legitimately empty and the
+            // row would otherwise look like dead configuration.
             mappings.Add(
                 new FirstRunMappingViewModel(
                     rule.TargetDesktopKey,
@@ -382,7 +389,12 @@ public sealed partial class MainWindow : Window
                     rule.DisplayName,
                     desktop?.DisplayName ?? rule.TargetDesktopKey,
                     string.Join(", ", rule.ProcessNames),
-                    rule.IsEnabled));
+                    rule.IsEnabled,
+                    ApplicationRulePresentationProjection.DescribeTarget(
+                        rule,
+                        state.Candidate),
+                    ApplicationRulePresentationProjection.DescribeMatch(rule),
+                    rule.AllowsAnywhere));
         }
 
         FirstRunViewModel viewModel = new(

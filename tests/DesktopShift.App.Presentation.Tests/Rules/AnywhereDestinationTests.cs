@@ -218,6 +218,63 @@ public sealed class AnywhereDestinationTests
     }
 
     [TestMethod]
+    public void EveryShippedRule_DescribesItsIdentityAndItsDestination()
+    {
+        // The first-run dialog and the Rules page both show a rule by these two
+        // sentences. Calculator, Task Manager, and Settings declare no process
+        // name at all — they are identified by a package family name or a full
+        // path — so a row built from process names alone renders blank and reads
+        // as dead configuration.
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+
+        foreach (ApplicationRule rule in document.ApplicationRules)
+        {
+            string identity =
+                ApplicationRulePresentationProjection.DescribeMatch(rule);
+            string destination =
+                ApplicationRulePresentationProjection.DescribeTarget(rule, document);
+
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(identity),
+                $"'{rule.Id}' would render with no identity at all.");
+            Assert.AreNotEqual(
+                "No identity declared",
+                identity,
+                $"'{rule.Id}' declares nothing a window could report.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(destination),
+                $"'{rule.Id}' would render with no destination.");
+        }
+
+        // The three that carry no process name still say what they are.
+        Assert.Contains(
+            "Package: Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            ApplicationRulePresentationProjection.DescribeMatch(
+                ApplicationRuleCatalog.Find(document, "calculator")!),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            @"Path: C:\Windows\System32\Taskmgr.exe",
+            ApplicationRulePresentationProjection.DescribeMatch(
+                ApplicationRuleCatalog.Find(document, "task-manager")!),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            @"Path: C:\Windows\ImmersiveControlPanel\SystemSettings.exe",
+            ApplicationRulePresentationProjection.DescribeMatch(
+                ApplicationRuleCatalog.Find(document, "settings")!),
+            StringComparison.Ordinal);
+
+        // And every Anywhere rule says so rather than showing an empty desktop.
+        foreach (ApplicationRule rule in document.ApplicationRules
+            .Where(static rule => rule.AllowsAnywhere))
+        {
+            Assert.Contains(
+                "Anywhere",
+                ApplicationRulePresentationProjection.DescribeTarget(rule, document),
+                StringComparison.Ordinal);
+        }
+    }
+
+    [TestMethod]
     public void ADraftForACapturedWindow_IsPreFilledFromWhatWasObserved()
     {
         // What the Activity view records is the privacy-safe identity only, so
