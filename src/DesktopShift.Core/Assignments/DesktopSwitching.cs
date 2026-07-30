@@ -1,6 +1,7 @@
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Performance;
 
 namespace DesktopShift.Core.Assignments;
 
@@ -223,10 +224,17 @@ public sealed class BoundedNewWindowActivationTracker :
 /// releases nothing and leaves the gate for the next one.
 /// </para>
 /// </remarks>
+/// <param name="performanceRecorder">
+/// Where a completed switch reports how long it took, or null to leave switching
+/// unmeasured. Only switches that actually moved the user are recorded: a query
+/// that found the desktop already correct, and a switch that failed, are not
+/// durations of switching.
+/// </param>
 public sealed class DesktopSwitchCoordinator(
     IDesktopTopologyProvider topologyProvider,
     IForegroundSwitchSuppression suppression,
-    TimeProvider timeProvider) : IDesktopSwitchCoordinator
+    TimeProvider timeProvider,
+    IPerformanceRecorder? performanceRecorder = null) : IDesktopSwitchCoordinator
 {
     private readonly SemaphoreSlim switchGate = new(1, 1);
 
@@ -308,10 +316,12 @@ public sealed class DesktopSwitchCoordinator(
             }
 
             suppression.Register(request.WindowHandle, request.CorrelationId);
+            TimeSpan duration = timeProvider.GetElapsedTime(startedTimestamp);
+            performanceRecorder?.RecordDesktopSwitch(duration);
             return new DesktopSwitchResult(
                 DesktopSwitchOutcome.Succeeded,
                 DesktopSwitchDecisionReason.PolicyApproved,
-                timeProvider.GetElapsedTime(startedTimestamp));
+                duration);
         }
         finally
         {

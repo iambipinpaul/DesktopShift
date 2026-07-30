@@ -1,4 +1,5 @@
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Performance;
 
 namespace DesktopShift.Core.Observation;
 
@@ -32,7 +33,49 @@ public sealed class TimerWindowCoalescingScheduler :
     }
 }
 
-public sealed class WindowEventCoalescer : IDisposable
+/// <summary>
+/// How much redundant work coalescing has removed since the process started.
+/// </summary>
+/// <remarks>
+/// Counted over coalescing-eligible events only — the window lifecycle events a
+/// duplicate is possible for. Destroyed events, startup reconciliation, and a
+/// manual reassignment are exempt by design and are deliberately left out of the
+/// denominator, because counting events that were never candidates would only
+/// dilute the rate towards zero and hide the thing it exists to show.
+/// </remarks>
+/// <param name="Evaluated">
+/// How many coalescing-eligible events were considered.
+/// </param>
+/// <param name="Coalesced">
+/// How many of those were recognised as a repeat inside the window and skipped.
+/// </param>
+public sealed record WindowCoalescingSnapshot(long Evaluated, long Coalesced)
+{
+    /// <summary>The reading for a host that has no coalescer at all.</summary>
+    public static WindowCoalescingSnapshot None { get; } = new(0, 0);
+
+    /// <summary>
+    /// The share of eligible events that were skipped, between 0 and 1.
+    /// </summary>
+    public double CoalescingRate =>
+        Evaluated == 0 ? 0d : (double)Coalesced / Evaluated;
+}
+
+/// <summary>
+/// Reads what coalescing has done, without being able to change it.
+/// </summary>
+/// <remarks>
+/// A separate interface so a performance report can be built in a host that has
+/// no observation pipeline, and so a test can hand the reporter a fixed reading
+/// rather than having to provoke a real burst.
+/// </remarks>
+public interface IWindowCoalescingMetrics
+{
+    /// <inheritdoc cref="WindowCoalescingSnapshot"/>
+    WindowCoalescingSnapshot Snapshot { get; }
+}
+
+public sealed class WindowEventCoalescer : IDisposable, IWindowCoalescingMetrics
 {
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromMilliseconds(75);
 
@@ -42,6 +85,8 @@ public sealed class WindowEventCoalescer : IDisposable
     private readonly Dictionary<(nint Handle, WindowEventKind Kind), ScheduledEntry>
         lastObserved = [];
     private long generation;
+    private long evaluated;
+    private long coalesced;
     private bool disposed;
 
     public WindowEventCoalescer(
@@ -59,6 +104,23 @@ public sealed class WindowEventCoalescer : IDisposable
             lock (syncRoot)
             {
                 return lastObserved.Count;
+            }
+        }
+    }
+
+    /// <inheritdoc cref="WindowCoalescingSnapshot"/>
+    /// <remarks>
+    /// Read under the same lock the counters are written under, so the two
+    /// figures always describe the same instant and a rate can never come back
+    /// above one.
+    /// </remarks>
+    public WindowCoalescingSnapshot Snapshot
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return new WindowCoalescingSnapshot(evaluated, coalesced);
             }
         }
     }
@@ -89,6 +151,12 @@ public sealed class WindowEventCoalescer : IDisposable
                 lastObserved.TryGetValue(key, out ScheduledEntry? previous) &&
                 windowEvent.ObservedAt - previous.ObservedAt < coalescingWindow;
             previous?.Dispose();
+
+            evaluated++;
+            if (isDuplicate)
+            {
+                coalesced++;
+            }
 
             long nextGeneration = ++generation;
             ScheduledEntry entry = new(nextGeneration, windowEvent.ObservedAt);
@@ -431,6 +499,8 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly IWindowAssignmentService? assignmentService;
     private readonly INewWindowActivationTracker? activationTracker;
     private readonly IForegroundSwitchSuppression? switchSuppression;
+    private readonly IPerformanceRecorder? performanceRecorder;
+    private readonly TimeProvider timeProvider;
 
     public WindowObservationProcessor(
         IWindowClassifier classifier,
@@ -442,7 +512,9 @@ public sealed class WindowObservationProcessor : IDisposable
         IWindowAssignmentService? assignmentService = null,
         INewWindowActivationTracker? activationTracker = null,
         IForegroundSwitchSuppression? switchSuppression = null,
-        OpenWindowFollowGrace? followGrace = null)
+        OpenWindowFollowGrace? followGrace = null,
+        IPerformanceRecorder? performanceRecorder = null,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -459,6 +531,8 @@ public sealed class WindowObservationProcessor : IDisposable
         this.assignmentService = assignmentService;
         this.activationTracker = activationTracker;
         this.switchSuppression = switchSuppression;
+        this.performanceRecorder = performanceRecorder;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async ValueTask<WindowObservationActivity> ProcessAsync(
@@ -468,6 +542,14 @@ public sealed class WindowObservationProcessor : IDisposable
         // Minted once, here, and carried through every downstream event this
         // window event produces.
         Guid correlationId = Guid.NewGuid();
+
+        // The monotonic start of event-to-move latency. An event the source
+        // stamped carries the moment Windows handed it over, queue wait
+        // included; one it did not is measured from here, which is the earliest
+        // honest answer available.
+        long receivedTimestamp = windowEvent.ReceivedTimestamp != 0
+            ? windowEvent.ReceivedTimestamp
+            : timeProvider.GetTimestamp();
 
         if (windowEvent.Kind == WindowEventKind.Destroyed)
         {
@@ -623,6 +705,11 @@ public sealed class WindowObservationProcessor : IDisposable
             // decides whether the desktop should follow it.
             if (assignmentService is not null && followGrace.IsEnabled)
             {
+                // Where the deliberate wait starts. Whatever the hold costs is
+                // measured from here and reported as policy deferral rather than
+                // as pipeline latency, so following windows can never be the
+                // reason a latency budget fails.
+                long heldFromTimestamp = timeProvider.GetTimestamp();
                 followGrace.Hold(
                     window.RootWindowHandle,
                     () => CompleteMatchAsync(
@@ -632,6 +719,8 @@ public sealed class WindowObservationProcessor : IDisposable
                         rule,
                         matchedOn,
                         correlationId,
+                        receivedTimestamp,
+                        heldFromTimestamp,
                         CancellationToken.None).AsTask());
 
                 // Deliberately not recorded. Whichever way the wait ends records
@@ -668,6 +757,8 @@ public sealed class WindowObservationProcessor : IDisposable
             rule,
             matchedOn,
             correlationId,
+            receivedTimestamp,
+            heldFromTimestamp: null,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -681,6 +772,15 @@ public sealed class WindowObservationProcessor : IDisposable
     /// the original one, so a held assignment is recorded against the moment the
     /// window appeared rather than the moment the wait expired.
     /// </remarks>
+    /// <param name="receivedTimestamp">
+    /// The monotonic reading taken when the window event was received, which is
+    /// where event-to-move latency is measured from.
+    /// </param>
+    /// <param name="heldFromTimestamp">
+    /// When the open-window grace period began, or null for an assignment that
+    /// never waited. Everything between it and now is reported as deliberate
+    /// deferral rather than as latency DesktopShift is answerable for.
+    /// </param>
     private async ValueTask<WindowObservationActivity> CompleteMatchAsync(
         WindowEvent windowEvent,
         nint windowHandle,
@@ -688,8 +788,16 @@ public sealed class WindowObservationProcessor : IDisposable
         WindowObservationRule rule,
         WindowMatchStrength? matchedOn,
         Guid correlationId,
+        long receivedTimestamp,
+        long? heldFromTimestamp,
         CancellationToken cancellationToken)
     {
+        // Read before the assignment runs, so the wait is measured up to the
+        // moment work resumed and not up to the moment it finished.
+        TimeSpan deferred = heldFromTimestamp is long heldFrom
+            ? timeProvider.GetElapsedTime(heldFrom)
+            : TimeSpan.Zero;
+
         WindowAssignmentActivity? assignment = null;
         if (assignmentService is not null)
         {
@@ -701,6 +809,17 @@ public sealed class WindowObservationProcessor : IDisposable
                     identity,
                     correlationId),
                 cancellationToken).ConfigureAwait(false);
+
+            // Recorded here rather than inside the assignment because this is
+            // the only frame that knows when the event arrived and how long the
+            // follow policy chose to wait.
+            performanceRecorder?.RecordAssignment(
+                new AssignmentLatencySample(
+                    windowEvent.Kind,
+                    assignment.MoveOutcome,
+                    timeProvider.GetElapsedTime(receivedTimestamp),
+                    deferred,
+                    assignment.Duration));
         }
 
         WindowObservationActivity activity = new(

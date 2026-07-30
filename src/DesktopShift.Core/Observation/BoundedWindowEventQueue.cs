@@ -31,7 +31,18 @@ public sealed record WindowEventQueueSnapshot(
     long Read,
     long Dropped,
     long SaturationEpisodes,
-    int CurrentDepth);
+    int CurrentDepth)
+{
+    /// <summary>
+    /// The reading for a host that has no queue at all.
+    /// </summary>
+    /// <remarks>
+    /// A performance report from a host with no observation pipeline says zero
+    /// rather than refusing to be built. Zero capacity is what distinguishes it
+    /// from a real queue that has simply never been used.
+    /// </remarks>
+    public static WindowEventQueueSnapshot None { get; } = new(0, 0, 0, 0, 0, 0);
+}
 
 public interface IWindowEventQueue
 {

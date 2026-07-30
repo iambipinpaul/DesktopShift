@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DesktopShift.Core.Compatibility;
+using DesktopShift.Core.Performance;
 
 namespace DesktopShift.Core.Diagnostics;
 
@@ -47,10 +48,16 @@ public sealed record DiagnosticBundleManifest(
     string SecurityNotice = DiagnosticBundleWriter.SecurityNotice);
 
 /// <summary>Everything a bundle is built from.</summary>
+/// <param name="Performance">
+/// The performance report to carry, or null when the host has no performance
+/// monitor. It is counts and durations only, so it travels under the same privacy
+/// rules as the rest of the bundle without needing an exception.
+/// </param>
 public sealed record DiagnosticBundleContents(
     DiagnosticBundleManifest Manifest,
     ImmutableArray<ActivityRecord> Activity,
-    ImmutableArray<DiagnosticBundleFile> Logs);
+    ImmutableArray<DiagnosticBundleFile> Logs,
+    PerformanceReport? Performance = null);
 
 /// <summary>What an export produced.</summary>
 public sealed record DiagnosticBundleSummary(
@@ -58,7 +65,8 @@ public sealed record DiagnosticBundleSummary(
     int LogFileCount,
     long ByteCount,
     string? FilePath = null,
-    string? DisplayPath = null);
+    string? DisplayPath = null,
+    bool IncludesPerformanceReport = false);
 
 /// <summary>
 /// Writes a diagnostic bundle as a zip archive.
@@ -79,6 +87,17 @@ public static class DiagnosticBundleWriter
 {
     public const string ManifestEntryName = "manifest.json";
     public const string ActivityEntryName = "activity.json";
+
+    /// <summary>
+    /// Where the performance report lands in the archive.
+    /// </summary>
+    /// <remarks>
+    /// Its own entry rather than a section of the manifest, because it is the one
+    /// part of a bundle worth diffing between two runs and a maintainer should be
+    /// able to extract it on its own.
+    /// </remarks>
+    public const string PerformanceEntryName = "performance.json";
+
     public const string LogEntryPrefix = "logs/";
 
     /// <summary>
@@ -154,6 +173,14 @@ public static class DiagnosticBundleWriter
                         .Select(DiagnosticLogEntry.From)
                         .ToArray()));
 
+            if (contents.Performance is PerformanceReport performance)
+            {
+                WriteEntry(
+                    archive,
+                    PerformanceEntryName,
+                    Serialize(PerformanceReportDocument.From(performance)));
+            }
+
             foreach (DiagnosticBundleFile log in logs)
             {
                 WriteEntry(
@@ -169,7 +196,8 @@ public static class DiagnosticBundleWriter
         return new DiagnosticBundleSummary(
             activity.Length,
             logs.Length,
-            byteCount);
+            byteCount,
+            IncludesPerformanceReport: contents.Performance is not null);
     }
 
     /// <summary>

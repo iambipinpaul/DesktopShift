@@ -7,6 +7,7 @@ using DesktopShift.Core.Hosting;
 using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Performance;
 using DesktopShift.Core.Recovery;
 using DesktopShift.Infrastructure.Appearance;
 using DesktopShift.Infrastructure.Assignments;
@@ -29,6 +30,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton(TimeProvider.System);
+        AddPerformanceMonitoring(services);
         services.TryAddSingleton<IThemePreferenceService, InMemoryThemePreferenceService>();
         services.TryAddSingleton<
             IConfigurationStoragePath,
@@ -69,6 +71,40 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers the one place the pipeline's own timings are collected.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Registered with the foundation so every host has a recorder, which is what
+    /// lets the instrumented types take it as an ordinary dependency instead of
+    /// each guarding for its absence. It is a singleton because a percentile
+    /// across two monitors is not a percentile.
+    /// </para>
+    /// <para>
+    /// The queue and the coalescer are resolved with <c>GetService</c> on purpose.
+    /// The foundation is registered before the observation pipeline and by hosts
+    /// that never register one at all, so requiring them would make a settings-only
+    /// host fail to build over a counter it was never going to read.
+    /// </para>
+    /// </remarks>
+    private static void AddPerformanceMonitoring(IServiceCollection services)
+    {
+        services.TryAddSingleton(
+            static serviceProvider => new PerformanceMonitor(
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetService<IProcessResourceSampler>(),
+                serviceProvider.GetService<IWindowEventQueue>(),
+                serviceProvider.GetService<IWindowCoalescingMetrics>(),
+                serviceProvider.GetService<PerformanceBudget>()));
+        services.TryAddSingleton<IPerformanceRecorder>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<PerformanceMonitor>());
+        services.TryAddSingleton<IPerformanceReportSource>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<PerformanceMonitor>());
+    }
+
     public static IServiceCollection AddDesktopShiftObservation(
         this IServiceCollection services)
     {
@@ -92,6 +128,9 @@ public static class ServiceCollectionExtensions
             ActiveConfigurationWindowRuleSource>();
         services.TryAddSingleton<WindowRuleMatcher>();
         services.TryAddSingleton<WindowEventCoalescer>();
+        services.TryAddSingleton<IWindowCoalescingMetrics>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<WindowEventCoalescer>());
         services.TryAddSingleton<OpenWindowFollowGrace>();
         services.TryAddSingleton<WindowObservationProcessor>();
         services.TryAddEnumerable(

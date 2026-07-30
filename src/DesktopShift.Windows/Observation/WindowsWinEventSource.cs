@@ -174,12 +174,17 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
                 return;
             }
 
+            // Both clocks are read here, at the only moment that is genuinely
+            // receipt: the wall clock for the Activity view and for coalescing,
+            // and the monotonic reading so event-to-move latency starts where the
+            // user's wait started rather than where the processor got round to it.
             bool accepted = queue.TryPublish(
                 new WindowEvent(
                     Interlocked.Increment(ref sequence),
                     kind,
                     windowHandle,
-                    timeProvider.GetUtcNow()));
+                    timeProvider.GetUtcNow(),
+                    timeProvider.GetTimestamp()));
             if (accepted)
             {
                 Interlocked.Increment(ref published);

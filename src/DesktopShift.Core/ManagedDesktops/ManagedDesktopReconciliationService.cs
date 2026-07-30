@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Performance;
 
 namespace DesktopShift.Core.ManagedDesktops;
 
@@ -13,6 +14,7 @@ public sealed class ManagedDesktopReconciliationService :
     private readonly IManagedDesktopBindingStore bindingStore;
     private readonly TimeProvider timeProvider;
     private readonly IManagedDesktopRecreationGate? recreationGate;
+    private readonly IPerformanceRecorder? performanceRecorder;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<string, ManagedDesktopBinding> sessionBindings =
         new(StringComparer.OrdinalIgnoreCase);
@@ -27,12 +29,20 @@ public sealed class ManagedDesktopReconciliationService :
     /// startup, a saved configuration, and an explicit user action are all
     /// intent, and intent is never rate limited.
     /// </param>
+    /// <param name="performanceRecorder">
+    /// Where a created desktop reports how long Windows took to make it, or null
+    /// to leave creation unmeasured. Creation is timed separately from everything
+    /// else because it is the one operation the startup pass is meant to have
+    /// already paid for — a creation counted while windows are being assigned
+    /// means one landed on a window's critical path.
+    /// </param>
     public ManagedDesktopReconciliationService(
         IConfigurationService configurationService,
         IDesktopTopologyProvider topologyProvider,
         IManagedDesktopBindingStore bindingStore,
         TimeProvider timeProvider,
-        IManagedDesktopRecreationGate? recreationGate = null)
+        IManagedDesktopRecreationGate? recreationGate = null,
+        IPerformanceRecorder? performanceRecorder = null)
     {
         this.configurationService =
             configurationService ?? throw new ArgumentNullException(nameof(configurationService));
@@ -43,6 +53,7 @@ public sealed class ManagedDesktopReconciliationService :
         this.timeProvider =
             timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this.recreationGate = recreationGate;
+        this.performanceRecorder = performanceRecorder;
     }
 
     public ManagedDesktopReconciliationSnapshot Current =>
@@ -344,9 +355,12 @@ public sealed class ManagedDesktopReconciliationService :
                 continue;
             }
 
+            long creationStartedTimestamp = timeProvider.GetTimestamp();
             DesktopTopologyProviderResult<Guid> creation =
                 await topologyProvider.CreateDesktopAsync(cancellationToken)
                     .ConfigureAwait(false);
+            TimeSpan creationDuration =
+                timeProvider.GetElapsedTime(creationStartedTimestamp);
             if (!creation.IsSuccess || creation.Value == Guid.Empty)
             {
                 DesktopTopologyProviderError error =
@@ -365,6 +379,11 @@ public sealed class ManagedDesktopReconciliationService :
                     error.Message));
                 continue;
             }
+
+            // Recorded once the provider has answered with a usable desktop, so
+            // the series describes how long making one takes rather than how
+            // long a refusal takes.
+            performanceRecorder?.RecordDesktopCreation(creationDuration);
 
             Guid createdId = creation.Value;
             if (!claimedIds.Add(createdId) || inventoryById.ContainsKey(createdId))

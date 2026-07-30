@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DesktopShift.Core;
 using DesktopShift.Core.Diagnostics;
+using DesktopShift.Core.Performance;
 
 namespace DesktopShift.Infrastructure.Diagnostics;
 
@@ -19,14 +20,22 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
     private readonly IActivityJournal journal;
     private readonly RollingDiagnosticLog log;
     private readonly TimeProvider timeProvider;
+    private readonly IPerformanceReportSource? performanceReports;
     private readonly string bundleDirectoryPath;
     private readonly string? userProfilePath;
 
+    /// <param name="performanceReports">
+    /// Where the exported performance report comes from, or null in a host with
+    /// no performance monitor. A bundle without one is still a valid bundle: the
+    /// entry is simply absent rather than present and empty, so a reader can tell
+    /// "not measured" from "measured as zero".
+    /// </param>
     public DiagnosticsCoordinator(
         IActivityJournal journal,
         RollingDiagnosticLog log,
         IDiagnosticLogLocation logLocation,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IPerformanceReportSource? performanceReports = null)
         : this(
             journal,
             log,
@@ -34,7 +43,8 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
             timeProvider,
             (logLocation as LocalAppDataDiagnosticLogLocation)?.BundleDirectoryPath ??
                 logLocation.DirectoryPath,
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            performanceReports)
     {
     }
 
@@ -44,7 +54,8 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
         IDiagnosticLogLocation logLocation,
         TimeProvider timeProvider,
         string bundleDirectoryPath,
-        string? userProfilePath)
+        string? userProfilePath,
+        IPerformanceReportSource? performanceReports = null)
     {
         ArgumentNullException.ThrowIfNull(journal);
         ArgumentNullException.ThrowIfNull(log);
@@ -55,6 +66,7 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
         this.journal = journal;
         this.log = log;
         this.timeProvider = timeProvider;
+        this.performanceReports = performanceReports;
         this.bundleDirectoryPath = bundleDirectoryPath;
         this.userProfilePath = userProfilePath;
         LogLocation = logLocation;
@@ -110,8 +122,14 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
     }
 
     /// <summary>
-    /// Assembles the bundle from the journal and the rolling log.
+    /// Assembles the bundle from the journal, the rolling log, and the
+    /// performance counters.
     /// </summary>
+    /// <remarks>
+    /// The performance report is built here, at export time, and nowhere else.
+    /// That is the only moment anything reads a processor or memory counter, so
+    /// asking for a bundle is the whole cost of the measurement.
+    /// </remarks>
     /// <returns>The contents to archive.</returns>
     public DiagnosticBundleContents BuildContents()
     {
@@ -133,7 +151,8 @@ public sealed class DiagnosticsCoordinator : IDiagnosticsCoordinator
                 logs.Length,
                 DiagnosticBundleWriter.PrivacyNotice),
             activity,
-            logs);
+            logs,
+            performanceReports?.CreateReport());
     }
 
     private static DiagnosticEnvironmentSummary DescribeEnvironment() =>

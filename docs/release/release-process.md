@@ -88,9 +88,21 @@ release candidate. In particular, confirm that:
 - uninstall removes the package registration, Start menu entry, and startup
   task.
 
+Then run
+[performance-budgets.md](../manual-tests/performance-budgets.md) against the
+installed Release build. It measures the two things no automated test can — what
+the application costs while nobody is touching it, and whether that cost stays
+flat over a working day — and it produces the exported `performance.json` that
+the release notes carry.
+
+A performance figure that misses its budget in `docs/performance/budgets.md` is a
+release blocker. The exported report names it as one, with the budget, the
+measured value, and the consequence, so the decision to ship anyway is a decision
+somebody has to take in writing rather than one that happens by omission.
+
 Record the package SHA-256, four-part version, signing-certificate thumbprint,
-runner Windows build, automated workflow URL, and manual-test result in the
-release notes.
+runner Windows build, automated workflow URL, manual-test result, and the
+exported performance report in the release notes.
 
 ## Install and uninstall for support
 
