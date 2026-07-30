@@ -51,6 +51,124 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
     }
 
     [TestMethod]
+    public async Task WindowFocusedBeforeItIsVisible_IsStillFollowedWhenItAppears()
+    {
+        // Windows Terminal focuses its window and shows it 665ms later. The
+        // activation therefore lands on a window that is not yet placeable, and
+        // dropping it used to leave only the shown event — which never follows,
+        // so a launch the user asked for left them behind.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(301, OtherDesktopId);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+        harness.Classifier.SetInvisible(301);
+
+        WindowObservationActivity dropped = await harness.ObserveAsync(
+            WindowEventKind.ForegroundActivated,
+            301,
+            Now);
+
+        // Qualification is unchanged: an invisible window is still not placed.
+        Assert.AreEqual(WindowObservationOutcome.Skipped, dropped.Outcome);
+        Assert.AreEqual(WindowSkipReason.InvisibleWindow, dropped.SkipReason);
+        Assert.IsNull(dropped.Assignment);
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+
+        harness.Classifier.SetVisible(301);
+        WindowObservationActivity appeared = await harness.ObserveAsync(
+            WindowEventKind.Shown,
+            301,
+            Now.AddMilliseconds(665));
+
+        // Nothing was held. The activation the grace period exists to wait for
+        // has already happened, so waiting again would only delay the move.
+        Assert.AreEqual(0, harness.FollowScheduler.PendingCount);
+
+        WindowAssignmentActivity assignment = appeared.Assignment!;
+        Assert.AreEqual(WindowMoveOutcome.Succeeded, assignment.MoveOutcome);
+        Assert.AreEqual(DesktopSwitchOutcome.Succeeded, assignment.SwitchOutcome);
+        Assert.AreEqual(
+            DesktopSwitchDecisionReason.PolicyApproved,
+            assignment.SwitchDecisionReason);
+        Assert.AreEqual(1, harness.Topology.SwitchCallCount);
+        Assert.AreEqual(TargetDesktopId, harness.Topology.CurrentDesktopId);
+
+        // The observation still records the event that arrived; the assignment
+        // records what it meant.
+        Assert.AreEqual(WindowEventKind.Shown, appeared.Trigger);
+        Assert.AreEqual(WindowEventKind.ForegroundActivated, assignment.Trigger);
+    }
+
+    [TestMethod]
+    public async Task WindowShownWithoutBeingFocused_IsMovedWithoutFollowing()
+    {
+        // The behaviour the remembered activation must not erode. An updater or
+        // a helper window opens without anyone asking for it, and following one
+        // would take the user away from what they were doing.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(311, OtherDesktopId);
+        harness.Placement.SetCurrent(312, OtherDesktopId);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+
+        // A different window was focused while invisible. That must not answer
+        // for this one.
+        harness.Classifier.SetInvisible(311);
+        await harness.ObserveAsync(WindowEventKind.ForegroundActivated, 311, Now);
+
+        WindowObservationActivity unasked = await harness.ProcessAsync(
+            WindowEventKind.Shown,
+            312,
+            Now.AddMilliseconds(10));
+
+        Assert.AreEqual(
+            WindowMoveOutcome.Succeeded,
+            unasked.Assignment!.MoveOutcome);
+        Assert.AreEqual(
+            DesktopSwitchOutcome.NotRequested,
+            unasked.Assignment.SwitchOutcome);
+        Assert.AreEqual(
+            DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
+            unasked.Assignment.SwitchDecisionReason);
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+    }
+
+    [TestMethod]
+    public async Task RememberedActivation_AnswersForOnlyOneOpenEvent()
+    {
+        // Opening a window produces a created event and a shown event a moment
+        // apart. One activation is one request from the user, so the second
+        // event must not inherit it a second time.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(321, OtherDesktopId);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+        harness.Classifier.SetInvisible(321);
+
+        await harness.ObserveAsync(WindowEventKind.ForegroundActivated, 321, Now);
+        harness.Classifier.SetVisible(321);
+
+        WindowObservationActivity created = await harness.ObserveAsync(
+            WindowEventKind.Created,
+            321,
+            Now.AddMilliseconds(200));
+        WindowObservationActivity shown = await harness.ProcessAsync(
+            WindowEventKind.Shown,
+            321,
+            Now.AddMilliseconds(210));
+
+        Assert.AreEqual(
+            WindowEventKind.ForegroundActivated,
+            created.Assignment!.Trigger);
+        Assert.AreEqual(WindowEventKind.Shown, shown.Assignment!.Trigger);
+
+        // The window is already where it belongs and the user is already there,
+        // so the second event settles rather than switching again.
+        Assert.AreEqual(1, harness.Topology.SwitchCallCount);
+        Assert.HasCount(1, harness.Placement.Moves);
+    }
+
+    [TestMethod]
     public async Task OnForegroundActivation_MovesAndSwitchesWhenBothAreIncorrect()
     {
         SwitchingHarness harness = new(
@@ -431,8 +549,11 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
                 policy,
                 WindowMatchCriteria.ForProcessNames(["Code.exe"]),
                 Order: 0);
+            Classifier = new WindowVisibilityClassifier();
+            EarlyForeground = new BoundedEarlyForegroundActivationMemory(
+                TimeProvider.System);
             Processor = new WindowObservationProcessor(
-                new AcceptAllClassifier(),
+                Classifier,
                 new CodeIdentityResolver(),
                 new FixedRuleSource(rule),
                 Sink,
@@ -440,12 +561,17 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
                 activationTracker: activationTracker,
                 switchSuppression: suppression,
                 followGrace: new OpenWindowFollowGrace(
-                    scheduler: FollowScheduler));
+                    scheduler: FollowScheduler),
+                earlyForeground: EarlyForeground);
         }
 
         public FakeTopologyProvider Topology { get; }
 
         public FakePlacementService Placement { get; }
+
+        public WindowVisibilityClassifier Classifier { get; }
+
+        public BoundedEarlyForegroundActivationMemory EarlyForeground { get; }
 
         public ManualOpenWindowFollowScheduler FollowScheduler { get; } = new();
 
@@ -645,15 +771,33 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
             ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
     }
 
-    private sealed class AcceptAllClassifier : IWindowClassifier
+    /// <summary>
+    /// Qualifies every window except those a test has declared not yet visible.
+    /// </summary>
+    /// <remarks>
+    /// Visibility is the one qualification an opening window changes on its own,
+    /// and the order in which it changes is what separates applications that the
+    /// desktop follows from ones it does not.
+    /// </remarks>
+    private sealed class WindowVisibilityClassifier : IWindowClassifier
     {
+        private readonly HashSet<nint> invisible = [];
+
+        public void SetInvisible(long windowHandle) =>
+            invisible.Add((nint)windowHandle);
+
+        public void SetVisible(long windowHandle) =>
+            invisible.Remove((nint)windowHandle);
+
         public WindowQualification Qualify(nint windowHandle) =>
-            WindowQualification.Qualified(
-                new QualifiedWindow(
-                    windowHandle,
-                    windowHandle,
-                    checked((uint)(long)windowHandle),
-                    "CodeWindow"));
+            invisible.Contains(windowHandle)
+                ? WindowQualification.Skipped(WindowSkipReason.InvisibleWindow)
+                : WindowQualification.Qualified(
+                    new QualifiedWindow(
+                        windowHandle,
+                        windowHandle,
+                        checked((uint)(long)windowHandle),
+                        "CodeWindow"));
 
         public WindowSkipReason ClassifyIdentity(
             QualifiedWindow window,
