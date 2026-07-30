@@ -87,16 +87,19 @@ public sealed class UnmanagedWindowSweepTests
     [TestMethod]
     [DataRow(WindowEventKind.Created)]
     [DataRow(WindowEventKind.Shown)]
-    public async Task WindowSweptAtOpenTime_TakesTheUserWithIt(
+    public async Task WindowSweptAtOpenTime_TakesTheUserWithItWhenActivated(
         WindowEventKind eventKind)
     {
         // Otherwise the window silently vanishes and the launch looks like it
-        // failed.
+        // failed. The activation is what says the user asked for this window,
+        // and it arrives while the sweep is still holding the move back.
         SweepHarness harness = new();
         harness.Placement.SetCurrent(12, OtherDesktopId);
 
-        WindowObservationActivity observation =
-            await harness.ProcessAsync(eventKind, 12);
+        await harness.ObserveAsync(eventKind, 12);
+        WindowObservationActivity observation = await harness.ProcessAsync(
+            WindowEventKind.ForegroundActivated,
+            12);
 
         Assert.AreEqual(
             DesktopSwitchOutcome.Succeeded,
@@ -107,9 +110,66 @@ public sealed class UnmanagedWindowSweepTests
         Assert.AreEqual(FirstDesktopId, harness.Topology.CurrentDesktopId);
         Assert.AreEqual(1, harness.Topology.SwitchCallCount);
 
+        // The held move was dropped rather than run, so the window is placed
+        // once, by the activation.
+        Assert.HasCount(1, harness.Placement.Moves);
+
         // The self-generated foreground event the switch raises is registered for
         // suppression exactly as a rule-driven switch registers it.
         Assert.IsTrue(harness.Suppression.HasPending((nint)12));
+    }
+
+    [TestMethod]
+    [DataRow(WindowEventKind.Created)]
+    [DataRow(WindowEventKind.Shown)]
+    public async Task WindowSweptWithoutBeingActivated_IsMovedButNotFollowed(
+        WindowEventKind eventKind)
+    {
+        // An updater, a helper window, an application restoring itself. Nobody
+        // asked for it, so it is tidied away to the first desktop and the user
+        // is left where they were.
+        SweepHarness harness = new();
+        harness.Placement.SetCurrent(21, OtherDesktopId);
+
+        WindowObservationActivity observation =
+            await harness.ProcessAsync(eventKind, 21);
+
+        Assert.AreEqual(
+            WindowMoveOutcome.Succeeded,
+            observation.Assignment!.MoveOutcome);
+        Assert.AreEqual(
+            DesktopSwitchOutcome.NotRequested,
+            observation.Assignment.SwitchOutcome);
+        Assert.AreEqual(
+            DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
+            observation.Assignment.SwitchDecisionReason);
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+    }
+
+    [TestMethod]
+    public async Task ClickingAStrayWindowLongAfterItOpened_NeverSweepsIt()
+    {
+        // The reason the sweep does not answer foreground activations at all.
+        // Once the grace period has passed, an activation is the user working
+        // with the window where it is, and moving it would be moving it out from
+        // under their click.
+        SweepHarness harness = new(
+            CreateRule(
+                ApplicationRuleAction.MoveToDesktop,
+                processName: "SomethingElse.exe"));
+        harness.Placement.SetCurrent(22, OtherDesktopId);
+
+        await harness.ProcessAsync(WindowEventKind.Shown, 22);
+        harness.Placement.SetCurrent(22, OtherDesktopId);
+        int movesAfterSweep = harness.Placement.Moves.Count;
+
+        WindowObservationActivity observation = await harness.ProcessAsync(
+            WindowEventKind.ForegroundActivated,
+            22);
+
+        Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
+        Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
+        Assert.HasCount(movesAfterSweep, harness.Placement.Moves);
     }
 
     [TestMethod]
@@ -156,8 +216,12 @@ public sealed class UnmanagedWindowSweepTests
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
             observation.Assignment.SkipReason);
         Assert.IsEmpty(harness.Placement.Moves);
+
+        // Nothing activated the window, so the switch is declined before the
+        // current desktop is even consulted. The window being already correct
+        // makes no difference to that.
         Assert.AreEqual(
-            DesktopSwitchDecisionReason.CurrentDesktopAlreadyTarget,
+            DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
             observation.Assignment.SwitchDecisionReason);
         Assert.AreEqual(0, harness.Topology.SwitchCallCount);
     }
@@ -277,7 +341,7 @@ public sealed class UnmanagedWindowSweepTests
     }
 
     [TestMethod]
-    public void TheSweepRule_AnswersFourTriggersAndFollowsOnlyOnOpen()
+    public void TheSweepRule_AnswersFourTriggersAndNeverForegroundActivation()
     {
         CollectionAssert.AreEqual(
             new[]
@@ -301,12 +365,12 @@ public sealed class UnmanagedWindowSweepTests
         Assert.IsFalse(UnmanagedWindowSweep.AnswersEvent(
             WindowEventKind.ForegroundActivated));
 
-        Assert.IsTrue(UnmanagedWindowSweep.FollowsWindow(WindowEventKind.Created));
-        Assert.IsTrue(UnmanagedWindowSweep.FollowsWindow(WindowEventKind.Shown));
-        Assert.IsFalse(UnmanagedWindowSweep.FollowsWindow(
-            WindowEventKind.StartupReconciliation));
-        Assert.IsFalse(UnmanagedWindowSweep.FollowsWindow(
-            WindowEventKind.ManualReassignment));
+        // The sweep no longer decides for itself whether the desktop follows a
+        // window. It carries a switch policy like any other rule, and the answer
+        // comes from whether the user activated the window.
+        Assert.AreEqual(
+            DesktopSwitchPolicy.OnNewWindowActivation,
+            UnmanagedWindowSweep.Rule.SwitchPolicy);
     }
 
     [TestMethod]
@@ -444,17 +508,31 @@ public sealed class UnmanagedWindowSweepTests
                     Suppression,
                     TimeProvider.System),
                 Suppression,
-                new BoundedNewWindowActivationTracker(),
+                ActivationTracker,
                 Locator);
 
             processor = new WindowObservationProcessor(
                 new AcceptAllClassifier(),
                 new DiscordIdentityResolver(),
                 new DocumentRuleSource(rule),
-                new NullWindowObservationActivitySink(),
+                Sink,
                 assignmentService: assignmentService,
-                switchSuppression: Suppression);
+                activationTracker: ActivationTracker,
+                switchSuppression: Suppression,
+                followGrace: new OpenWindowFollowGrace(
+                    scheduler: FollowScheduler));
         }
+
+        /// <summary>
+        /// Shared between the observer and the assignment, as the host shares it.
+        /// </summary>
+        /// <remarks>
+        /// The observer is what marks a window new, and the assignment is what
+        /// asks whether this is its first activation. Two trackers would make
+        /// every activation look like a repeat, and no swept window would ever
+        /// be followed.
+        /// </remarks>
+        public BoundedNewWindowActivationTracker ActivationTracker { get; } = new();
 
         public FakePlacementService Placement { get; } = new();
 
@@ -465,7 +543,39 @@ public sealed class UnmanagedWindowSweepTests
 
         public CountingLocator Locator { get; }
 
-        public ValueTask<WindowObservationActivity> ProcessAsync(
+        public ManualOpenWindowFollowScheduler FollowScheduler { get; } = new();
+
+        public CapturingWindowObservationActivitySink Sink { get; } = new();
+
+        /// <summary>
+        /// Observes one window event and settles whatever it started.
+        /// </summary>
+        /// <remarks>
+        /// An opened window is held rather than assigned, waiting to see whether
+        /// it takes the foreground. Releasing here is what a test means by "and
+        /// nothing activated it": the window was left alone for its grace period
+        /// and then placed. A test about activation drives the foreground event
+        /// before this runs, and finds nothing left to release.
+        /// </remarks>
+        public async ValueTask<WindowObservationActivity> ProcessAsync(
+            WindowEventKind eventKind,
+            nint windowHandle)
+        {
+            WindowObservationActivity observation = await ObserveAsync(
+                eventKind,
+                windowHandle);
+            await FollowScheduler.ReleaseAllAsync();
+            return Sink.Last ?? observation;
+        }
+
+        /// <summary>
+        /// Observes one window event and leaves any hold it started standing.
+        /// </summary>
+        /// <remarks>
+        /// For tests about what happens <em>during</em> the grace period, where
+        /// the next event is the point.
+        /// </remarks>
+        public ValueTask<WindowObservationActivity> ObserveAsync(
             WindowEventKind eventKind,
             nint windowHandle) =>
             processor.ProcessAsync(

@@ -240,9 +240,7 @@ public sealed class WindowAssignmentService(
                         request.WindowHandle,
                         targetDesktopId,
                         request.Rule.SwitchPolicy,
-                        isFirstForegroundActivation,
-                        request.Rule.Destination ==
-                            WindowRuleDestination.FirstDesktop),
+                        isFirstForegroundActivation),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (

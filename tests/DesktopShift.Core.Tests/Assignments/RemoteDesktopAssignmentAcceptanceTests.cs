@@ -227,10 +227,12 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
         Assert.AreEqual(FirstDesktopId, harness.Placement.Moves[0].DesktopId);
         Assert.AreNotEqual(RemoteDesktopId, harness.Placement.Moves[0].DesktopId);
 
-        // Swept at open time, so the user is taken along rather than left
-        // wondering where the window went.
-        Assert.AreEqual(1, harness.Topology.SwitchCallCount);
-        Assert.AreEqual(FirstDesktopId, harness.Topology.CurrentDesktopId);
+        // Tidied away, but the user stays where they are. A broker window
+        // appears on its own account and nothing activated this one, so being
+        // dragged to another desktop by it would interrupt whatever they were
+        // actually doing.
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+        Assert.AreEqual(OtherDesktopId, harness.Topology.CurrentDesktopId);
 
         await host.StopAsync();
     }
@@ -496,6 +498,7 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
 
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new ActiveConfigurationService(configuration));
             services.AddSingleton<ICompatibilityCoordinator>(

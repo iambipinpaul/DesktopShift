@@ -240,6 +240,7 @@ public sealed class WindowAssignmentHostingAcceptanceTests
 
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new ActiveConfigurationService(configuration));
             services.AddSingleton<ICompatibilityCoordinator>(

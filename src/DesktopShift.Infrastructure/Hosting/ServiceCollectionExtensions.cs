@@ -92,6 +92,7 @@ public static class ServiceCollectionExtensions
             ActiveConfigurationWindowRuleSource>();
         services.TryAddSingleton<WindowRuleMatcher>();
         services.TryAddSingleton<WindowEventCoalescer>();
+        services.TryAddSingleton<OpenWindowFollowGrace>();
         services.TryAddSingleton<WindowObservationProcessor>();
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<

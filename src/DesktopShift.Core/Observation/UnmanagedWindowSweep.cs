@@ -82,11 +82,10 @@ public static class UnmanagedWindowSweep
         TargetDesktopKey,
         Triggers,
 
-        // The window is being moved because it has just been opened somewhere
-        // it does not belong, and the switch that follows is what stops the
-        // launch looking like a failure. The policy is never consulted for the
-        // sweep — a switch is decided from the trigger — but this is the one
-        // that describes what happens.
+        // A swept window follows the same rule as any other: the desktop goes
+        // with it when the user activates it, and stays put when the window
+        // opened on its own. Nothing about being unnamed by a rule makes a
+        // window more or less likely to be one the user asked for.
         DesktopSwitchPolicy.OnNewWindowActivation,
         new WindowMatchCriteria([], [], [], [], [], [], []),
         Order: int.MaxValue,
@@ -103,20 +102,6 @@ public static class UnmanagedWindowSweep
             WindowEventKind.Shown or
             WindowEventKind.StartupReconciliation or
             WindowEventKind.ManualReassignment;
-
-    /// <summary>
-    /// Whether a swept window takes the user with it.
-    /// </summary>
-    /// <remarks>
-    /// Only on the two events that mean the user just opened something.
-    /// Switching on a startup reconciliation would bounce a user across desktops
-    /// at sign-in, and switching on a manual reassignment would make a batch
-    /// thrash.
-    /// </remarks>
-    /// <param name="eventKind">The observed window event.</param>
-    /// <returns>Whether the current desktop follows the swept window.</returns>
-    public static bool FollowsWindow(WindowEventKind eventKind) =>
-        eventKind is WindowEventKind.Created or WindowEventKind.Shown;
 
     /// <summary>
     /// Whether an activity record was produced by the sweep.

@@ -302,6 +302,7 @@ public sealed class DiagnosticsHostingAcceptanceTests
 
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new ActiveConfigurationService(configuration));
             services.AddSingleton<ICompatibilityCoordinator>(

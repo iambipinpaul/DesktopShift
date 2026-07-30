@@ -224,6 +224,7 @@ public sealed class BrowserAssignmentAcceptanceTests
 
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new ActiveConfigurationService(configuration));
             services.AddSingleton<ICompatibilityCoordinator>(

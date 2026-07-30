@@ -218,6 +218,7 @@ public sealed class WindowObservationHostingTests
     {
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new StubConfigurationService(
                     configurationState ??

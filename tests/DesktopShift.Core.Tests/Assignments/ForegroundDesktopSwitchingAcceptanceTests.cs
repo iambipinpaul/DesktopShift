@@ -71,6 +71,88 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
     }
 
     [TestMethod]
+    public async Task LaunchedWindowActivatedWhileHeld_IsMovedOnceAndFollowed()
+    {
+        // Launching an application from another desktop. The window is shown
+        // here first and takes the foreground a moment later, and the desktop
+        // has to end up where the window did.
+        //
+        // Moving it the instant it was shown is what used to break this: a
+        // window that is no longer on this desktop cannot take the foreground
+        // on it, so the activation never arrived and the user was left behind.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(210, OtherDesktopId);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+
+        await harness.ObserveAsync(WindowEventKind.Shown, 210, Now);
+
+        // Still here, deliberately. The move is waiting to see what happens.
+        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(1, harness.FollowScheduler.PendingCount);
+
+        WindowObservationActivity activated = await harness.ProcessAsync(
+            WindowEventKind.ForegroundActivated,
+            210,
+            Now);
+
+        Assert.AreEqual(
+            DesktopSwitchOutcome.Succeeded,
+            activated.Assignment!.SwitchOutcome);
+        Assert.AreEqual(TargetDesktopId, harness.Topology.CurrentDesktopId);
+
+        // Placed once. The activation took the held move over rather than
+        // racing it.
+        Assert.HasCount(1, harness.Placement.Moves);
+        Assert.AreEqual(0, harness.FollowScheduler.PendingCount);
+    }
+
+    [TestMethod]
+    public async Task OpenedWindowNothingActivates_IsMovedWithoutFollowing()
+    {
+        // The window that appears without being asked for. It is still placed,
+        // because placement is total, but the user is not taken anywhere.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(211, OtherDesktopId);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+
+        await harness.ObserveAsync(WindowEventKind.Shown, 211, Now);
+        Assert.IsEmpty(harness.Placement.Moves);
+
+        Assert.AreEqual(1, await harness.FollowScheduler.ReleaseAllAsync());
+        WindowAssignmentActivity assignment = harness.Sink.Last!.Assignment!;
+
+        Assert.AreEqual(WindowMoveOutcome.Succeeded, assignment.MoveOutcome);
+        Assert.AreEqual(
+            DesktopSwitchOutcome.NotRequested,
+            assignment.SwitchOutcome);
+        Assert.AreEqual(
+            DesktopSwitchDecisionReason.BackgroundEventMoveOnly,
+            assignment.SwitchDecisionReason);
+        Assert.HasCount(1, harness.Placement.Moves);
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+        Assert.AreEqual(OtherDesktopId, harness.Topology.CurrentDesktopId);
+    }
+
+    [TestMethod]
+    public async Task WindowClosedWhileHeld_IsNeverMoved()
+    {
+        // A window that came and went inside its grace period. There is nothing
+        // left to place, and the handle may already belong to something else.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.SetCurrent(212, OtherDesktopId);
+
+        await harness.ObserveAsync(WindowEventKind.Shown, 212, Now);
+        await harness.ObserveAsync(WindowEventKind.Destroyed, 212, Now);
+
+        Assert.AreEqual(0, await harness.FollowScheduler.ReleaseAllAsync());
+        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(0, harness.Topology.SwitchCallCount);
+    }
+
+    [TestMethod]
     public async Task CurrentTargetDesktop_IsIdempotentAndDuplicateEventIsCoalesced()
     {
         SwitchingHarness harness = new(
@@ -353,19 +435,46 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
                 new AcceptAllClassifier(),
                 new CodeIdentityResolver(),
                 new FixedRuleSource(rule),
-                new NullWindowObservationActivitySink(),
+                Sink,
                 assignmentService: assignmentService,
                 activationTracker: activationTracker,
-                switchSuppression: suppression);
+                switchSuppression: suppression,
+                followGrace: new OpenWindowFollowGrace(
+                    scheduler: FollowScheduler));
         }
 
         public FakeTopologyProvider Topology { get; }
 
         public FakePlacementService Placement { get; }
 
+        public ManualOpenWindowFollowScheduler FollowScheduler { get; } = new();
+
+        public CapturingWindowObservationActivitySink Sink { get; } = new();
+
         private WindowObservationProcessor Processor { get; }
 
-        public ValueTask<WindowObservationActivity> ProcessAsync(
+        /// <summary>
+        /// Observes one window event and settles whatever it started, so an
+        /// opened window that nothing activates ends up placed.
+        /// </summary>
+        public async ValueTask<WindowObservationActivity> ProcessAsync(
+            WindowEventKind kind,
+            long handle,
+            DateTimeOffset observedAt)
+        {
+            WindowObservationActivity observation = await ObserveAsync(
+                kind,
+                handle,
+                observedAt);
+            await FollowScheduler.ReleaseAllAsync();
+            return Sink.Last ?? observation;
+        }
+
+        /// <summary>
+        /// Observes one window event and leaves any hold it started standing,
+        /// for tests where the next event is the point.
+        /// </summary>
+        public ValueTask<WindowObservationActivity> ObserveAsync(
             WindowEventKind kind,
             long handle,
             DateTimeOffset observedAt) =>

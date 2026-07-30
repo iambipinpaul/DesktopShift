@@ -16,7 +16,8 @@ rule cannot use.
 | --- | --- |
 | The three-tier decision, on every trigger | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs` |
 | The identity-only predicate ignoring triggers, switch policy, and destination | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs` |
-| The follow-on-open switch, and the batch triggers that must not switch | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs` |
+| The follow-on-activation switch, and the batch triggers that must not switch | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs` |
+| Holding an opened window back so an activation can overtake the move | `tests/DesktopShift.Core.Tests/Observation/OpenWindowFollowGraceTests.cs`, `tests/DesktopShift.Core.Tests/Assignments/ForegroundDesktopSwitchingAcceptanceTests.cs` |
 | Position 0 resolved by position rather than by name | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs` |
 | Degrading when the first desktop cannot be located | `tests/DesktopShift.Core.Tests/Observation/UnmanagedWindowSweepTests.cs`, `tests/DesktopShift.Core.Tests/Assignments/TerminalAssignmentAcceptanceTests.cs` |
 | A swept window never guessed onto a managed desktop | `tests/DesktopShift.Core.Tests/Assignments/RemoteDesktopAssignmentAcceptanceTests.cs` |
@@ -45,7 +46,8 @@ This document covers what those cannot.
 
 | Case | Action | Expected result |
 | --- | --- | --- |
-| Swept on open, with the user | Stand on desktop 3. Launch the unnamed application. | Its window opens on the first desktop and **the current desktop becomes the first desktop**, so you are looking at the window you just launched. It never appears to vanish. |
+| Swept on open, with the user | Stand on desktop 3. Launch the unnamed application. | **The current desktop becomes the first desktop**, so you are looking at the window you just launched. It never appears to vanish. The window may be visible on desktop 3 for a moment first: DesktopShift waits briefly to see whether you activate it, and a launch always does. |
+| Opened without being asked for | Stand on desktop 3 and make an unnamed application open a window you did not activate — a background updater, or a second window raised by an application already running elsewhere. | The window is still swept to the first desktop, but **the current desktop does not change**. You are not moved away from what you were doing. This is the one case that distinguishes a launch from a window that simply appeared. |
 | Recorded distinctly | Read the newest Activity rows. | The decision row says no rule names this app and that the window is moved to the first desktop. Rule reads "No rule names this app" and target reads "First desktop" — not a raw key in parentheses. |
 | One-click rule | On that decision row, press **Create a rule for this app**. | The rule editor opens pre-filled with the application's process name and, for a packaged app, its package family name and app ID. The name and identifier are filled in. No window title, address, or command line appears anywhere in the dialog. |
 | The rule takes over | Save that rule against a Managed Desktop, then close and relaunch the application. | The window now goes to the Managed Desktop, and the Activity row names your rule instead of the sweep. |

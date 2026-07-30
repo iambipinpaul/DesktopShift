@@ -160,6 +160,7 @@ public sealed class AutomaticAssignmentPauseTests
     {
         return DesktopShiftHost.Create(services =>
         {
+            services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
                 new StubConfigurationService(
                     new ConfigurationState(

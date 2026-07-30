@@ -175,6 +175,250 @@ public sealed class WindowEventCoalescer : IDisposable
     }
 }
 
+/// <summary>
+/// Schedules a held assignment to run once its grace period has elapsed.
+/// </summary>
+/// <remarks>
+/// Distinct from <see cref="IWindowCoalescingScheduler"/>, whose callback only
+/// expires a bookkeeping entry. This one runs the assignment itself, so its
+/// callback is asynchronous and the scheduler owns the decision to let it run
+/// unobserved.
+/// </remarks>
+public interface IOpenWindowFollowScheduler
+{
+    IDisposable Schedule(TimeSpan dueTime, Func<Task> callback);
+}
+
+public sealed class TimerOpenWindowFollowScheduler : IOpenWindowFollowScheduler
+{
+    public IDisposable Schedule(TimeSpan dueTime, Func<Task> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        return new Timer(
+            static state => Run((Func<Task>)state!),
+            callback,
+            dueTime,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private static void Run(Func<Task> callback)
+    {
+        try
+        {
+            // Nothing awaits a held assignment, and it records its own failures.
+            // Both arms here exist only to keep a failure from reaching a
+            // ThreadPool timer callback or the finalizer as an unobserved
+            // exception, either of which would terminate the process.
+            _ = callback().ContinueWith(
+                static faulted => _ = faulted.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted |
+                    TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+        catch (Exception)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// Holds a newly opened window's assignment briefly, so a foreground activation
+/// can overtake it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The desktop follows a window only when Windows says the user activated it.
+/// Moving at open time defeats that test rather than passing it: once a window
+/// is on another desktop it can never take the foreground on this one, so the
+/// activation the policy is waiting for never arrives, and a launch the user
+/// asked for leaves them behind. Which of the two happened came down to whether
+/// the Shell had registered an application view yet — a few milliseconds
+/// deciding whether the desktop followed.
+/// </para>
+/// <para>
+/// So the open-time assignment waits. If the window takes the foreground inside
+/// the grace period, that event does the work and the desktop follows it; if it
+/// does not, the held assignment runs and the window is moved without the user.
+/// A window that opens on its own — an updater, a helper window, a restored
+/// background app — never takes the foreground, and so is never followed.
+/// </para>
+/// <para>
+/// A <see cref="TimeSpan.Zero"/> grace period disables the hold and assigns
+/// inline, which is what a caller that drives events by hand wants.
+/// </para>
+/// </remarks>
+public sealed class OpenWindowFollowGrace : IDisposable
+{
+    /// <summary>
+    /// How long an open-time assignment waits for a foreground activation.
+    /// </summary>
+    /// <remarks>
+    /// The observed gap between a window being shown and taking the foreground
+    /// is around a millisecond, so this is a wide margin rather than a tuned
+    /// value. It stays under the threshold where a delay reads as lag, which
+    /// matters because it is also how long an unwanted window stays visible
+    /// before it is moved away.
+    /// </remarks>
+    public static readonly TimeSpan DefaultGracePeriod =
+        TimeSpan.FromMilliseconds(150);
+
+    private readonly TimeSpan gracePeriod;
+    private readonly IOpenWindowFollowScheduler scheduler;
+    private readonly object syncRoot = new();
+    private readonly Dictionary<nint, HeldAssignment> held = [];
+    private long generation;
+    private bool disposed;
+
+    public OpenWindowFollowGrace(
+        TimeSpan? gracePeriod = null,
+        IOpenWindowFollowScheduler? scheduler = null)
+    {
+        TimeSpan period = gracePeriod ?? DefaultGracePeriod;
+        ArgumentOutOfRangeException.ThrowIfLessThan(period, TimeSpan.Zero);
+
+        this.gracePeriod = period;
+        this.scheduler = scheduler ?? new TimerOpenWindowFollowScheduler();
+    }
+
+    /// <summary>Whether an open-time assignment is held rather than run inline.</summary>
+    public bool IsEnabled => gracePeriod > TimeSpan.Zero;
+
+    /// <summary>How many windows are currently waiting on an activation.</summary>
+    public int HeldCount
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return held.Count;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether a window is still inside the grace period that began when it
+    /// opened.
+    /// </summary>
+    /// <remarks>
+    /// This is how the observer tells a window that has just opened apart from
+    /// one that has been sitting there — the two are otherwise indistinguishable
+    /// by the time a foreground activation arrives.
+    /// </remarks>
+    /// <param name="windowHandle">The window to ask about.</param>
+    /// <returns>Whether an assignment is being held for it.</returns>
+    public bool IsHeld(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            return held.ContainsKey(windowHandle);
+        }
+    }
+
+    /// <summary>
+    /// Holds an assignment for a window, replacing any already held for it.
+    /// </summary>
+    /// <remarks>
+    /// A new window produces a created event and a shown event a moment apart.
+    /// Replacing rather than stacking means the later of the two is the one that
+    /// runs, so a window is assigned once whichever pair of events Windows sends.
+    /// </remarks>
+    /// <param name="windowHandle">The window whose assignment is held.</param>
+    /// <param name="release">The assignment to run when the grace period ends.</param>
+    public void Hold(nint windowHandle, Func<Task> release)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            if (held.Remove(windowHandle, out HeldAssignment? previous))
+            {
+                previous.Dispose();
+            }
+
+            long nextGeneration = ++generation;
+            HeldAssignment entry = new(nextGeneration, release);
+            held[windowHandle] = entry;
+            entry.Lease = scheduler.Schedule(
+                gracePeriod,
+                () => ReleaseAsync(windowHandle, nextGeneration));
+        }
+    }
+
+    /// <summary>
+    /// Drops a held assignment, because something else is answering for the
+    /// window: the activation the hold was waiting for, or the window closing.
+    /// </summary>
+    /// <param name="windowHandle">The window to stop holding.</param>
+    /// <returns>Whether an assignment was being held.</returns>
+    public bool Cancel(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            if (!held.Remove(windowHandle, out HeldAssignment? entry))
+            {
+                return false;
+            }
+
+            entry.Dispose();
+            return true;
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (syncRoot)
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            foreach (HeldAssignment entry in held.Values)
+            {
+                entry.Dispose();
+            }
+
+            held.Clear();
+        }
+    }
+
+    private Task ReleaseAsync(nint windowHandle, long expectedGeneration)
+    {
+        Func<Task>? release = null;
+        lock (syncRoot)
+        {
+            if (held.TryGetValue(windowHandle, out HeldAssignment? entry) &&
+                entry.Generation == expectedGeneration)
+            {
+                held.Remove(windowHandle);
+                release = entry.Release;
+                entry.Dispose();
+            }
+        }
+
+        // Invoked outside the lock. The assignment moves a window and can switch
+        // the desktop, neither of which should run while a foreground event is
+        // waiting to cancel a different window's hold.
+        return release?.Invoke() ?? Task.CompletedTask;
+    }
+
+    private sealed class HeldAssignment(long generation, Func<Task> release)
+        : IDisposable
+    {
+        public long Generation { get; } = generation;
+
+        public Func<Task> Release { get; } = release;
+
+        public IDisposable? Lease { get; set; }
+
+        public void Dispose() => Lease?.Dispose();
+    }
+}
+
 public sealed class WindowObservationProcessor : IDisposable
 {
     private readonly IWindowClassifier classifier;
@@ -183,6 +427,7 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly IWindowObservationActivitySink activitySink;
     private readonly WindowRuleMatcher matcher;
     private readonly WindowEventCoalescer coalescer;
+    private readonly OpenWindowFollowGrace followGrace;
     private readonly IWindowAssignmentService? assignmentService;
     private readonly INewWindowActivationTracker? activationTracker;
     private readonly IForegroundSwitchSuppression? switchSuppression;
@@ -196,7 +441,8 @@ public sealed class WindowObservationProcessor : IDisposable
         WindowEventCoalescer? coalescer = null,
         IWindowAssignmentService? assignmentService = null,
         INewWindowActivationTracker? activationTracker = null,
-        IForegroundSwitchSuppression? switchSuppression = null)
+        IForegroundSwitchSuppression? switchSuppression = null,
+        OpenWindowFollowGrace? followGrace = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -209,6 +455,7 @@ public sealed class WindowObservationProcessor : IDisposable
         this.activitySink = activitySink;
         this.matcher = matcher ?? new WindowRuleMatcher();
         this.coalescer = coalescer ?? new WindowEventCoalescer();
+        this.followGrace = followGrace ?? new OpenWindowFollowGrace();
         this.assignmentService = assignmentService;
         this.activationTracker = activationTracker;
         this.switchSuppression = switchSuppression;
@@ -226,6 +473,11 @@ public sealed class WindowObservationProcessor : IDisposable
         {
             activationTracker?.Clear(windowEvent.WindowHandle);
             switchSuppression?.Clear(windowEvent.WindowHandle);
+
+            // A window that closed inside its grace period is not moved. There
+            // is nothing left to place, and the handle may already have been
+            // handed to a different window.
+            followGrace.Cancel(windowEvent.WindowHandle);
             coalescer.ShouldProcess(windowEvent);
             return await RecordSkipAsync(
                 windowEvent,
@@ -329,12 +581,21 @@ public sealed class WindowObservationProcessor : IDisposable
         }
         else
         {
+            // The sweep does not answer foreground activations, so that clicking
+            // a stray window never moves it out from under the click. A window
+            // still inside its opening grace period is the exception: there the
+            // activation is the window being launched, which is the one thing
+            // the sweep does answer — it just arrived as a different event.
+            bool answersEvent =
+                UnmanagedWindowSweep.AnswersEvent(windowEvent.Kind) ||
+                (windowEvent.Kind == WindowEventKind.ForegroundActivated &&
+                    followGrace.IsHeld(window.RootWindowHandle));
+
             // The sweep test asks whether any enabled rule names the
             // application, never whether one matched this event. Reusing the
             // match result would turn narrowing a rule's triggers into
             // banishing its windows.
-            if (!UnmanagedWindowSweep.AnswersEvent(windowEvent.Kind) ||
-                matcher.IsNamedByAnyRule(identity, rules))
+            if (!answersEvent || matcher.IsNamedByAnyRule(identity, rules))
             {
                 return await RecordSkipAsync(
                     windowEvent,
@@ -351,20 +612,93 @@ public sealed class WindowObservationProcessor : IDisposable
             matchedOn = null;
         }
 
-        WindowAssignmentActivity? assignment = null;
+        WindowSafeIdentity safeIdentity = identity.ToSafeIdentity();
         if (windowEvent.Kind is WindowEventKind.Created or WindowEventKind.Shown)
         {
             activationTracker?.MarkMatchedWindowNew(window.RootWindowHandle);
+
+            // Wait rather than move now. Moving takes the window off this
+            // desktop, and a window that is not here can never take the
+            // foreground here, so moving first destroys the very signal that
+            // decides whether the desktop should follow it.
+            if (assignmentService is not null && followGrace.IsEnabled)
+            {
+                followGrace.Hold(
+                    window.RootWindowHandle,
+                    () => CompleteMatchAsync(
+                        windowEvent,
+                        window.RootWindowHandle,
+                        safeIdentity,
+                        rule,
+                        matchedOn,
+                        correlationId,
+                        CancellationToken.None).AsTask());
+
+                // Deliberately not recorded. Whichever way the wait ends records
+                // the observation — the held assignment when it runs, or the
+                // activation that overtakes it — so opening a window leaves one
+                // row behind rather than two.
+                return new WindowObservationActivity(
+                    windowEvent.ObservedAt,
+                    windowEvent.Sequence,
+                    windowEvent.Kind,
+                    window.RootWindowHandle,
+                    WindowObservationOutcome.Matched,
+                    WindowSkipReason.None,
+                    rule.Id,
+                    rule.TargetDesktopKey,
+                    safeIdentity,
+                    MatchedOn: matchedOn,
+                    CorrelationId: correlationId);
+            }
+        }
+        else if (windowEvent.Kind == WindowEventKind.ForegroundActivated)
+        {
+            // The activation the hold was waiting for. Dropped here, once this
+            // event is known to be assigning, rather than when it arrived: an
+            // activation that goes on to be skipped has to leave the hold alone,
+            // or a window that fails to qualify on activation is never placed.
+            followGrace.Cancel(window.RootWindowHandle);
         }
 
+        return await CompleteMatchAsync(
+            windowEvent,
+            window.RootWindowHandle,
+            safeIdentity,
+            rule,
+            matchedOn,
+            correlationId,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Assigns a matched window and records the observation it belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Reached either directly, or from
+    /// <see cref="OpenWindowFollowGrace"/> once an opened window has waited out
+    /// its grace period without being activated. The window event it is given is
+    /// the original one, so a held assignment is recorded against the moment the
+    /// window appeared rather than the moment the wait expired.
+    /// </remarks>
+    private async ValueTask<WindowObservationActivity> CompleteMatchAsync(
+        WindowEvent windowEvent,
+        nint windowHandle,
+        WindowSafeIdentity identity,
+        WindowObservationRule rule,
+        WindowMatchStrength? matchedOn,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        WindowAssignmentActivity? assignment = null;
         if (assignmentService is not null)
         {
             assignment = await assignmentService.AssignAsync(
                 new WindowAssignmentRequest(
                     windowEvent.Kind,
-                    window.RootWindowHandle,
+                    windowHandle,
                     rule,
-                    identity.ToSafeIdentity(),
+                    identity,
                     correlationId),
                 cancellationToken).ConfigureAwait(false);
         }
@@ -373,12 +707,12 @@ public sealed class WindowObservationProcessor : IDisposable
             windowEvent.ObservedAt,
             windowEvent.Sequence,
             windowEvent.Kind,
-            window.RootWindowHandle,
+            windowHandle,
             WindowObservationOutcome.Matched,
             WindowSkipReason.None,
             rule.Id,
             rule.TargetDesktopKey,
-            identity.ToSafeIdentity(),
+            identity,
             AssignmentCorrelationId: assignment?.CorrelationId,
             AssignmentOutcome: assignment?.Outcome,
             AssignmentDuration: assignment?.Duration,
@@ -434,5 +768,12 @@ public sealed class WindowObservationProcessor : IDisposable
         return activity;
     }
 
-    public void Dispose() => coalescer.Dispose();
+    public void Dispose()
+    {
+        coalescer.Dispose();
+
+        // Held assignments are dropped rather than run. Shutdown is not the
+        // moment to start moving the user's windows around.
+        followGrace.Dispose();
+    }
 }

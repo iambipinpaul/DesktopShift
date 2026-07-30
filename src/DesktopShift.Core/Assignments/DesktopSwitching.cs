@@ -4,19 +4,13 @@ using DesktopShift.Core.Observation;
 
 namespace DesktopShift.Core.Assignments;
 
-/// <param name="IsUnmanagedSweep">
-/// Whether the window is being moved because no rule names it. A swept window
-/// takes the user with it when it is swept at open time, which is what stops a
-/// launch from looking like a failure.
-/// </param>
 public sealed record DesktopSwitchRequest(
     Guid CorrelationId,
     WindowEventKind Trigger,
     nint WindowHandle,
     Guid TargetDesktopId,
     DesktopSwitchPolicy Policy,
-    bool IsFirstForegroundActivation,
-    bool IsUnmanagedSweep = false);
+    bool IsFirstForegroundActivation);
 
 public sealed record DesktopSwitchResult(
     DesktopSwitchOutcome Outcome,
@@ -296,18 +290,18 @@ public sealed class DesktopSwitchCoordinator(
     {
         if (request.Trigger != WindowEventKind.ForegroundActivated)
         {
-            // A window swept at open time is the one exception to move-only on
-            // a background event. The user just launched the application, and
-            // moving it to the first desktop without taking them along would
-            // look like the launch had silently failed.
+            // One rule, with no exceptions: the desktop follows a window only
+            // when Windows says the user activated it. Ruled windows and swept
+            // windows alike.
             //
-            // Only at open time. A startup reconciliation would bounce the user
-            // across desktops at sign-in, and a manual reassignment batch would
-            // thrash.
-            return request.IsUnmanagedSweep &&
-                UnmanagedWindowSweep.FollowsWindow(request.Trigger)
-                ? null
-                : DesktopSwitchDecisionReason.BackgroundEventMoveOnly;
+            // An open-time event reaching here has already waited out its grace
+            // period in the observer without being activated, so what is being
+            // moved is a window that opened without anyone asking for it — an
+            // updater, a helper window, an application restoring itself.
+            // Following one of those would take the user away from whatever they
+            // were doing, which is a far worse thing to get wrong than leaving
+            // them where they are.
+            return DesktopSwitchDecisionReason.BackgroundEventMoveOnly;
         }
 
         return request.Policy switch
