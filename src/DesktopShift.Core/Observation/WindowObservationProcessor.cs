@@ -499,6 +499,7 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly IWindowAssignmentService? assignmentService;
     private readonly INewWindowActivationTracker? activationTracker;
     private readonly IForegroundSwitchSuppression? switchSuppression;
+    private readonly IEarlyForegroundActivationMemory? earlyForeground;
     private readonly IPerformanceRecorder? performanceRecorder;
     private readonly TimeProvider timeProvider;
 
@@ -514,7 +515,8 @@ public sealed class WindowObservationProcessor : IDisposable
         IForegroundSwitchSuppression? switchSuppression = null,
         OpenWindowFollowGrace? followGrace = null,
         IPerformanceRecorder? performanceRecorder = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IEarlyForegroundActivationMemory? earlyForeground = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -531,6 +533,7 @@ public sealed class WindowObservationProcessor : IDisposable
         this.assignmentService = assignmentService;
         this.activationTracker = activationTracker;
         this.switchSuppression = switchSuppression;
+        this.earlyForeground = earlyForeground;
         this.performanceRecorder = performanceRecorder;
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -555,6 +558,7 @@ public sealed class WindowObservationProcessor : IDisposable
         {
             activationTracker?.Clear(windowEvent.WindowHandle);
             switchSuppression?.Clear(windowEvent.WindowHandle);
+            earlyForeground?.Clear(windowEvent.WindowHandle);
 
             // A window that closed inside its grace period is not moved. There
             // is nothing left to place, and the handle may already have been
@@ -587,6 +591,15 @@ public sealed class WindowObservationProcessor : IDisposable
             classifier.Qualify(windowEvent.WindowHandle);
         if (qualification.Window is null)
         {
+            // The window is not placeable — usually because it is not visible
+            // yet — but it just took the foreground, and that is the one signal
+            // saying the user asked for it. Remembered rather than dropped, so
+            // the open event that follows can inherit it.
+            if (windowEvent.Kind == WindowEventKind.ForegroundActivated)
+            {
+                earlyForeground?.Remember(windowEvent.WindowHandle);
+            }
+
             return await RecordSkipAsync(
                 windowEvent,
                 windowEvent.WindowHandle,
@@ -695,6 +708,14 @@ public sealed class WindowObservationProcessor : IDisposable
         }
 
         WindowSafeIdentity safeIdentity = identity.ToSafeIdentity();
+
+        // An activation that arrived before this window could be placed. The
+        // window is being opened by a user who focused it on the way up, so this
+        // open event carries the same weight as an activation would have.
+        bool focusedBeforeVisible =
+            windowEvent.Kind is WindowEventKind.Created or WindowEventKind.Shown &&
+            earlyForeground?.TryConsume(window.RootWindowHandle) == true;
+
         if (windowEvent.Kind is WindowEventKind.Created or WindowEventKind.Shown)
         {
             activationTracker?.MarkMatchedWindowNew(window.RootWindowHandle);
@@ -703,7 +724,12 @@ public sealed class WindowObservationProcessor : IDisposable
             // desktop, and a window that is not here can never take the
             // foreground here, so moving first destroys the very signal that
             // decides whether the desktop should follow it.
-            if (assignmentService is not null && followGrace.IsEnabled)
+            //
+            // Unless that signal already arrived. A window focused before it
+            // became visible has nothing left to wait for, and holding it would
+            // only delay a move the user is watching for.
+            if (assignmentService is not null && followGrace.IsEnabled &&
+                !focusedBeforeVisible)
             {
                 // Where the deliberate wait starts. Whatever the hold costs is
                 // measured from here and reported as policy deferral rather than
@@ -721,6 +747,7 @@ public sealed class WindowObservationProcessor : IDisposable
                         correlationId,
                         receivedTimestamp,
                         heldFromTimestamp,
+                        focusedBeforeVisible: false,
                         CancellationToken.None).AsTask());
 
                 // Deliberately not recorded. Whichever way the wait ends records
@@ -759,6 +786,7 @@ public sealed class WindowObservationProcessor : IDisposable
             correlationId,
             receivedTimestamp,
             heldFromTimestamp: null,
+            focusedBeforeVisible,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -790,6 +818,7 @@ public sealed class WindowObservationProcessor : IDisposable
         Guid correlationId,
         long receivedTimestamp,
         long? heldFromTimestamp,
+        bool focusedBeforeVisible,
         CancellationToken cancellationToken)
     {
         // Read before the assignment runs, so the wait is measured up to the
@@ -798,12 +827,20 @@ public sealed class WindowObservationProcessor : IDisposable
             ? timeProvider.GetElapsedTime(heldFrom)
             : TimeSpan.Zero;
 
+        // The assignment is told what the event meant rather than which event it
+        // was. A window focused before it became visible was activated by the
+        // user just as surely as one focused after, and the switch policy asks
+        // only whether the user asked for this window.
+        WindowEventKind assignmentTrigger = focusedBeforeVisible
+            ? WindowEventKind.ForegroundActivated
+            : windowEvent.Kind;
+
         WindowAssignmentActivity? assignment = null;
         if (assignmentService is not null)
         {
             assignment = await assignmentService.AssignAsync(
                 new WindowAssignmentRequest(
-                    windowEvent.Kind,
+                    assignmentTrigger,
                     windowHandle,
                     rule,
                     identity,

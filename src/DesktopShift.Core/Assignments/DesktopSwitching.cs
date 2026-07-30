@@ -47,6 +47,50 @@ public interface INewWindowActivationTracker
     void Clear(nint windowHandle);
 }
 
+/// <summary>
+/// Remembers a window that took the foreground before it was ready to be placed.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Applications do not agree on the order of showing a window and focusing it.
+/// One shows first and focuses after, and its activation arrives on a window
+/// that qualifies. Another focuses first and shows after, and its activation
+/// arrives on a window that is still invisible — which the classifier rejects,
+/// rightly, because an invisible window is not something to place.
+/// </para>
+/// <para>
+/// Rejecting the window also throws away the only signal that says the user
+/// asked for it. By the time the window is visible the sole remaining event is
+/// an open event, which never follows, so a launch the user made deliberately
+/// leaves them behind. The activation is therefore remembered against the
+/// handle, and the open event arriving a moment later inherits it.
+/// </para>
+/// <para>
+/// The memory is deliberately short. It answers "this window was focused as it
+/// came up", not "this window was focused at some point": a window that takes
+/// seconds to appear after being focused is no longer the launch the user is
+/// waiting on, and following it would move them for something they have
+/// forgotten about.
+/// </para>
+/// </remarks>
+public interface IEarlyForegroundActivationMemory
+{
+    /// <summary>Records that an unqualified window took the foreground.</summary>
+    void Remember(nint windowHandle);
+
+    /// <summary>
+    /// Takes the remembered activation, if one is still live.
+    /// </summary>
+    /// <remarks>
+    /// Consuming rather than peeking, so one early activation answers for one
+    /// open event. A window that is created and then shown produces two, and the
+    /// second must not inherit an activation the first already spent.
+    /// </remarks>
+    bool TryConsume(nint windowHandle);
+
+    void Clear(nint windowHandle);
+}
+
 public sealed class BoundedForegroundSwitchSuppression(
     TimeProvider timeProvider) : IForegroundSwitchSuppression
 {
@@ -187,6 +231,82 @@ public sealed class BoundedNewWindowActivationTracker :
 
     private sealed record EligibilityEntry(
         bool IsEligible,
+        long Generation);
+}
+
+public sealed class BoundedEarlyForegroundActivationMemory(
+    TimeProvider timeProvider) : IEarlyForegroundActivationMemory
+{
+    public const int DefaultCapacity = 128;
+
+    /// <summary>
+    /// How long an activation on an unqualified window stays available to the
+    /// open event that follows it.
+    /// </summary>
+    /// <remarks>
+    /// The observed gap between Windows Terminal taking the foreground and its
+    /// window becoming visible is around 665ms, so this is a wide margin rather
+    /// than a tuned value. It is bounded because the memory decides whether the
+    /// user is taken to another desktop, and an activation old enough to have
+    /// been forgotten must not be able to do that.
+    /// </remarks>
+    public static readonly TimeSpan DefaultLifetime =
+        TimeSpan.FromSeconds(2);
+
+    private readonly object syncRoot = new();
+    private readonly Dictionary<nint, MemoryEntry> entries = [];
+    private long generation;
+
+    public void Remember(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            PruneExpired();
+            if (entries.Count >= DefaultCapacity &&
+                !entries.ContainsKey(windowHandle))
+            {
+                nint oldest = entries.MinBy(
+                    static pair => pair.Value.Generation).Key;
+                entries.Remove(oldest);
+            }
+
+            entries[windowHandle] = new MemoryEntry(
+                timeProvider.GetUtcNow() + DefaultLifetime,
+                ++generation);
+        }
+    }
+
+    public bool TryConsume(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            PruneExpired();
+            return entries.Remove(windowHandle);
+        }
+    }
+
+    public void Clear(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            entries.Remove(windowHandle);
+        }
+    }
+
+    private void PruneExpired()
+    {
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        foreach (nint handle in entries
+            .Where(pair => pair.Value.ExpiresAtUtc <= now)
+            .Select(static pair => pair.Key)
+            .ToArray())
+        {
+            entries.Remove(handle);
+        }
+    }
+
+    private sealed record MemoryEntry(
+        DateTimeOffset ExpiresAtUtc,
         long Generation);
 }
 

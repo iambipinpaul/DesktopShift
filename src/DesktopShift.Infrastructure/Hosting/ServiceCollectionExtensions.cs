@@ -264,6 +264,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<INewWindowActivationTracker>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 BoundedNewWindowActivationTracker>());
+        services.TryAddSingleton<BoundedEarlyForegroundActivationMemory>();
+        services.TryAddSingleton<IEarlyForegroundActivationMemory>(
+            static serviceProvider => serviceProvider.GetRequiredService<
+                BoundedEarlyForegroundActivationMemory>());
         if (services.Any(
             static descriptor =>
                 descriptor.ServiceType == typeof(IDesktopTopologyProvider)))
