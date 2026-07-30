@@ -345,7 +345,7 @@
                             <DataTemplate x:DataType="settings:HotkeyBindingEditor">
                                 <Border
                                     Margin="0,4"
-                                    Padding="{StaticResource DesktopShift.GroupSpacing}"
+                                    Padding="{StaticResource DesktopShift.GroupPadding}"
                                     Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
                                     BorderBrush="{ThemeResource DesktopShift.BorderBrush}"
                                     BorderThickness="1"
