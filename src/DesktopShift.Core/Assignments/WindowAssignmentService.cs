@@ -13,9 +13,36 @@ public sealed class WindowAssignmentService(
     IDesktopSwitchCoordinator? switchCoordinator = null,
     IForegroundSwitchSuppression? suppression = null,
     INewWindowActivationTracker? activationTracker = null,
-    IFirstDesktopLocator? firstDesktopLocator = null) :
+    IFirstDesktopLocator? firstDesktopLocator = null,
+    PerWindowAssignmentGate? windowGate = null) :
     IWindowAssignmentService
 {
+    /// <summary>
+    /// Keeps two assignments for one window from running at once.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than required from the caller, so it is never null. The
+    /// application shares one assignment service, which makes one gate per
+    /// service one gate per window; a caller that constructs its own service
+    /// gets the same protection without having to know this type exists. The
+    /// parameter is there for tests that want to read the gate afterwards.
+    /// </remarks>
+    private readonly PerWindowAssignmentGate gate =
+        windowGate ?? new PerWindowAssignmentGate();
+
+    /// <summary>
+    /// Places one window according to its rule, and switches the desktop if the
+    /// rule's policy says the user asked for it.
+    /// </summary>
+    /// <remarks>
+    /// Held against <see cref="PerWindowAssignmentGate"/> from end to end, so
+    /// the placement this reads is the placement it acts on. Two assignments for
+    /// the same window run one after the other; assignments for different
+    /// windows do not wait for each other at all.
+    /// </remarks>
+    /// <param name="request">The window, the rule, and the correlation to use.</param>
+    /// <param name="cancellationToken">Abandons the assignment.</param>
+    /// <returns>What was decided and what it did.</returns>
     public async ValueTask<WindowAssignmentActivity> AssignAsync(
         WindowAssignmentRequest request,
         CancellationToken cancellationToken = default)
@@ -23,6 +50,17 @@ public sealed class WindowAssignmentService(
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
+        using PerWindowAssignmentGate.Lease lease = await gate
+            .AcquireAsync(request.WindowHandle, cancellationToken)
+            .ConfigureAwait(false);
+        return await AssignExclusiveAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async ValueTask<WindowAssignmentActivity> AssignExclusiveAsync(
+        WindowAssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
         // The observation already minted a correlation for this window event.
         // Reusing it is what makes the decision, the move, the switch, and the
         // result one readable story instead of four unrelated rows.
@@ -244,9 +282,24 @@ public sealed class WindowAssignmentService(
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested &&
+                moveOutcome != WindowMoveOutcome.Succeeded)
+            {
+                // Nothing has happened to the window yet, so unwinding loses
+                // nothing and the caller's shutdown proceeds as it asked.
+                throw;
+            }
+            catch (OperationCanceledException) when (
                 cancellationToken.IsCancellationRequested)
             {
-                throw;
+                // The move already landed. Throwing here would leave the user's
+                // window somewhere new with nothing in Activity saying who put
+                // it there, so the cancellation is reported as the reason the
+                // switch did not follow rather than as a lost assignment.
+                switchResult = new DesktopSwitchResult(
+                    DesktopSwitchOutcome.NotRequested,
+                    DesktopSwitchDecisionReason.SwitchCancelled,
+                    TimeSpan.Zero);
             }
             catch (Exception exception)
             {

@@ -166,7 +166,7 @@ public sealed class WindowsWinEventSourceTests
     private sealed class ThrowingWindowEventQueue : IWindowEventQueue
     {
         public WindowEventQueueSnapshot Snapshot =>
-            new(1, 0, 0, 0, 0);
+            new(1, 0, 0, 0, 0, 0);
 
         public bool TryPublish(WindowEvent windowEvent) =>
             throw new InvalidOperationException("queue failed");

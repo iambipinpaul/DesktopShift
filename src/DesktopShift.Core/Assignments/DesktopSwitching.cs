@@ -189,6 +189,40 @@ public sealed class BoundedNewWindowActivationTracker :
         long Generation);
 }
 
+/// <summary>
+/// Decides whether a placed window should take the user with it, and performs
+/// at most one desktop switch at a time.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The gate covers reading the current desktop, comparing it with the target,
+/// and switching. Those three have to be one step: two switches interleaved
+/// would each read the desktop the other is about to leave, so the second would
+/// decide against a desktop that no longer exists by the time it acts, and the
+/// desktop the user ends up on would be whichever call happened to finish last.
+/// </para>
+/// <para>
+/// The wait is asynchronous and nothing here blocks a thread. That is what keeps
+/// the switch free of the deadlocks its callers could otherwise create, because
+/// a switch is reached from four places at once: the UI thread through the
+/// Reassign All command and the tray, a hosted worker draining window events, a
+/// ThreadPool timer releasing a held open-window assignment, and — through the
+/// suppression registered on the way out — the WinEvent callback that the switch
+/// itself provokes. A blocking wait on any of those would stall a message pump
+/// or a callback Windows is waiting on, which is a hung desktop rather than a
+/// slow one.
+/// </para>
+/// <para>
+/// It is also the innermost of the two gates an assignment holds. An assignment
+/// takes <see cref="PerWindowAssignmentGate"/> first and this one second, always
+/// in that order and never the reverse, so the two cannot form a cycle. Nothing
+/// under this gate calls back into an assignment.
+/// </para>
+/// <para>
+/// A caller that cancels while waiting never enters, so an abandoned switch
+/// releases nothing and leaves the gate for the next one.
+/// </para>
+/// </remarks>
 public sealed class DesktopSwitchCoordinator(
     IDesktopTopologyProvider topologyProvider,
     IForegroundSwitchSuppression suppression,

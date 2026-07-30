@@ -248,6 +248,8 @@ public sealed record AssignmentActivityPresentation(
                 "the rule policy approved switching",
             DesktopSwitchDecisionReason.SwitchFailed =>
                 "Windows could not complete the switch",
+            DesktopSwitchDecisionReason.SwitchCancelled =>
+                "DesktopShift was shutting down",
             _ => FormatEnum(reason),
         };
 

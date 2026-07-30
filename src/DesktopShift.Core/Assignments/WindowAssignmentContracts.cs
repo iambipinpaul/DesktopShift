@@ -48,6 +48,17 @@ public enum DesktopSwitchDecisionReason
     CapabilityUnavailable,
     PolicyApproved,
     SwitchFailed,
+
+    /// <summary>
+    /// The window was moved, and then shutdown cancelled the switch that would
+    /// have followed it.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="SwitchFailed"/> because nothing went wrong.
+    /// The move is still recorded as a success, and this says why the desktop
+    /// stayed put.
+    /// </remarks>
+    SwitchCancelled,
 }
 
 public sealed record WindowAssignmentError(
