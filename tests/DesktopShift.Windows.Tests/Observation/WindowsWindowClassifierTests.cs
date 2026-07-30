@@ -292,10 +292,28 @@ public sealed class WindowsWindowClassifierTests
 
         public nint GetDesktopWindow() => DesktopWindow;
 
-        public uint GetWindowProcessId(nint windowHandle) => ProcessId;
+        public uint GetWindowProcessId(nint windowHandle) =>
+            ChildProcessIds.TryGetValue(windowHandle, out uint childProcessId)
+                ? childProcessId
+                : ProcessId;
 
         public string GetWindowClass(nint windowHandle) => WindowClass;
 
         public string? GetWindowTitle(nint windowHandle) => "Sensitive title";
+
+        public Dictionary<nint, uint> ChildProcessIds { get; } = [];
+
+        public void EnumerateChildWindows(
+            nint windowHandle,
+            Func<nint, bool> onChild)
+        {
+            foreach (nint child in ChildProcessIds.Keys)
+            {
+                if (!onChild(child))
+                {
+                    return;
+                }
+            }
+        }
     }
 }

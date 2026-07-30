@@ -28,6 +28,22 @@ public interface IWindowsWindowNativeApi
     string GetWindowClass(nint windowHandle);
 
     string? GetWindowTitle(nint windowHandle);
+
+    /// <summary>
+    /// Visits the descendants of <paramref name="windowHandle"/> until
+    /// <paramref name="onChild"/> returns <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// Used to find the process that owns the content inside a frame window,
+    /// so enumeration stops as soon as the caller has what it came for rather
+    /// than walking a tree it does not need.
+    /// </remarks>
+    /// <param name="windowHandle">The window whose descendants are visited.</param>
+    /// <param name="onChild">
+    /// Receives each descendant and returns whether to keep going. It must not
+    /// throw: it runs inside a native callback.
+    /// </param>
+    void EnumerateChildWindows(nint windowHandle, Func<nint, bool> onChild);
 }
 
 public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
@@ -112,8 +128,35 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
                 : null;
     }
 
+    public void EnumerateChildWindows(nint windowHandle, Func<nint, bool> onChild)
+    {
+        ArgumentNullException.ThrowIfNull(onChild);
+
+        NativeMethods.EnumChildWindowsCallback callback =
+            (child, context) =>
+            {
+                _ = context;
+                return onChild(child);
+            };
+
+        _ = NativeMethods.EnumChildWindows(windowHandle, callback, 0);
+        GC.KeepAlive(callback);
+    }
+
     private static class NativeMethods
     {
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate bool EnumChildWindowsCallback(
+            nint windowHandle,
+            nint context);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool EnumChildWindows(
+            nint parentWindow,
+            EnumChildWindowsCallback callback,
+            nint context);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool IsWindow(nint windowHandle);

@@ -266,9 +266,16 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
                 WindowIdentityResolutionFailure.StaleWindow);
         }
 
+        // Everything the identity describes is read from the process the
+        // application actually runs in. For almost every window that is the
+        // process owning the window; for a legacy Store app it is the process
+        // whose content the frame is displaying, and asking the frame instead
+        // would describe ApplicationFrameHost.exe for every such app alike.
+        uint identityProcessId = window.ContentProcessId ?? window.ProcessId;
+
         using SafeProcessHandle process = processApi.OpenProcess(
             QueryLimitedInformation,
-            window.ProcessId);
+            identityProcessId);
         if (process.IsInvalid)
         {
             int error = Marshal.GetLastWin32Error();
@@ -294,7 +301,7 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
 
         string? commandLine = options.IncludeCommandLine
             ? await commandLineReader
-                .TryReadAsync(window.ProcessId, cancellationToken)
+                .TryReadAsync(identityProcessId, cancellationToken)
                 .ConfigureAwait(false)
             : null;
 
@@ -305,7 +312,7 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
         }
 
         WindowIdentity identity = new(
-            window.ProcessId,
+            identityProcessId,
             Path.GetFileName(executablePath),
             executablePath,
             processApi.TryGetPackageFamilyName(process),

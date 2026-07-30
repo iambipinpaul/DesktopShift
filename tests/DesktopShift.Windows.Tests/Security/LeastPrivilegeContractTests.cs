@@ -230,5 +230,11 @@ public sealed class LeastPrivilegeContractTests
             Assert.Fail("A window title must never be read by default.");
             return null;
         }
+
+        public void EnumerateChildWindows(
+            nint windowHandle,
+            Func<nint, bool> onChild)
+        {
+        }
     }
 }

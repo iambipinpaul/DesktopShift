@@ -1,10 +1,24 @@
 namespace DesktopShift.Core.Observation;
 
+/// <param name="ProcessId">
+/// The process that owns <paramref name="RootWindowHandle"/>. This is what the
+/// window still has to belong to for the handle to be the same window it was a
+/// moment ago, so it stays the frame's process even when the application lives
+/// somewhere else.
+/// </param>
+/// <param name="ContentProcessId">
+/// The process that owns the content inside the window, when that is a
+/// different process from the one owning the window itself — a legacy Store
+/// app, whose frame belongs to <c>ApplicationFrameHost.exe</c> while the
+/// application is its own process. Identity is resolved against this when it is
+/// present, so rules see the application rather than its host.
+/// </param>
 public sealed record QualifiedWindow(
     nint OriginalWindowHandle,
     nint RootWindowHandle,
     uint ProcessId,
-    string WindowClass);
+    string WindowClass,
+    uint? ContentProcessId = null);
 
 public sealed record WindowIdentity(
     uint ProcessId,

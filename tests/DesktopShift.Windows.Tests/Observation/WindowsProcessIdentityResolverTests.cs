@@ -123,5 +123,11 @@ public sealed class WindowsProcessIdentityResolverTests
             TitleReadCount++;
             return "Sensitive title";
         }
+
+        public void EnumerateChildWindows(
+            nint windowHandle,
+            Func<nint, bool> onChild)
+        {
+        }
     }
 }

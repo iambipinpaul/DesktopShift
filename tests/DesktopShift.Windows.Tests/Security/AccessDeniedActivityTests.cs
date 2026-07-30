@@ -293,5 +293,11 @@ public sealed class AccessDeniedActivityTests
             Assert.Fail("A window title must never be read.");
             return null;
         }
+
+        public void EnumerateChildWindows(
+            nint windowHandle,
+            Func<nint, bool> onChild)
+        {
+        }
     }
 }

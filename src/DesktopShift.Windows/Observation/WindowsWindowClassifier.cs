@@ -12,6 +12,10 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
     // expected.
     private const int MaximumOwnerChainDepth = 16;
 
+    // The window class ApplicationFrameHost.exe gives the frames it puts around
+    // legacy Store apps.
+    private const string ApplicationFrameClass = "ApplicationFrameWindow";
+
     private static readonly HashSet<string> TransientClasses =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -139,12 +143,32 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
                 WindowSkipReason.DesktopShiftWindow);
         }
 
+        uint? contentProcessId = null;
+        if (ApplicationFrameClass.Equals(
+            windowClass,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            contentProcessId = FindHostedContentProcessId(rootOwner, processId);
+            if (contentProcessId is null)
+            {
+                // The frame is up but nothing of the application is inside it
+                // yet. Naming the frame host here would be worse than saying
+                // nothing: every legacy Store app would answer to that one
+                // name, so a rule meant for one of them would claim all of
+                // them. Skipped instead, which leaves the window where it
+                // opened until a later event finds the application attached.
+                return WindowQualification.Skipped(
+                    WindowSkipReason.IdentityUnavailable);
+            }
+        }
+
         return WindowQualification.Qualified(
             new QualifiedWindow(
                 windowHandle,
                 rootOwner,
                 processId,
-                windowClass));
+                windowClass,
+                contentProcessId));
     }
 
     public WindowSkipReason ClassifyIdentity(
@@ -165,6 +189,65 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
         return SystemUiProcesses.Contains(identity.ProcessName)
             ? WindowSkipReason.SystemWindow
             : WindowSkipReason.None;
+    }
+
+    /// <summary>
+    /// Finds the process that owns the application content inside a frame
+    /// window, so a legacy Store app is identified as itself rather than as the
+    /// host that draws its frame.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A legacy UWP app does not own a top-level window.
+    /// <c>ApplicationFrameHost.exe</c> owns the frame; the application owns a
+    /// child window inside it. Reading the top-level window's process therefore
+    /// reports the host for every one of these apps at once, so Calculator and
+    /// a Store-packaged third-party app become the same application as far as
+    /// rules are concerned, and the package family name — the strongest signal
+    /// a rule can match on — cannot be read at all, because the host is not
+    /// packaged.
+    /// </para>
+    /// <para>
+    /// The child is found by the process owning it, not by its window class, so
+    /// this does not rest on <c>Windows.UI.Core.CoreWindow</c> staying the name
+    /// it is today.
+    /// </para>
+    /// <para>
+    /// This runs only for the frame host's own window class, and that limit is
+    /// load-bearing rather than an optimisation. Plenty of ordinary
+    /// applications put a child window belonging to another process inside
+    /// their own — anything hosting a browser view, which today means most of
+    /// them — and descending into those would identify an application by
+    /// whichever helper process happened to answer first.
+    /// </para>
+    /// </remarks>
+    /// <param name="frameWindow">The frame window to look inside.</param>
+    /// <param name="frameProcessId">The process owning the frame itself.</param>
+    /// <returns>
+    /// The process owning the content, or <see langword="null"/> when the frame
+    /// holds nothing belonging to anyone else — which for a frame window means
+    /// the application has not attached its content yet.
+    /// </returns>
+    private uint? FindHostedContentProcessId(
+        nint frameWindow,
+        uint frameProcessId)
+    {
+        uint? contentProcessId = null;
+        nativeApi.EnumerateChildWindows(
+            frameWindow,
+            child =>
+            {
+                uint childProcessId = nativeApi.GetWindowProcessId(child);
+                if (childProcessId == 0 || childProcessId == frameProcessId)
+                {
+                    return true;
+                }
+
+                contentProcessId = childProcessId;
+                return false;
+            });
+
+        return contentProcessId;
     }
 
     /// <summary>
