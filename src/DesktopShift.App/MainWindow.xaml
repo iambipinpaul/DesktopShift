@@ -30,14 +30,15 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
-                Spacing="10">
+                Spacing="{StaticResource DesktopShift.ItemSpacing}">
                 <Border
                     Width="24"
                     Height="24"
                     Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                    CornerRadius="7">
+                    CornerRadius="{StaticResource DesktopShift.ControlCornerRadius}">
                     <FontIcon
                         FontSize="12"
+                        AutomationProperties.AccessibilityView="Raw"
                         Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
                         Glyph="&#xE8B7;" />
                 </Border>
@@ -50,15 +51,22 @@
                     Text="DesktopShift" />
             </StackPanel>
 
+            <!--
+                A tagline, not information. The window already announces its own
+                name, so repeating a slogan into a screen reader would only get
+                between the user and the navigation.
+            -->
             <TextBlock
                 Grid.Column="1"
                 Margin="16,0"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
                 FontFamily="Segoe UI Variable Text"
                 FontSize="11"
                 Foreground="{ThemeResource DesktopShift.TextSecondaryBrush}"
-                Text="WINDOW WORKSPACE COMPANION" />
+                Text="WINDOW WORKSPACE COMPANION"
+                TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <NavigationView
@@ -119,15 +127,19 @@
             </NavigationView.FooterMenuItems>
 
             <NavigationView.PaneFooter>
-                <StackPanel Margin="8,12,8,8" Spacing="7">
-                    <TextBlock
-                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                        Text="APPEARANCE" />
+                <!--
+                    The label is the control's own Header rather than a caption
+                    floating above it, so Windows ties the two together: the
+                    screen reader reads the same word the user can see, and the
+                    label grows with the system text size instead of staying put.
+                -->
+                <StackPanel Margin="8,12,8,8">
                     <ComboBox
                         x:Name="ThemeSelector"
                         HorizontalAlignment="Stretch"
                         AutomationProperties.HelpText="Choose whether DesktopShift follows Windows or uses a fixed light or dark appearance."
-                        AutomationProperties.Name="Application theme"
+                        AutomationProperties.Name="Appearance"
+                        Header="Appearance"
                         SelectionChanged="OnThemeSelectionChanged">
                         <ComboBoxItem Content="Use system setting" Tag="System" />
                         <ComboBoxItem Content="Light" Tag="Light" />

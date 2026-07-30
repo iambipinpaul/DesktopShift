@@ -13,21 +13,17 @@
     PrimaryButtonClick="OnPrimaryButtonClick"
     PrimaryButtonText="Apply and continue">
 
-    <ScrollViewer MaxHeight="690" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="20">
-            <StackPanel Spacing="7">
-                <StackPanel Orientation="Horizontal" Spacing="11">
-                    <Border
-                        Width="36"
-                        Height="36"
-                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                        CornerRadius="10">
+    <ScrollViewer MaxHeight="690" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="{StaticResource DesktopShift.SectionSpacing}">
+            <StackPanel Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                    <Border Style="{StaticResource DesktopShift.IconTileStyle}">
                         <FontIcon
+                            Style="{StaticResource DesktopShift.IconTileGlyphStyle}"
                             FontSize="17"
-                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
                             Glyph="&#xE8B7;" />
                     </Border>
-                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
                         <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Welcome to DesktopShift" />
                         <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="REVIEW BEFORE ANYTHING MOVES" />
                     </StackPanel>
@@ -38,6 +34,7 @@
             </StackPanel>
 
             <InfoBar
+                AutomationProperties.Name="First run validation issues"
                 IsClosable="False"
                 IsIconVisible="True"
                 IsOpen="{x:Bind ViewModel.HasValidationIssues, Mode=OneWay}"
@@ -46,17 +43,19 @@
                 Title="Check the highlighted configuration" />
 
             <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <Grid ColumnSpacing="16">
+                <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <FontIcon
+                        VerticalAlignment="Top"
+                        AutomationProperties.AccessibilityView="Raw"
                         FontSize="20"
                         Foreground="{ThemeResource DesktopShift.WarningBrush}"
                         Glyph="&#xE7BA;" />
-                    <StackPanel Grid.Column="1" Spacing="3">
+                    <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
                         <TextBlock
                             FontWeight="SemiBold"
                             Style="{StaticResource DesktopShift.BodyStyle}"
@@ -73,28 +72,21 @@
                 </Grid>
             </Border>
 
-            <StackPanel Spacing="8">
-                <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Starter mappings" />
+            <StackPanel Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Starter mappings" />
                 <TextBlock Style="{StaticResource DesktopShift.PageSubtitleStyle}" Text="Rename a desktop, adjust executable names, or turn off any mapping you do not want." />
             </StackPanel>
 
             <ListView
                 AutomationProperties.Name="Starter mappings"
                 IsItemClickEnabled="False"
+                ItemContainerStyle="{StaticResource DesktopShift.CardListItemStyle}"
                 ItemsSource="{x:Bind ViewModel.Mappings, Mode=OneWay}"
                 SelectionMode="None">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="Margin" Value="0,0,0,10" />
-                        <Setter Property="CornerRadius" Value="12" />
-                    </Style>
-                </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="viewModels:FirstRunMappingViewModel">
                         <Border Style="{StaticResource DesktopShift.CardStyle}">
-                            <Grid RowSpacing="12" ColumnSpacing="16">
+                            <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}" RowSpacing="{StaticResource DesktopShift.GroupSpacing}">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -103,18 +95,16 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2">
+                                <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                                     <TextBlock
                                         Style="{StaticResource DesktopShift.SectionTitleStyle}"
                                         Text="{x:Bind RuleName, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{x:Bind DestinationSummary, Mode=OneWay}"
-                                        TextWrapping="Wrap" />
+                                        Text="{x:Bind DestinationSummary, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource DesktopShift.CaptionStyle}"
                                         Text="{x:Bind IdentitySummary, Mode=OneWay}"
-                                        TextWrapping="Wrap"
                                         Visibility="{x:Bind rules:RuleIconSource.TextVisibility(IdentitySummary), Mode=OneWay}" />
                                 </StackPanel>
                                 <ToggleSwitch
@@ -124,25 +114,28 @@
                                     IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
                                     OffContent="Disabled"
                                     OnContent="Enabled" />
-                                <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12">
+                                <Grid
+                                    Grid.Row="1"
+                                    Grid.ColumnSpan="2"
+                                    ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
                                         <ColumnDefinition Width="3*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox
-                                        AutomationProperties.Name="Managed desktop name"
+                                        AutomationProperties.HelpText="{x:Bind RuleName, Mode=OneWay}"
+                                        AutomationProperties.Name="Managed desktop"
                                         Header="Managed desktop"
                                         Text="{x:Bind DesktopName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                         Visibility="{x:Bind rules:RuleIconSource.WhenTrue(IsDesktopNameEditable), Mode=OneWay}" />
                                     <StackPanel
-                                        Spacing="4"
+                                        Spacing="{StaticResource DesktopShift.TightSpacing}"
                                         Visibility="{x:Bind rules:RuleIconSource.WhenTrue(AllowsAnywhere), Mode=OneWay}">
-                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Managed desktop" />
+                                        <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Managed desktop" />
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             Style="{StaticResource DesktopShift.BodyStyle}"
-                                            Text="Not used — never moved"
-                                            TextWrapping="Wrap" />
+                                            Text="Not used — never moved" />
                                     </StackPanel>
                                     <TextBox
                                         Grid.Column="1"

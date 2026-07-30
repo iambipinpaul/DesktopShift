@@ -7,9 +7,13 @@
     xmlns:viewModels="using:DesktopShift.App.ViewModels"
     AutomationProperties.Name="Windows desktops page"
     Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="960" Margin="32,28" HorizontalAlignment="Left" Spacing="20">
-            <StackPanel Spacing="5">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
+            Margin="{StaticResource DesktopShift.PageMargin}"
+            HorizontalAlignment="Left"
+            Spacing="{StaticResource DesktopShift.SectionSpacing}">
+            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                 <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Windows Desktops" />
                 <TextBlock
                     Style="{StaticResource DesktopShift.PageSubtitleStyle}"
@@ -19,29 +23,30 @@
             <StackPanel
                 x:Name="ManagedMappingsPanel"
                 AutomationProperties.Name="Managed desktop definitions"
-                Spacing="10"
+                Spacing="{StaticResource DesktopShift.GroupSpacing}"
                 Visibility="Collapsed">
                 <Border Style="{StaticResource DesktopShift.CardStyle}">
-                    <StackPanel Spacing="14">
-                        <Grid ColumnSpacing="16">
+                    <StackPanel Spacing="{StaticResource DesktopShift.CardSpacing}">
+                        <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="4">
+                            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                                 <TextBlock
-                                    Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                                    Style="{StaticResource DesktopShift.SectionHeadingStyle}"
                                     Text="Managed destinations" />
                                 <TextBlock
                                     x:Name="ManagedMappingSummary"
-                                    TextWrapping="Wrap"
                                     Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
                                 <TextBlock
                                     x:Name="ManagedMappingProvider"
-                                    TextWrapping="Wrap"
                                     Style="{StaticResource DesktopShift.CaptionStyle}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="3">
+                            <StackPanel
+                                Grid.Column="1"
+                                HorizontalAlignment="Right"
+                                Spacing="{StaticResource DesktopShift.TightSpacing}">
                                 <TextBlock
                                     x:Name="ManagedMappingOutcome"
                                     HorizontalAlignment="Right"
@@ -53,44 +58,60 @@
                                     Style="{StaticResource DesktopShift.CaptionStyle}" />
                             </StackPanel>
                         </Grid>
-                        <StackPanel
+                        <!--
+                            The name and the visibility live on the scroller, not
+                            on the row inside it. Collapsing only the row would
+                            leave an empty scroller behind, and the card would
+                            keep a band of blank space in Limited Mode where the
+                            commands are never shown at all.
+                        -->
+                        <ScrollViewer
                             x:Name="MaintenanceCommands"
-                            Orientation="Horizontal"
-                            Spacing="10"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Disabled"
                             Visibility="Collapsed">
-                            <Button
-                                x:Name="AddDesktopButton"
-                                AutomationProperties.Name="Add a managed desktop"
-                                Click="OnAddDesktopClick"
-                                Style="{StaticResource AccentButtonStyle}">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon FontSize="14" Glyph="&#xE710;" />
-                                    <TextBlock Text="Add managed desktop" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="ReconcileAllButton"
-                                AutomationProperties.Name="Reconcile all runtime mappings"
-                                Click="OnReconcileAllClick">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon FontSize="14" Glyph="&#xE895;" />
-                                    <TextBlock Text="Reconcile all" />
-                                </StackPanel>
-                            </Button>
-                            <ProgressRing
-                                x:Name="MaintenanceProgress"
-                                Width="20"
-                                Height="20"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="Applying the requested change"
-                                IsActive="False"
-                                Visibility="Collapsed" />
-                        </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                                <Button
+                                    x:Name="AddDesktopButton"
+                                    AutomationProperties.Name="Add a managed desktop"
+                                    Click="OnAddDesktopClick"
+                                    Style="{StaticResource AccentButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                        <FontIcon
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            FontSize="14"
+                                            Glyph="&#xE710;" />
+                                        <TextBlock Text="Add managed desktop" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="ReconcileAllButton"
+                                    AutomationProperties.Name="Reconcile all runtime mappings"
+                                    Click="OnReconcileAllClick">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                        <FontIcon
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            FontSize="14"
+                                            Glyph="&#xE895;" />
+                                        <TextBlock Text="Reconcile all" />
+                                    </StackPanel>
+                                </Button>
+                                <ProgressRing
+                                    x:Name="MaintenanceProgress"
+                                    Width="20"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Applying the requested change"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </ScrollViewer>
                     </StackPanel>
                 </Border>
 
                 <InfoBar
                     x:Name="OperationResult"
+                    AutomationProperties.LiveSetting="Polite"
                     AutomationProperties.Name="Result of the last managed desktop change"
                     IsClosable="True"
                     IsOpen="False"
@@ -116,46 +137,47 @@
                 <ListView
                     x:Name="ManagedMappingList"
                     AutomationProperties.Name="Managed desktop definitions"
+                    ItemContainerStyle="{StaticResource DesktopShift.CardListItemStyle}"
                     SelectionMode="None">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="0,0,0,10" />
-                        </Style>
-                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="desktops:ManagedDesktopCatalogItem">
                             <Border
                                 AutomationProperties.Name="{x:Bind AutomationName}"
                                 Style="{StaticResource DesktopShift.CardStyle}">
-                                <Grid ColumnSpacing="16">
+                                <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="42" />
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
+                                    <!--
+                                        The card's own name already reads out the
+                                        preferred position, so the numbered disc
+                                        is decoration and stays out of the
+                                        accessibility tree rather than announcing
+                                        the number a second time.
+                                    -->
                                     <Border
-                                        Width="36"
-                                        Height="36"
+                                        Width="{StaticResource DesktopShift.IconTileSize}"
+                                        Height="{StaticResource DesktopShift.IconTileSize}"
                                         VerticalAlignment="Top"
-                                        AutomationProperties.Name="Preferred position"
+                                        AutomationProperties.AccessibilityView="Raw"
                                         Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                        CornerRadius="18">
+                                        CornerRadius="{StaticResource DesktopShift.PillCornerRadius}">
                                         <TextBlock
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
                                             FontWeight="SemiBold"
                                             Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                            Style="{StaticResource DesktopShift.BodyStyle}"
                                             Text="{x:Bind Order}" />
                                     </Border>
-                                    <StackPanel Grid.Column="1" Spacing="8">
-                                        <Grid ColumnSpacing="12">
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                        <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="3">
+                                            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                                                 <TextBlock
                                                     Style="{StaticResource DesktopShift.SectionTitleStyle}"
                                                     Text="{x:Bind DisplayName}" />
@@ -165,14 +187,12 @@
                                             </StackPanel>
                                             <Border
                                                 Grid.Column="1"
-                                                Padding="10,5"
                                                 VerticalAlignment="Center"
-                                                Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                                CornerRadius="8">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                Style="{StaticResource DesktopShift.BadgeStyle}">
+                                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
                                                     <FontIcon
-                                                        FontSize="12"
                                                         AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="12"
                                                         Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
                                                         Glyph="{x:Bind StatusGlyph}" />
                                                     <TextBlock
@@ -183,14 +203,12 @@
                                             </Border>
                                         </Grid>
                                         <TextBlock
-                                            TextWrapping="Wrap"
                                             Style="{StaticResource DesktopShift.BodyStyle}"
                                             Text="{x:Bind RuntimeSummary}" />
                                         <TextBlock
-                                            TextWrapping="Wrap"
                                             Style="{StaticResource DesktopShift.CaptionStyle}"
                                             Text="{x:Bind Explanation}" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
                                             <TextBlock
                                                 Style="{StaticResource DesktopShift.CaptionStyle}"
                                                 Text="{x:Bind RuleSummary}" />
@@ -202,69 +220,107 @@
                                                 Style="{StaticResource DesktopShift.CaptionStyle}"
                                                 Text="{x:Bind RecreationPolicy}" />
                                         </StackPanel>
-                                        <StackPanel
-                                            Orientation="Horizontal"
-                                            Spacing="6"
+                                        <!--
+                                            Five commands that say the same thing
+                                            on every row, so each one carries the
+                                            desktop's name as help text. The strip
+                                            scrolls rather than clipping, because
+                                            a command cut off by a narrow window
+                                            cannot be reached by mouse or by Tab.
+                                        -->
+                                        <ScrollViewer
+                                            HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                                             Visibility="{x:Bind EditVisibility}">
-                                            <Button
-                                                AutomationProperties.Name="Rename this managed desktop"
-                                                Click="OnRenameClick"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="Rename">
-                                                <FontIcon FontSize="14" Glyph="&#xE70F;" />
-                                            </Button>
-                                            <Button
-                                                AutomationProperties.Name="Move to an earlier preferred position"
-                                                Click="OnMoveEarlierClick"
-                                                IsEnabled="{x:Bind CanMoveEarlier}"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="Move earlier">
-                                                <FontIcon FontSize="14" Glyph="&#xE74A;" />
-                                            </Button>
-                                            <Button
-                                                AutomationProperties.Name="Move to a later preferred position"
-                                                Click="OnMoveLaterClick"
-                                                IsEnabled="{x:Bind CanMoveLater}"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="Move later">
-                                                <FontIcon FontSize="14" Glyph="&#xE74B;" />
-                                            </Button>
-                                            <Button
-                                                AutomationProperties.Name="{x:Bind RecreationToggleLabel}"
-                                                Click="OnToggleRecreationClick"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="{x:Bind RecreationToggleLabel}">
-                                                <FontIcon FontSize="14" Glyph="&#xE117;" />
-                                            </Button>
-                                            <Button
-                                                AutomationProperties.Name="Recreate the missing Windows desktop"
-                                                Click="OnRecreateClick"
-                                                IsEnabled="{x:Bind CanRecreate}"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="{x:Bind RecreateToolTip}">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <FontIcon FontSize="14" Glyph="&#xE7F4;" />
-                                                    <TextBlock Text="Recreate" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button
-                                                AutomationProperties.Name="Remove this managed desktop from management"
-                                                Click="OnRemoveClick"
-                                                Tag="{x:Bind SemanticKey}"
-                                                ToolTipService.ToolTip="Remove from management. The Windows desktop is kept.">
-                                                <FontIcon FontSize="14" Glyph="&#xE738;" />
-                                            </Button>
-                                        </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="Rename this managed desktop"
+                                                    Click="OnRenameClick"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="Rename">
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="14"
+                                                        Glyph="&#xE70F;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="Move to an earlier preferred position"
+                                                    Click="OnMoveEarlierClick"
+                                                    IsEnabled="{x:Bind CanMoveEarlier}"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="Move earlier">
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="14"
+                                                        Glyph="&#xE74A;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="Move to a later preferred position"
+                                                    Click="OnMoveLaterClick"
+                                                    IsEnabled="{x:Bind CanMoveLater}"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="Move later">
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="14"
+                                                        Glyph="&#xE74B;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="{x:Bind RecreationToggleLabel}"
+                                                    Click="OnToggleRecreationClick"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="{x:Bind RecreationToggleLabel}">
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="14"
+                                                        Glyph="&#xE117;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="Recreate the missing Windows desktop"
+                                                    Click="OnRecreateClick"
+                                                    IsEnabled="{x:Bind CanRecreate}"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="{x:Bind RecreateToolTip}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                                        <FontIcon
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            FontSize="14"
+                                                            Glyph="&#xE7F4;" />
+                                                        <TextBlock Text="Recreate" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                                    AutomationProperties.Name="Remove this managed desktop from management"
+                                                    Click="OnRemoveClick"
+                                                    Tag="{x:Bind SemanticKey}"
+                                                    ToolTipService.ToolTip="Remove from management. The Windows desktop is kept.">
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="14"
+                                                        Glyph="&#xE738;" />
+                                                </Button>
+                                            </StackPanel>
+                                        </ScrollViewer>
                                         <Expander
-                                            AutomationProperties.Name="{x:Bind DisplayName}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
                                             Header="Advanced mapping details">
+                                            <!--
+                                                No accessible name of its own: a
+                                                name on a TextBlock replaces the
+                                                text it is meant to introduce, and
+                                                the expander this sits inside has
+                                                already said what it holds.
+                                            -->
                                             <TextBlock
                                                 Padding="0,8,0,2"
-                                                AutomationProperties.Name="Advanced managed desktop mapping details"
-                                                FontFamily="Consolas"
-                                                IsTextSelectionEnabled="True"
-                                                TextWrapping="Wrap"
-                                                Style="{StaticResource DesktopShift.BodyStyle}"
+                                                Style="{StaticResource DesktopShift.MonospaceStyle}"
                                                 Text="{x:Bind AdvancedDetails}" />
                                         </Expander>
                                     </StackPanel>
@@ -277,10 +333,13 @@
 
             <Border
                 x:Name="StatusCard"
-                AutomationProperties.LiveSetting="Polite"
                 MinHeight="260"
+                AutomationProperties.LiveSetting="Polite"
                 Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="{StaticResource DesktopShift.GroupSpacing}">
                     <ProgressRing
                         x:Name="LoadingIndicator"
                         Width="28"
@@ -290,31 +349,34 @@
                         Visibility="Collapsed" />
                     <FontIcon
                         x:Name="StatusIcon"
+                        HorizontalAlignment="Center"
                         Style="{StaticResource DesktopShift.EmptyStateIconStyle}"
                         Glyph="&#xE7F4;" />
                     <TextBlock
                         x:Name="StatusTitle"
-                        TextAlignment="Center"
-                        Style="{StaticResource DesktopShift.SectionTitleStyle}" />
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DesktopShift.SectionHeadingStyle}"
+                        TextAlignment="Center" />
                     <TextBlock
                         x:Name="StatusMessage"
                         MaxWidth="560"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap"
-                        Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
+                        Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                        TextAlignment="Center" />
                     <TextBlock
                         x:Name="StatusProvider"
                         MaxWidth="560"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap"
-                        Style="{StaticResource DesktopShift.CaptionStyle}" />
+                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                        TextAlignment="Center" />
                 </StackPanel>
             </Border>
 
-            <StackPanel x:Name="InventoryPanel" Spacing="10" Visibility="Collapsed">
+            <StackPanel
+                x:Name="InventoryPanel"
+                Spacing="{StaticResource DesktopShift.GroupSpacing}"
+                Visibility="Collapsed">
                 <Grid>
                     <TextBlock
-                        Style="{StaticResource DesktopShift.SectionTitleStyle}"
+                        Style="{StaticResource DesktopShift.SectionHeadingStyle}"
                         Text="Runtime inventory" />
                     <TextBlock
                         x:Name="InventoryCount"
@@ -326,43 +388,28 @@
                 <ListView
                     x:Name="DesktopList"
                     AutomationProperties.Name="Windows desktop runtime inventory"
+                    ItemContainerStyle="{StaticResource DesktopShift.CardListItemStyle}"
                     SelectionMode="None">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="0,0,0,10" />
-                        </Style>
-                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="viewModels:DesktopInventoryItemPresentation">
                             <Border
                                 AutomationProperties.Name="{x:Bind AutomationName}"
                                 Style="{StaticResource DesktopShift.CardStyle}">
-                                <Grid ColumnSpacing="16">
+                                <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border
-                                        Width="42"
-                                        Height="42"
-                                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                        CornerRadius="10">
-                                        <FontIcon
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
-                                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                                            Glyph="&#xE7F4;" />
+                                    <Border Style="{StaticResource DesktopShift.IconTileStyle}">
+                                        <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE7F4;" />
                                     </Border>
-                                    <StackPanel Grid.Column="1" Spacing="8">
-                                        <Grid ColumnSpacing="12">
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                        <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="3">
+                                            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                                                 <TextBlock
                                                     Style="{StaticResource DesktopShift.SectionTitleStyle}"
                                                     Text="{x:Bind DisplayName}" />
@@ -372,10 +419,8 @@
                                             </StackPanel>
                                             <Border
                                                 Grid.Column="1"
-                                                Padding="10,5"
                                                 VerticalAlignment="Center"
-                                                Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                                CornerRadius="8"
+                                                Style="{StaticResource DesktopShift.BadgeStyle}"
                                                 Visibility="{x:Bind CurrentVisibility}">
                                                 <TextBlock
                                                     AutomationProperties.Name="Current Windows desktop"
@@ -385,17 +430,16 @@
                                             </Border>
                                         </Grid>
                                         <Expander
-                                            AutomationProperties.Name="{x:Bind DisplayName}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
                                             Header="Advanced details">
-                                            <StackPanel Padding="0,8,0,2" Spacing="4">
+                                            <StackPanel Padding="0,8,0,2" Spacing="{StaticResource DesktopShift.TightSpacing}">
                                                 <TextBlock
-                                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                    Style="{StaticResource DesktopShift.FieldLabelStyle}"
                                                     Text="Desktop ID" />
                                                 <TextBlock
-                                                    AutomationProperties.Name="Desktop ID"
-                                                    FontFamily="Consolas"
-                                                    IsTextSelectionEnabled="True"
-                                                    Style="{StaticResource DesktopShift.BodyStyle}"
+                                                    Style="{StaticResource DesktopShift.MonospaceStyle}"
                                                     Text="{x:Bind DesktopId}" />
                                             </StackPanel>
                                         </Expander>

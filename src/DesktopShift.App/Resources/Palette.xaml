@@ -3,63 +3,82 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!--
+        Every brush is declared once per theme rather than as one brush over a
+        per-theme colour. A high-contrast theme has no colours of its own to
+        borrow: it has system colours the user chose, and those arrive as
+        SystemColor*Color theme resources that only a brush can read. Declaring
+        the brushes here is what lets the HighContrast dictionary answer with
+        the user's colours instead of DesktopShift's teal.
+    -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
-            <Color x:Key="DesktopShift.WindowBackgroundColor">#CC0C1517</Color>
-            <Color x:Key="DesktopShift.PaneBackgroundColor">#E6122022</Color>
-            <Color x:Key="DesktopShift.SurfaceColor">#E619292C</Color>
-            <Color x:Key="DesktopShift.SurfaceSecondaryColor">#CC213437</Color>
-            <Color x:Key="DesktopShift.BorderColor">#4D789093</Color>
-            <Color x:Key="DesktopShift.TextPrimaryColor">#FFF2F7F6</Color>
-            <Color x:Key="DesktopShift.TextSecondaryColor">#FFA9BCB9</Color>
-            <Color x:Key="DesktopShift.AccentColor">#FF43D6C4</Color>
-            <Color x:Key="DesktopShift.AccentStrongColor">#FF74E6D8</Color>
-            <Color x:Key="DesktopShift.AccentSoftColor">#293FD1BE</Color>
-            <Color x:Key="DesktopShift.SuccessColor">#FF73D7A1</Color>
-            <Color x:Key="DesktopShift.WarningColor">#FFF0C674</Color>
+            <SolidColorBrush x:Key="DesktopShift.WindowBackgroundBrush" Color="#CC0C1517" />
+            <SolidColorBrush x:Key="DesktopShift.PaneBackgroundBrush" Color="#E6122022" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceBrush" Color="#E619292C" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceSecondaryBrush" Color="#CC213437" />
+            <SolidColorBrush x:Key="DesktopShift.BorderBrush" Color="#4D789093" />
+            <SolidColorBrush x:Key="DesktopShift.TextPrimaryBrush" Color="#FFF2F7F6" />
+            <SolidColorBrush x:Key="DesktopShift.TextSecondaryBrush" Color="#FFA9BCB9" />
+            <SolidColorBrush x:Key="DesktopShift.AccentBrush" Color="#FF43D6C4" />
+            <SolidColorBrush x:Key="DesktopShift.AccentStrongBrush" Color="#FF74E6D8" />
+            <SolidColorBrush x:Key="DesktopShift.AccentSoftBrush" Color="#293FD1BE" />
+            <SolidColorBrush x:Key="DesktopShift.SuccessBrush" Color="#FF73D7A1" />
+            <SolidColorBrush x:Key="DesktopShift.WarningBrush" Color="#FFF0C674" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
-            <Color x:Key="DesktopShift.WindowBackgroundColor">#DCF3F8F7</Color>
-            <Color x:Key="DesktopShift.PaneBackgroundColor">#F2F8FBFA</Color>
-            <Color x:Key="DesktopShift.SurfaceColor">#F7FFFFFF</Color>
-            <Color x:Key="DesktopShift.SurfaceSecondaryColor">#FFE7F1EF</Color>
-            <Color x:Key="DesktopShift.BorderColor">#40607A77</Color>
-            <Color x:Key="DesktopShift.TextPrimaryColor">#FF142220</Color>
-            <Color x:Key="DesktopShift.TextSecondaryColor">#FF536966</Color>
-            <Color x:Key="DesktopShift.AccentColor">#FF087F75</Color>
-            <Color x:Key="DesktopShift.AccentStrongColor">#FF056A62</Color>
-            <Color x:Key="DesktopShift.AccentSoftColor">#1F087F75</Color>
-            <Color x:Key="DesktopShift.SuccessColor">#FF16764A</Color>
-            <Color x:Key="DesktopShift.WarningColor">#FF855A00</Color>
+            <SolidColorBrush x:Key="DesktopShift.WindowBackgroundBrush" Color="#DCF3F8F7" />
+            <SolidColorBrush x:Key="DesktopShift.PaneBackgroundBrush" Color="#F2F8FBFA" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceBrush" Color="#F7FFFFFF" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceSecondaryBrush" Color="#FFE7F1EF" />
+            <SolidColorBrush x:Key="DesktopShift.BorderBrush" Color="#40607A77" />
+            <SolidColorBrush x:Key="DesktopShift.TextPrimaryBrush" Color="#FF142220" />
+            <SolidColorBrush x:Key="DesktopShift.TextSecondaryBrush" Color="#FF536966" />
+            <SolidColorBrush x:Key="DesktopShift.AccentBrush" Color="#FF087F75" />
+            <SolidColorBrush x:Key="DesktopShift.AccentStrongBrush" Color="#FF056A62" />
+            <SolidColorBrush x:Key="DesktopShift.AccentSoftBrush" Color="#1F087F75" />
+            <SolidColorBrush x:Key="DesktopShift.SuccessBrush" Color="#FF16764A" />
+            <SolidColorBrush x:Key="DesktopShift.WarningBrush" Color="#FF855A00" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
-            <Color x:Key="DesktopShift.WindowBackgroundColor">#CC0C1517</Color>
-            <Color x:Key="DesktopShift.PaneBackgroundColor">#E6122022</Color>
-            <Color x:Key="DesktopShift.SurfaceColor">#E619292C</Color>
-            <Color x:Key="DesktopShift.SurfaceSecondaryColor">#CC213437</Color>
-            <Color x:Key="DesktopShift.BorderColor">#4D789093</Color>
-            <Color x:Key="DesktopShift.TextPrimaryColor">#FFF2F7F6</Color>
-            <Color x:Key="DesktopShift.TextSecondaryColor">#FFA9BCB9</Color>
-            <Color x:Key="DesktopShift.AccentColor">#FF43D6C4</Color>
-            <Color x:Key="DesktopShift.AccentStrongColor">#FF74E6D8</Color>
-            <Color x:Key="DesktopShift.AccentSoftColor">#293FD1BE</Color>
-            <Color x:Key="DesktopShift.SuccessColor">#FF73D7A1</Color>
-            <Color x:Key="DesktopShift.WarningColor">#FFF0C674</Color>
+            <SolidColorBrush x:Key="DesktopShift.WindowBackgroundBrush" Color="#CC0C1517" />
+            <SolidColorBrush x:Key="DesktopShift.PaneBackgroundBrush" Color="#E6122022" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceBrush" Color="#E619292C" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceSecondaryBrush" Color="#CC213437" />
+            <SolidColorBrush x:Key="DesktopShift.BorderBrush" Color="#4D789093" />
+            <SolidColorBrush x:Key="DesktopShift.TextPrimaryBrush" Color="#FFF2F7F6" />
+            <SolidColorBrush x:Key="DesktopShift.TextSecondaryBrush" Color="#FFA9BCB9" />
+            <SolidColorBrush x:Key="DesktopShift.AccentBrush" Color="#FF43D6C4" />
+            <SolidColorBrush x:Key="DesktopShift.AccentStrongBrush" Color="#FF74E6D8" />
+            <SolidColorBrush x:Key="DesktopShift.AccentSoftBrush" Color="#293FD1BE" />
+            <SolidColorBrush x:Key="DesktopShift.SuccessBrush" Color="#FF73D7A1" />
+            <SolidColorBrush x:Key="DesktopShift.WarningBrush" Color="#FFF0C674" />
+        </ResourceDictionary>
+
+        <!--
+            A high-contrast theme is a promise the user made to themselves about
+            how their whole desktop will look, so DesktopShift keeps none of its
+            own colours here. Surfaces collapse onto the window colour, every
+            separator and outline becomes window text so it stays visible, and
+            the accent becomes the system hotlight. Secondary text deliberately
+            does not use SystemColorGrayTextColor: grey text means disabled in a
+            high-contrast theme, and this text is live content.
+        -->
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="DesktopShift.WindowBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DesktopShift.PaneBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DesktopShift.SurfaceSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DesktopShift.BorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DesktopShift.TextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DesktopShift.TextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DesktopShift.AccentBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="DesktopShift.AccentStrongBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="DesktopShift.AccentSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DesktopShift.SuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DesktopShift.WarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
-
-    <SolidColorBrush x:Key="DesktopShift.WindowBackgroundBrush" Color="{ThemeResource DesktopShift.WindowBackgroundColor}" />
-    <SolidColorBrush x:Key="DesktopShift.PaneBackgroundBrush" Color="{ThemeResource DesktopShift.PaneBackgroundColor}" />
-    <SolidColorBrush x:Key="DesktopShift.SurfaceBrush" Color="{ThemeResource DesktopShift.SurfaceColor}" />
-    <SolidColorBrush x:Key="DesktopShift.SurfaceSecondaryBrush" Color="{ThemeResource DesktopShift.SurfaceSecondaryColor}" />
-    <SolidColorBrush x:Key="DesktopShift.BorderBrush" Color="{ThemeResource DesktopShift.BorderColor}" />
-    <SolidColorBrush x:Key="DesktopShift.TextPrimaryBrush" Color="{ThemeResource DesktopShift.TextPrimaryColor}" />
-    <SolidColorBrush x:Key="DesktopShift.TextSecondaryBrush" Color="{ThemeResource DesktopShift.TextSecondaryColor}" />
-    <SolidColorBrush x:Key="DesktopShift.AccentBrush" Color="{ThemeResource DesktopShift.AccentColor}" />
-    <SolidColorBrush x:Key="DesktopShift.AccentStrongBrush" Color="{ThemeResource DesktopShift.AccentStrongColor}" />
-    <SolidColorBrush x:Key="DesktopShift.AccentSoftBrush" Color="{ThemeResource DesktopShift.AccentSoftColor}" />
-    <SolidColorBrush x:Key="DesktopShift.SuccessBrush" Color="{ThemeResource DesktopShift.SuccessColor}" />
-    <SolidColorBrush x:Key="DesktopShift.WarningBrush" Color="{ThemeResource DesktopShift.WarningColor}" />
 </ResourceDictionary>

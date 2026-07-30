@@ -640,9 +640,14 @@ public sealed partial class DesktopsPage : Page
         panel.Children.Add(recreateBox);
         panel.Children.Add(explanation);
 
+        // A dialog is hosted outside the page, so it does not inherit the theme
+        // the shell applied to its own tree. Without this it renders in whatever
+        // Windows is set to, which is visibly wrong the moment someone has asked
+        // DesktopShift for light while Windows is dark.
         ContentDialog dialog = new()
         {
             XamlRoot = XamlRoot,
+            RequestedTheme = ActualTheme,
             Title = "Add a managed desktop",
             Content = panel,
             PrimaryButtonText = "Add",
@@ -679,6 +684,7 @@ public sealed partial class DesktopsPage : Page
         ContentDialog dialog = new()
         {
             XamlRoot = XamlRoot,
+            RequestedTheme = ActualTheme,
             Title = $"Rename {item.DisplayName}",
             Content = panel,
             PrimaryButtonText = "Rename",
@@ -710,6 +716,7 @@ public sealed partial class DesktopsPage : Page
         ContentDialog dialog = new()
         {
             XamlRoot = XamlRoot,
+            RequestedTheme = ActualTheme,
             Title = $"Stop managing {item.DisplayName}?",
             Content = explanation,
             PrimaryButtonText = "Remove from management",

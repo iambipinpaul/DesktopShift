@@ -7,7 +7,7 @@
     xmlns:rules="using:DesktopShift.App.Rules"
     AutomationProperties.Name="Activity page"
     Background="Transparent">
-    <Grid Margin="32,28" RowSpacing="16">
+    <Grid Margin="{StaticResource DesktopShift.PageMargin}" RowSpacing="{StaticResource DesktopShift.CardSpacing}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,88 +15,102 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="5">
+        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
             <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
             <TextBlock
-                MaxWidth="960"
+                MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
                 HorizontalAlignment="Left"
                 Style="{StaticResource DesktopShift.PageSubtitleStyle}"
                 Text="Recent decisions, window moves, desktop switches, and assignment results. DesktopShift records privacy-safe app identity only—never window titles, browser addresses, or command lines." />
         </StackPanel>
 
+        <!--
+            Four filters side by side need about eight hundred points of width.
+            The window can be narrower than that, and a filter that has been
+            clipped away is one the user cannot reach with a mouse or with Tab,
+            so the row scrolls instead of losing its tail.
+        -->
         <Border
             Grid.Row="1"
             Padding="16,12"
             AutomationProperties.Name="Activity filters"
             Style="{StaticResource DesktopShift.CardStyle}">
-            <StackPanel Orientation="Horizontal" Spacing="16">
-                <ComboBox
-                    x:Name="ResultFilter"
-                    MinWidth="150"
-                    AutomationProperties.Name="Filter by result"
-                    Header="Result"
-                    SelectionChanged="OnFilterChanged">
-                    <ComboBoxItem Content="All results" Tag="all" />
-                    <ComboBoxItem Content="Succeeded" Tag="succeeded" />
-                    <ComboBoxItem Content="Skipped" Tag="skipped" />
-                    <ComboBoxItem Content="Failed" Tag="failed" />
-                </ComboBox>
-                <ComboBox
-                    x:Name="ApplicationFilter"
-                    MinWidth="180"
-                    AutomationProperties.Name="Filter by application"
-                    Header="Application"
-                    SelectionChanged="OnFilterChanged" />
-                <ComboBox
-                    x:Name="RuleFilter"
-                    MinWidth="180"
-                    AutomationProperties.Name="Filter by rule"
-                    Header="Rule"
-                    SelectionChanged="OnFilterChanged" />
-                <ComboBox
-                    x:Name="DateFilter"
-                    MinWidth="180"
-                    AutomationProperties.Name="Filter by date or session"
-                    Header="Date or session"
-                    SelectionChanged="OnFilterChanged">
-                    <ComboBoxItem Content="All time" Tag="all" />
-                    <ComboBoxItem Content="This session" Tag="session" />
-                    <ComboBoxItem Content="Last hour" Tag="hour" />
-                    <ComboBoxItem Content="Today" Tag="today" />
-                    <ComboBoxItem Content="Last 7 days" Tag="week" />
-                </ComboBox>
-            </StackPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.CardSpacing}">
+                    <ComboBox
+                        x:Name="ResultFilter"
+                        MinWidth="150"
+                        AutomationProperties.Name="Filter by result"
+                        Header="Result"
+                        SelectionChanged="OnFilterChanged">
+                        <ComboBoxItem Content="All results" Tag="all" />
+                        <ComboBoxItem Content="Succeeded" Tag="succeeded" />
+                        <ComboBoxItem Content="Skipped" Tag="skipped" />
+                        <ComboBoxItem Content="Failed" Tag="failed" />
+                    </ComboBox>
+                    <ComboBox
+                        x:Name="ApplicationFilter"
+                        MinWidth="180"
+                        AutomationProperties.Name="Filter by application"
+                        Header="Application"
+                        SelectionChanged="OnFilterChanged" />
+                    <ComboBox
+                        x:Name="RuleFilter"
+                        MinWidth="180"
+                        AutomationProperties.Name="Filter by rule"
+                        Header="Rule"
+                        SelectionChanged="OnFilterChanged" />
+                    <ComboBox
+                        x:Name="DateFilter"
+                        MinWidth="180"
+                        AutomationProperties.Name="Filter by date or session"
+                        Header="Date or session"
+                        SelectionChanged="OnFilterChanged">
+                        <ComboBoxItem Content="All time" Tag="all" />
+                        <ComboBoxItem Content="This session" Tag="session" />
+                        <ComboBoxItem Content="Last hour" Tag="hour" />
+                        <ComboBoxItem Content="Today" Tag="today" />
+                        <ComboBoxItem Content="Last 7 days" Tag="week" />
+                    </ComboBox>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="2" ColumnSpacing="12">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button
-                    x:Name="CopyEventButton"
-                    AutomationProperties.Name="Copy the selected event"
-                    Click="OnCopyEventClick"
-                    Content="Copy event"
-                    IsEnabled="False" />
-                <Button
-                    x:Name="ClearActivityButton"
-                    AutomationProperties.Name="Clear local activity"
-                    Click="OnClearActivityClick"
-                    Content="Clear local activity" />
-                <Button
-                    x:Name="OpenLogLocationButton"
-                    AutomationProperties.Name="Open the log location"
-                    Click="OnOpenLogLocationClick"
-                    Content="Open log location"
-                    IsEnabled="False" />
-                <Button
-                    x:Name="ExportBundleButton"
-                    AutomationProperties.Name="Export a diagnostic bundle"
-                    Click="OnExportBundleClick"
-                    Content="Export diagnostics"
-                    IsEnabled="False" />
-            </StackPanel>
+        <Grid Grid.Row="2" ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                    <Button
+                        x:Name="CopyEventButton"
+                        AutomationProperties.Name="Copy the selected event"
+                        Click="OnCopyEventClick"
+                        Content="Copy event"
+                        IsEnabled="False" />
+                    <Button
+                        x:Name="ClearActivityButton"
+                        AutomationProperties.Name="Clear local activity"
+                        Click="OnClearActivityClick"
+                        Content="Clear local activity" />
+                    <Button
+                        x:Name="OpenLogLocationButton"
+                        AutomationProperties.Name="Open the log location"
+                        Click="OnOpenLogLocationClick"
+                        Content="Open log location"
+                        IsEnabled="False" />
+                    <Button
+                        x:Name="ExportBundleButton"
+                        AutomationProperties.Name="Export a diagnostic bundle"
+                        Click="OnExportBundleClick"
+                        Content="Export diagnostics"
+                        IsEnabled="False" />
+                </StackPanel>
+            </ScrollViewer>
             <TextBlock
                 x:Name="ActivityCount"
-                HorizontalAlignment="Right"
+                Grid.Column="1"
                 VerticalAlignment="Center"
                 AutomationProperties.LiveSetting="Polite"
                 Style="{StaticResource DesktopShift.CaptionStyle}" />
@@ -113,6 +127,7 @@
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="Padding" Value="0,2" />
+                        <Setter Property="CornerRadius" Value="{StaticResource DesktopShift.CardCornerRadius}" />
                     </Style>
                 </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
@@ -121,41 +136,37 @@
                             Margin="0,0,0,4"
                             AutomationProperties.Name="{Binding AutomationName}"
                             Style="{StaticResource DesktopShift.CardStyle}">
-                            <Grid ColumnSpacing="16">
+                            <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel MinWidth="120" Spacing="6">
-                                    <Border
-                                        Padding="10,5"
-                                        HorizontalAlignment="Left"
-                                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                                        CornerRadius="999">
+                                <StackPanel MinWidth="120" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                    <Border HorizontalAlignment="Left" Style="{StaticResource DesktopShift.PillStyle}">
                                         <TextBlock
-                                            FontSize="12"
-                                            FontWeight="SemiBold"
-                                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                                            Style="{StaticResource DesktopShift.PillTextStyle}"
                                             Text="{Binding ResultLabel}" />
                                     </Border>
                                     <TextBlock
                                         Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{Binding Source}"
-                                        TextWrapping="Wrap" />
+                                        Text="{Binding Source}" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Spacing="9">
-                                    <Grid ColumnSpacing="12">
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                    <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock
                                             Style="{StaticResource DesktopShift.SectionTitleStyle}"
-                                            Text="{Binding Summary}"
-                                            TextWrapping="Wrap" />
+                                            Text="{Binding Summary}" />
                                         <TextBlock
-                                            HorizontalAlignment="Right"
+                                            Grid.Column="1"
                                             VerticalAlignment="Center"
                                             Style="{StaticResource DesktopShift.CaptionStyle}"
                                             Text="{Binding Timestamp}" />
                                     </Grid>
-                                    <Grid ColumnSpacing="24" RowSpacing="5">
+                                    <Grid ColumnSpacing="24" RowSpacing="{StaticResource DesktopShift.ItemSpacing}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
@@ -165,39 +176,43 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Application" />
-                                            <TextBlock Text="{Binding Application}" TextWrapping="Wrap" />
+                                        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Application" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Application}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Target desktop" />
-                                            <TextBlock Text="{Binding Target}" TextWrapping="Wrap" />
+                                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Target desktop" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Target}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Row="1" Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Trigger" />
-                                            <TextBlock Text="{Binding Trigger}" TextWrapping="Wrap" />
+                                        <StackPanel Grid.Row="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Trigger" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Trigger}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Duration" />
-                                            <TextBlock Text="{Binding Duration}" TextWrapping="Wrap" />
+                                        <StackPanel
+                                            Grid.Row="1"
+                                            Grid.Column="1"
+                                            Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Duration" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Duration}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Row="2" Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Rule" />
-                                            <TextBlock Text="{Binding Rule}" TextWrapping="Wrap" />
+                                        <StackPanel Grid.Row="2" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Rule" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Rule}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="3">
-                                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Window identity" />
-                                            <TextBlock Text="{Binding Identity}" TextWrapping="Wrap" />
+                                        <StackPanel
+                                            Grid.Row="2"
+                                            Grid.Column="1"
+                                            Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Window identity" />
+                                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{Binding Identity}" />
                                         </StackPanel>
                                     </Grid>
                                     <TextBlock
-                                        IsTextSelectionEnabled="True"
-                                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                                        Style="{StaticResource DesktopShift.MonospaceStyle}"
                                         Text="{Binding Correlation}" />
                                     <TextBlock
                                         Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{Binding ErrorDetails}"
-                                        TextWrapping="Wrap" />
+                                        Text="{Binding ErrorDetails}" />
                                     <Button
                                         HorizontalAlignment="Left"
                                         AutomationProperties.Name="Create a rule for this application"
@@ -220,9 +235,15 @@
                 <StackPanel
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Spacing="10">
-                    <FontIcon Glyph="&#xE9D9;" Style="{StaticResource DesktopShift.EmptyStateIconStyle}" />
-                    <TextBlock Style="{StaticResource DesktopShift.SectionTitleStyle}" Text="Nothing to report" />
+                    Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                    <FontIcon
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DesktopShift.EmptyStateIconStyle}"
+                        Glyph="&#xE9D9;" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DesktopShift.SectionHeadingStyle}"
+                        Text="Nothing to report" />
                     <TextBlock
                         x:Name="EmptyStateMessage"
                         MaxWidth="500"
@@ -238,6 +259,7 @@
             Grid.Row="3"
             Margin="0,0,0,12"
             VerticalAlignment="Bottom"
+            AutomationProperties.LiveSetting="Polite"
             IsClosable="True"
             IsOpen="False" />
     </Grid>
