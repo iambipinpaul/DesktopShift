@@ -53,17 +53,24 @@
 
             <Border
                 Margin="0,0,0,14"
-                Padding="15"
+                Padding="16"
                 Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Identify the application" />
-                    <TextBlock
-                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                        Text="Choose a running application, browse for its executable, or type the identities by hand below. A packaged identity is stronger than a process name, which any application can share." />
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.ItemSpacing}" RowSpacing="{StaticResource DesktopShift.ItemSpacing}">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="4">
+                        <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Identify the application" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="Select an open app or browse to its executable. DesktopShift will use the strongest identity available."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Grid
+                        x:Name="RunningApplicationPickerGrid"
+                        ColumnSpacing="8"
+                        RowSpacing="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="136" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -72,14 +79,18 @@
                         <ComboBox
                             HorizontalAlignment="Stretch"
                             AutomationProperties.Name="Running applications"
-                            Header="Running applications"
+                            Header="Open applications"
                             ItemsSource="{x:Bind ViewModel.RunningApplications}"
                             SelectedIndex="{x:Bind ViewModel.SelectedRunningApplicationIndex, Mode=TwoWay}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="config:RunningApplicationCandidate">
                                     <StackPanel Padding="0,4" Spacing="{StaticResource DesktopShift.TightSpacing}">
                                         <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="{x:Bind DisplayName}" />
-                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind Summary}" />
+                                        <TextBlock
+                                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                                            Text="{x:Bind Summary}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="NoWrap" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
@@ -87,53 +98,98 @@
                         <Button
                             Grid.Column="1"
                             VerticalAlignment="Bottom"
-                            HorizontalAlignment="Stretch"
                             AutomationProperties.Name="Refresh running applications"
-                            Click="OnRefreshRunningApplicationsClick"
-                            Content="Refresh" />
-                        <Button
+                            Click="OnRefreshRunningApplicationsClick">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <SymbolIcon Symbol="Refresh" />
+                                <TextBlock Text="Refresh" />
+                            </StackPanel>
+                        </Button>
+
+                        <Grid
+                            x:Name="RunningApplicationActionsGrid"
                             Grid.Row="1"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            AutomationProperties.Name="Use the selected running application"
-                            Click="OnUseRunningApplicationClick"
-                            Content="Use selected"
-                            Style="{StaticResource AccentButtonStyle}" />
-                        <StackPanel
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                            Grid.ColumnSpan="2"
+                            ColumnSpacing="8"
+                            RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <Button
+                                MinWidth="126"
+                                AutomationProperties.Name="Use the selected running application"
+                                Click="OnUseRunningApplicationClick"
+                                Content="Use selected"
+                                Style="{StaticResource AccentButtonStyle}" />
+                            <Button
+                                Grid.Column="1"
                                 AutomationProperties.Name="Browse for an executable"
-                                Click="OnBrowseForExecutableClick"
-                                Content="Browse for executable" />
-                            <ProgressRing
-                                Width="18"
-                                Height="18"
+                                Click="OnBrowseForExecutableClick">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <SymbolIcon Symbol="OpenFile" />
+                                    <TextBlock Text="Browse for executable" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel
+                                x:Name="RunningApplicationStatusPanel"
+                                Grid.Column="2"
+                                HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
-                                AutomationProperties.Name="Reading running windows"
-                                IsActive="{x:Bind ViewModel.IsLoadingRunningApplications, Mode=OneWay}" />
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <ProgressRing
+                                    Width="18"
+                                    Height="18"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Reading running windows"
+                                    IsActive="{x:Bind ViewModel.IsLoadingRunningApplications, Mode=OneWay}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                    Text="{x:Bind ViewModel.RunningApplicationStatus, Mode=OneWay}" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <StackPanel Spacing="8">
+                        <StackPanel Spacing="2">
+                            <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Match options" />
                             <TextBlock
-                                VerticalAlignment="Center"
                                 Style="{StaticResource DesktopShift.CaptionStyle}"
-                                Text="{x:Bind ViewModel.RunningApplicationStatus, Mode=OneWay}" />
+                                Text="Use these only when similar apps need different rules."
+                                TextWrapping="Wrap" />
                         </StackPanel>
-                    </Grid>
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.SectionSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <CheckBox
-                            Content="Also pin to this installation's path"
-                            IsChecked="{x:Bind ViewModel.IncludeExecutablePath, Mode=TwoWay}" />
-                        <CheckBox
-                            Grid.Column="1"
-                            Content="Also narrow to its window classes"
-                            IsChecked="{x:Bind ViewModel.IncludeWindowClasses, Mode=TwoWay}" />
-                    </Grid>
+                        <Grid
+                            x:Name="RunningApplicationMatchOptionsGrid"
+                            ColumnSpacing="{StaticResource DesktopShift.SectionSpacing}"
+                            RowSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <CheckBox
+                                x:Name="IncludeExecutablePathCheckBox"
+                                Content="Match this installation path"
+                                IsChecked="{x:Bind ViewModel.IncludeExecutablePath, Mode=TwoWay}" />
+                            <CheckBox
+                                x:Name="IncludeWindowClassesCheckBox"
+                                Grid.Column="1"
+                                Content="Match its window classes"
+                                IsChecked="{x:Bind ViewModel.IncludeWindowClasses, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

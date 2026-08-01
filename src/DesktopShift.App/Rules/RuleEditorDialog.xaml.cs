@@ -105,8 +105,11 @@ public sealed partial class RuleEditorDialog : ContentDialog
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
         UpdateResponsiveLayout();
 
-    private void OnDialogSizeChanged(object sender, SizeChangedEventArgs args) =>
+    private void OnDialogSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        UpdateApplicationPickerLayout(args.NewSize.Width);
         CenterInWindow();
+    }
 
     private void UpdateResponsiveLayout()
     {
@@ -119,7 +122,30 @@ public sealed partial class RuleEditorDialog : ContentDialog
         // window inset on each side, while retaining the 1040px large layout.
         double targetOuterWidth = Math.Min(1040, XamlRoot.Size.Width - 32);
         Width = Math.Max(320, targetOuterWidth - 80);
+        UpdateApplicationPickerLayout(Width);
         CenterInWindow();
+    }
+
+    private void UpdateApplicationPickerLayout(double width)
+    {
+        if (RunningApplicationActionsGrid is null ||
+            RunningApplicationStatusPanel is null ||
+            RunningApplicationMatchOptionsGrid is null ||
+            IncludeWindowClassesCheckBox is null)
+        {
+            return;
+        }
+
+        bool isCompact = width < 660;
+
+        Grid.SetRow(RunningApplicationStatusPanel, isCompact ? 1 : 0);
+        Grid.SetColumn(RunningApplicationStatusPanel, isCompact ? 0 : 2);
+        Grid.SetColumnSpan(RunningApplicationStatusPanel, isCompact ? 3 : 1);
+        RunningApplicationStatusPanel.HorizontalAlignment =
+            isCompact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
+        Grid.SetRow(IncludeWindowClassesCheckBox, isCompact ? 1 : 0);
+        Grid.SetColumn(IncludeWindowClassesCheckBox, isCompact ? 0 : 1);
     }
 
     private void CenterInWindow()
