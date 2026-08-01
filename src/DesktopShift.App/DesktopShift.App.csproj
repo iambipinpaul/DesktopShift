@@ -54,6 +54,7 @@
 
   <ItemGroup>
     <Content Include="Assets\AppIcon.ico" />
+    <Content Include="Assets\DesktopShiftLogo.svg" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" />

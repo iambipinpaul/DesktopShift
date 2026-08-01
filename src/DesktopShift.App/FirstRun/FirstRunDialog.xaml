@@ -17,12 +17,12 @@
         <StackPanel Spacing="{StaticResource DesktopShift.SectionSpacing}">
             <StackPanel Spacing="{StaticResource DesktopShift.ItemSpacing}">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <Border Style="{StaticResource DesktopShift.IconTileStyle}">
-                        <FontIcon
-                            Style="{StaticResource DesktopShift.IconTileGlyphStyle}"
-                            FontSize="17"
-                            Glyph="&#xE8B7;" />
-                    </Border>
+                    <Image
+                        Width="40"
+                        Height="40"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                        Stretch="Uniform" />
                     <StackPanel VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
                         <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Welcome to DesktopShift" />
                         <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="REVIEW BEFORE ANYTHING MOVES" />

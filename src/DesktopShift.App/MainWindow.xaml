@@ -31,17 +31,12 @@
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                <Border
+                <Image
                     Width="27"
                     Height="27"
-                    Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                    CornerRadius="{StaticResource DesktopShift.ControlCornerRadius}">
-                    <FontIcon
-                        FontSize="12"
-                        AutomationProperties.AccessibilityView="Raw"
-                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                        Glyph="&#xE8B7;" />
-                </Border>
+                    AutomationProperties.AccessibilityView="Raw"
+                    Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                    Stretch="Uniform" />
                 <TextBlock
                     VerticalAlignment="Center"
                     FontFamily="Segoe UI Variable Display"
@@ -91,18 +86,12 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border
+                        <Image
                             Width="44"
                             Height="44"
-                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
-                            BorderBrush="{ThemeResource DesktopShift.BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="10">
-                            <FontIcon
-                                FontSize="19"
-                                Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                                Glyph="&#xE8B7;" />
-                        </Border>
+                            AutomationProperties.AccessibilityView="Raw"
+                            Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                            Stretch="Uniform" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock
                                 FontFamily="Segoe UI Variable Display"

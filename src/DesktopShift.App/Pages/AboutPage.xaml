@@ -27,9 +27,12 @@
             <Border Style="{StaticResource DesktopShift.CardStyle}">
                 <StackPanel Spacing="{StaticResource DesktopShift.CardSpacing}">
                     <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                        <Border Style="{StaticResource DesktopShift.IconTileStyle}">
-                            <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" FontSize="20" Glyph="&#xE8B7;" />
-                        </Border>
+                        <Image
+                            Width="40"
+                            Height="40"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                            Stretch="Uniform" />
                         <StackPanel VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
                             <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="DesktopShift" />
                             <TextBlock x:Name="VersionSummary" Style="{StaticResource DesktopShift.CaptionStyle}" />

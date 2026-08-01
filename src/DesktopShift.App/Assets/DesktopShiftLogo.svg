@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">DesktopShift</title>
+  <desc id="description">Two interlocking directional forms create an abstract S.</desc>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="#2563EB"/>
+  <path d="M52 70h94l36 36-36 36H88l30-30H52V70Z" fill="#FFFFFF"/>
+  <path d="M204 186h-94l-36-36 36-36h58l-30 30h66v42Z" fill="#BFDBFE"/>
+  <path d="M52 70h42l30 30H82L52 70Z" fill="#DBEAFE" opacity="0.8"/>
+  <path d="M204 186h-42l-30-30h42l30 30Z" fill="#FFFFFF" opacity="0.78"/>
+</svg>
