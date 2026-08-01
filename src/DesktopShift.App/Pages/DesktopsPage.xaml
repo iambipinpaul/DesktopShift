@@ -226,52 +226,100 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <Expander Margin="0,16,0,0" Header="Live Windows desktop inventory">
-                    <Grid Padding="0,12,0,0">
-                        <Border
-                            x:Name="StatusCard"
-                            MinHeight="120"
-                            AutomationProperties.Name="Desktop inventory status"
-                            Style="{StaticResource DesktopShift.CardStyle}">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                                <ProgressRing x:Name="LoadingIndicator" Width="24" Height="24" IsActive="False" />
-                                <FontIcon x:Name="StatusIcon" Style="{StaticResource DesktopShift.EmptyStateIconStyle}" />
-                                <TextBlock x:Name="StatusTitle" Style="{StaticResource DesktopShift.RowTitleStyle}" />
-                                <TextBlock x:Name="StatusMessage" Style="{StaticResource DesktopShift.CaptionStyle}" TextAlignment="Center" />
-                                <TextBlock x:Name="StatusProvider" Style="{StaticResource DesktopShift.CaptionStyle}" TextAlignment="Center" />
-                            </StackPanel>
-                        </Border>
-                        <StackPanel x:Name="InventoryPanel" Visibility="Collapsed">
-                            <TextBlock x:Name="InventoryCount" Margin="0,0,0,8" Style="{StaticResource DesktopShift.CaptionStyle}" />
-                            <ListView
-                                x:Name="DesktopList"
-                                AutomationProperties.Name="Windows desktop inventory"
-                                ItemContainerStyle="{StaticResource DesktopShift.CardListItemStyle}"
-                                SelectionMode="None">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="viewModels:DesktopInventoryItemPresentation">
-                                        <Border AutomationProperties.Name="{x:Bind AutomationName}" Style="{StaticResource DesktopShift.ListCardStyle}">
-                                            <Grid ColumnSpacing="14">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="4">
-                                                    <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="{x:Bind DisplayName}" />
+                <Grid Margin="0,16,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.SectionLabelStyle}"
+                        Text="Live Windows desktops" />
+                    <TextBlock
+                        x:Name="InventoryCount"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource DesktopShift.CaptionStyle}" />
+                </Grid>
+                <Grid>
+                    <Border
+                        x:Name="StatusCard"
+                        MinHeight="120"
+                        AutomationProperties.Name="Desktop inventory status"
+                        Style="{StaticResource DesktopShift.CardStyle}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                            <ProgressRing x:Name="LoadingIndicator" Width="24" Height="24" IsActive="False" />
+                            <FontIcon x:Name="StatusIcon" Style="{StaticResource DesktopShift.EmptyStateIconStyle}" />
+                            <TextBlock x:Name="StatusTitle" Style="{StaticResource DesktopShift.RowTitleStyle}" />
+                            <TextBlock x:Name="StatusMessage" Style="{StaticResource DesktopShift.CaptionStyle}" TextAlignment="Center" />
+                            <TextBlock x:Name="StatusProvider" Style="{StaticResource DesktopShift.CaptionStyle}" TextAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    <Border
+                        x:Name="InventoryPanel"
+                        Style="{StaticResource DesktopShift.GroupCardStyle}"
+                        Visibility="Collapsed">
+                        <ListView
+                            x:Name="DesktopList"
+                            AutomationProperties.Name="Windows desktop inventory"
+                            SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="MinHeight" Value="68" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:DesktopInventoryItemPresentation">
+                                    <Border
+                                        MinHeight="68"
+                                        Padding="15,12"
+                                        AutomationProperties.Name="{x:Bind AutomationName}"
+                                        BorderBrush="{ThemeResource DesktopShift.BorderBrush}"
+                                        BorderThickness="0,0,0,1">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="32" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource DesktopShift.TextSecondaryBrush}"
+                                                Glyph="&#xE7F4;" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                                <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="{x:Bind DisplayName}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind Position}" />
+                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="•" />
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind DesktopId}" />
                                                 </StackPanel>
-                                                <Border Grid.Column="1" Style="{StaticResource DesktopShift.BadgeStyle}" Visibility="{x:Bind CurrentVisibility}">
-                                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind CurrentLabel}" />
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </StackPanel>
-                    </Grid>
-                </Expander>
+                                            </StackPanel>
+                                            <Border
+                                                Grid.Column="2"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource DesktopShift.BadgeStyle}"
+                                                Visibility="{x:Bind CurrentVisibility}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon
+                                                        FontSize="11"
+                                                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                                        Glyph="&#xE73E;" />
+                                                    <TextBlock
+                                                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                        Text="{x:Bind CurrentLabel}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Border>
+                </Grid>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
