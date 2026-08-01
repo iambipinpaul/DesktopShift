@@ -172,6 +172,15 @@
                 Style="{StaticResource DesktopShift.CaptionStyle}"
                 Text="A window that no enabled rule names is moved to the first desktop. Choose Anywhere to leave an app exactly where it opens — disabling a rule does not do that, it unmanages the app instead." />
 
+            <InfoBar
+                AutomationProperties.LiveSetting="Polite"
+                AutomationProperties.Name="Windows Settings placement note"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasSystemSettingsPlacementNote, Mode=OneWay}"
+                Message="{x:Bind ViewModel.SystemSettingsPlacementNote, Mode=OneWay}"
+                Severity="Informational"
+                Title="Windows Settings reuses its window" />
+
             <Expander
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"

@@ -72,6 +72,37 @@ public sealed class SweptWindowActivityTests
     }
 
     [TestMethod]
+    public void AnActivationTheSweepDoesNotAnswer_ExplainsThePolicy()
+    {
+        ActivityRecord record = ActivityRecordFactory.FromObservation(
+            DiagnosticTestData.SkippedObservation(
+                WindowSkipReason.ActivationNotSwept),
+            DiagnosticTestData.Session);
+
+        Assert.AreEqual(
+            "observation.skipped.activation_not_swept",
+            record.ResultCode);
+        Assert.AreEqual(
+            "DesktopShift does not move a window when you switch to it.",
+            record.Summary);
+
+        ActivityRecordDisplay display = ActivityRecordDisplay.Create(record);
+        Assert.AreEqual("Not evaluated", display.Rule);
+        Assert.DoesNotContain("No matching rule", display.AutomationName);
+    }
+
+    [TestMethod]
+    [DataRow(WindowSkipReason.AllowedAnywhere, 17)]
+    [DataRow(WindowSkipReason.ActivationNotSwept, 18)]
+    [DataRow(WindowSkipReason.CloakStateChangeObserved, 19)]
+    public void SkipReason_NumericValueIsStable(
+        WindowSkipReason reason,
+        int expectedValue)
+    {
+        Assert.AreEqual(expectedValue, (int)reason);
+    }
+
+    [TestMethod]
     public void ASweptAssignment_NamesTheFirstDesktopInEveryStage()
     {
         ImmutableArray<ActivityRecord> records =

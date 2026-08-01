@@ -65,6 +65,50 @@ public sealed class AnywhereDestinationTests
     }
 
     [TestMethod]
+    public void SettingsIdentity_ShowsItsPlacementChoicesInTheEditor()
+    {
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+        RuleEditorViewModel viewModel = new(
+            document,
+            ApplicationRuleDraft.ForNewRule(document));
+
+        Assert.IsFalse(viewModel.HasSystemSettingsPlacementNote);
+
+        viewModel.PackageFamilyNames =
+            "windows.immersivecontrolpanel_cw5n1h2txyewy";
+
+        Assert.IsTrue(viewModel.HasSystemSettingsPlacementNote);
+        Assert.Contains(
+            "Anywhere",
+            viewModel.SystemSettingsPlacementNote,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Foreground activated",
+            viewModel.SystemSettingsPlacementNote,
+            StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void SettingsPlacementNote_RecognizesEachDurableIdentity()
+    {
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+        ApplicationRuleDraft empty = ApplicationRuleDraft.ForNewRule(document);
+
+        RuleEditorViewModel byProcess = new(document, empty)
+        {
+            ProcessNames = "notepad.exe; SYSTEMSETTINGS.EXE",
+        };
+        RuleEditorViewModel byAppUserModelId = new(document, empty)
+        {
+            AppUserModelIds =
+                "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel",
+        };
+
+        Assert.IsTrue(byProcess.HasSystemSettingsPlacementNote);
+        Assert.IsTrue(byAppUserModelId.HasSystemSettingsPlacementNote);
+    }
+
+    [TestMethod]
     public void SelectingAnywhereAndBack_KeepsTheChosenManagedDesktop()
     {
         // Looking at the option must not cost the user the destination they had

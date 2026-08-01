@@ -24,12 +24,14 @@ public sealed class WindowsWinEventSourceTests
                 WindowsWinEventSource.EventObjectShow,
                 WindowsWinEventSource.EventSystemForeground,
                 WindowsWinEventSource.EventObjectDestroy,
+                WindowsWinEventSource.EventObjectCloaked,
+                WindowsWinEventSource.EventObjectUncloaked,
             },
             nativeApi.Registrations.Select(static item => item.Minimum).ToArray());
         Assert.IsTrue(
             nativeApi.Registrations.All(
                 static item => item.Minimum == item.Maximum));
-        Assert.AreEqual(4, nativeApi.Registrations.Count);
+        Assert.AreEqual(6, nativeApi.Registrations.Count);
         Assert.IsTrue(source.IsRunning);
 
         foreach (HookRegistration registration in nativeApi.Registrations)
@@ -70,8 +72,8 @@ public sealed class WindowsWinEventSourceTests
             events.Add(item);
         }
 
-        Assert.AreEqual(4, events.Count);
-        Assert.AreEqual(4L, source.Snapshot.Published);
+        Assert.AreEqual(6, events.Count);
+        Assert.AreEqual(6L, source.Snapshot.Published);
         Assert.AreEqual(0L, source.Snapshot.CallbackFailures);
         CollectionAssert.AreEquivalent(
             new[]
@@ -80,6 +82,8 @@ public sealed class WindowsWinEventSourceTests
                 WindowEventKind.Shown,
                 WindowEventKind.ForegroundActivated,
                 WindowEventKind.Destroyed,
+                WindowEventKind.Cloaked,
+                WindowEventKind.Uncloaked,
             },
             events.Select(static item => item.Kind).ToArray());
     }

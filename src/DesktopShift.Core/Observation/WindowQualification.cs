@@ -35,9 +35,7 @@ public enum WindowSkipReason
     /// This no longer means "nothing knows about this application" — that window
     /// is swept to the first desktop instead. It now means only that the
     /// application is named by a rule whose triggers do not include the one that
-    /// fired, so the window is deliberately left alone. It is also what a window
-    /// gets when the sweep does not answer the event, which is every foreground
-    /// activation.
+    /// fired, so the window is deliberately left alone.
     /// </remarks>
     NoMatchingRule,
 
@@ -46,6 +44,31 @@ public enum WindowSkipReason
     /// window stays exactly where it opened.
     /// </summary>
     AllowedAnywhere,
+
+    /// <summary>
+    /// The unmanaged sweep does not answer this foreground activation, so the
+    /// window is deliberately left alone.
+    /// </summary>
+    /// <remarks>
+    /// The sweep answers window creation, window showing, startup reconciliation,
+    /// and manual reassignment. It does not answer a foreground activation outside
+    /// the opening grace period, because moving a window as the user switches to
+    /// it would move it out from under their interaction.
+    /// </remarks>
+    ActivationNotSwept,
+
+    /// <summary>
+    /// Windows reported that the window's cloak state changed. The event is
+    /// recorded for diagnosis but does not participate in placement yet.
+    /// </summary>
+    /// <remarks>
+    /// Cloaking is how Windows hides a window that is not on the visible virtual
+    /// desktop. This reason keeps the cloak/uncloak spike observational: a later
+    /// change may let an uncloak trigger the unmanaged sweep, but only after a
+    /// real capture proves that it distinguishes relocation from a desktop
+    /// switch.
+    /// </remarks>
+    CloakStateChangeObserved,
 }
 
 public sealed record WindowQualification(

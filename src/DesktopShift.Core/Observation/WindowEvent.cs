@@ -8,6 +8,8 @@ public enum WindowEventKind
     Destroyed,
     StartupReconciliation,
     ManualReassignment,
+    Cloaked,
+    Uncloaked,
 }
 
 /// <param name="Sequence">The monotonic order the event was received in.</param>

@@ -128,7 +128,9 @@ public sealed record ActivityRecord(
     long? EventSequence = null,
     ActivityErrorDetail? Error = null,
     string? TopologyReason = null,
-    string? RecoverySignal = null);
+    string? RecoverySignal = null,
+    Guid? SourceDesktopId = null,
+    Guid? DestinationDesktopId = null);
 
 /// <summary>
 /// Projects the pipeline's own activity records onto the privacy-safe
@@ -163,9 +165,14 @@ public static class ActivityRecordFactory
             : $"observation.skipped.{ToCode(activity.SkipReason)}";
         string summary = isMatched
             ? BuildMatchSummary(activity)
-            : activity.SkipReason == WindowSkipReason.AllowedAnywhere
-                ? "An Anywhere rule names this application, so the window stays where it opened."
-                : $"Skipped: {Humanize(activity.SkipReason)}.";
+            : activity.SkipReason switch
+            {
+                WindowSkipReason.AllowedAnywhere =>
+                    "An Anywhere rule names this application, so the window stays where it opened.",
+                WindowSkipReason.ActivationNotSwept =>
+                    "DesktopShift does not move a window when you switch to it.",
+                _ => $"Skipped: {Humanize(activity.SkipReason)}.",
+            };
         ActivityErrorDetail? error = activity.NativeErrorCode is int nativeErrorCode
             ? new ActivityErrorDetail(
                 "observation.native_error",
@@ -669,8 +676,12 @@ public static class ActivityRecordFactory
         string summary,
         DateTimeOffset occurredAt,
         TimeSpan? duration,
-        ActivityErrorDetail? error) =>
-        new(
+        ActivityErrorDetail? error)
+    {
+        bool carriesPlacement = source is
+            ActivityEventSource.Move or ActivityEventSource.Assignment;
+
+        return new ActivityRecord(
             activity.CorrelationId,
             sessionId,
             occurredAt,
@@ -685,7 +696,12 @@ public static class ActivityRecordFactory
             activity.TargetDesktopKey,
             duration,
             EventSequence: null,
-            Error: error);
+            Error: error,
+            SourceDesktopId:
+                carriesPlacement ? activity.PreviousDesktopId : null,
+            DestinationDesktopId:
+                carriesPlacement ? activity.TargetDesktopId : null);
+    }
 
     private static ActivityErrorDetail? ToErrorDetail(
         WindowAssignmentError? error) =>

@@ -18,7 +18,7 @@ namespace DesktopShift.Windows.Tests.Recovery;
 [TestClass]
 public sealed class WindowsWinEventSourceRestartTests
 {
-    private const int ExpectedHookCount = 4;
+    private const int ExpectedHookCount = 6;
 
     [TestMethod]
     public void TheWindowEventSource_AdvertisesItselfAsRestartable()
@@ -81,7 +81,7 @@ public sealed class WindowsWinEventSourceRestartTests
             .ToArray();
         Assert.IsEmpty(second.Intersect(first).ToArray());
 
-        // The same four events, asked for again exactly once each.
+        // The same six events, asked for again exactly once each.
         CollectionAssert.AreEquivalent(
             new uint[]
             {
@@ -89,6 +89,8 @@ public sealed class WindowsWinEventSourceRestartTests
                 WindowsWinEventSource.EventObjectShow,
                 WindowsWinEventSource.EventSystemForeground,
                 WindowsWinEventSource.EventObjectDestroy,
+                WindowsWinEventSource.EventObjectCloaked,
+                WindowsWinEventSource.EventObjectUncloaked,
             },
             nativeApi.Registrations
                 .Skip(ExpectedHookCount)

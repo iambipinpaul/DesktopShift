@@ -108,6 +108,25 @@ public sealed class ActivityRecordDisplayTests
     }
 
     [TestMethod]
+    public void MoveCopyText_CarriesRuntimeDesktopIds()
+    {
+        ActivityRecordDisplay display = ActivityRecordDisplay.Create(
+            ActivityRecordFactory
+                .FromAssignment(
+                    DiagnosticTestData.Assignment(),
+                    DiagnosticTestData.Session)
+                .Single(static record =>
+                    record.Source == ActivityEventSource.Move));
+
+        Assert.Contains(
+            $"Source desktop ID: {DiagnosticTestData.PreviousDesktopId:D}",
+            display.CopyText);
+        Assert.Contains(
+            $"Destination desktop ID: {DiagnosticTestData.TargetDesktopId:D}",
+            display.CopyText);
+    }
+
+    [TestMethod]
     public void CopyText_NeverCarriesTitlesCommandLinesOrProfilePaths()
     {
         foreach (ActivityRecordDisplay display in ActivityRecordFactory

@@ -485,7 +485,9 @@ public sealed class RemoteDesktopAssignmentAcceptanceTests
         // The sweep never answers a foreground activation: a window must not be
         // moved out from under a click.
         Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
+        Assert.AreEqual(
+            WindowSkipReason.ActivationNotSwept,
+            observation.SkipReason);
         Assert.IsEmpty(harness.Placement.Moves);
         Assert.AreEqual(0, harness.Topology.SwitchCallCount);
 

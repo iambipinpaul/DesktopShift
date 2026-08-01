@@ -65,8 +65,8 @@ public sealed class UnmanagedWindowSweepTests
         // answered foreground events, clicking a stray window would teleport it
         // mid-interaction and deliberate manual placement would be impossible.
         //
-        // A rule naming a different application is in force, so the reason is
-        // "no rule matched" rather than "nothing is configured".
+        // A rule naming a different application is in force, so configuration is
+        // enabled; the binding reason is that the sweep ignores this activation.
         SweepHarness harness = new(
             CreateRule(
                 ApplicationRuleAction.MoveToDesktop,
@@ -78,7 +78,31 @@ public sealed class UnmanagedWindowSweepTests
             11);
 
         Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
+        Assert.AreEqual(
+            WindowSkipReason.ActivationNotSwept,
+            observation.SkipReason);
+        Assert.IsNull(observation.Assignment);
+        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(0, harness.Locator.CallCount);
+    }
+
+    [TestMethod]
+    [DataRow(WindowEventKind.Cloaked)]
+    [DataRow(WindowEventKind.Uncloaked)]
+    public async Task CloakStateChange_IsLoggedWithoutMovingTheWindow(
+        WindowEventKind eventKind)
+    {
+        SweepHarness harness = new();
+        harness.Placement.SetCurrent(25, OtherDesktopId);
+
+        WindowObservationActivity observation =
+            await harness.ProcessAsync(eventKind, 25);
+
+        Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
+        Assert.AreEqual(
+            WindowSkipReason.CloakStateChangeObserved,
+            observation.SkipReason);
+        Assert.AreEqual("Discord.exe", observation.Identity?.ProcessName);
         Assert.IsNull(observation.Assignment);
         Assert.IsEmpty(harness.Placement.Moves);
         Assert.AreEqual(0, harness.Locator.CallCount);
@@ -168,8 +192,50 @@ public sealed class UnmanagedWindowSweepTests
             22);
 
         Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
-        Assert.AreEqual(WindowSkipReason.NoMatchingRule, observation.SkipReason);
+        Assert.AreEqual(
+            WindowSkipReason.ActivationNotSwept,
+            observation.SkipReason);
         Assert.HasCount(movesAfterSweep, harness.Placement.Moves);
+    }
+
+    [TestMethod]
+    public async Task NamedWindow_OnAnUnansweredActivation_ReportsTheBindingReason()
+    {
+        SweepHarness harness = new(
+            CreateRule(
+                ApplicationRuleAction.MoveToDesktop,
+                triggers: [ApplicationRuleTrigger.WindowCreated]));
+        harness.Placement.SetCurrent(23, OtherDesktopId);
+
+        WindowObservationActivity observation = await harness.ProcessAsync(
+            WindowEventKind.ForegroundActivated,
+            23);
+
+        Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
+        Assert.AreEqual(
+            WindowSkipReason.ActivationNotSwept,
+            observation.SkipReason);
+        Assert.IsNull(observation.Assignment);
+        Assert.IsEmpty(harness.Placement.Moves);
+    }
+
+    [TestMethod]
+    public async Task ForegroundActivation_WithNoEnabledRules_ReportsThatFirst()
+    {
+        SweepHarness harness = new(
+            CreateRule(
+                ApplicationRuleAction.MoveToDesktop,
+                isEnabled: false));
+        harness.Placement.SetCurrent(24, OtherDesktopId);
+
+        WindowObservationActivity observation = await harness.ProcessAsync(
+            WindowEventKind.ForegroundActivated,
+            24);
+
+        Assert.AreEqual(WindowObservationOutcome.Skipped, observation.Outcome);
+        Assert.AreEqual(WindowSkipReason.NoEnabledRules, observation.SkipReason);
+        Assert.IsNull(observation.Assignment);
+        Assert.IsEmpty(harness.Placement.Moves);
     }
 
     [TestMethod]
@@ -364,6 +430,10 @@ public sealed class UnmanagedWindowSweepTests
             WindowEventKind.ManualReassignment));
         Assert.IsFalse(UnmanagedWindowSweep.AnswersEvent(
             WindowEventKind.ForegroundActivated));
+        Assert.IsFalse(UnmanagedWindowSweep.AnswersEvent(
+            WindowEventKind.Cloaked));
+        Assert.IsFalse(UnmanagedWindowSweep.AnswersEvent(
+            WindowEventKind.Uncloaked));
 
         // The sweep no longer decides for itself whether the desktop follows a
         // window. It carries a switch policy like any other rule, and the answer

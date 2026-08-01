@@ -27,7 +27,11 @@ public sealed record ObservationActivityPresentation(
 
         bool isMatched = activity.Outcome is WindowObservationOutcome.Matched;
         string outcome = isMatched ? "Matched" : "Skipped";
-        string rule = ValueOrFallback(activity.RuleId, "No matching rule");
+        string rule = ValueOrFallback(
+            activity.RuleId,
+            activity.SkipReason == WindowSkipReason.ActivationNotSwept
+                ? "Not evaluated"
+                : "No matching rule");
         string targetDesktop = ValueOrFallback(
             activity.TargetDesktopKey,
             "No desktop assigned");

@@ -69,7 +69,11 @@ public sealed record ActivityRecordDisplay(
             : ValueOrFallback(record.TargetDesktopKey, "No desktop assigned");
         string rule = isSwept
             ? "No rule names this app"
-            : ValueOrFallback(record.RuleId, "No matching rule");
+            : ValueOrFallback(
+                record.RuleId,
+                record.ResultCode == "observation.skipped.activation_not_swept"
+                    ? "Not evaluated"
+                    : "No matching rule");
         string resultLabel = ActivityRecordFactory.Humanize(record.Result);
         string summary = record.Summary;
         string duration = record.Duration is TimeSpan value
@@ -220,6 +224,20 @@ public sealed record ActivityRecordDisplay(
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Trigger: {trigger}");
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Rule: {rule}");
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Target desktop: {target}");
+        if (record.SourceDesktopId is Guid sourceDesktopId)
+        {
+            _ = text.AppendLine(
+                CultureInfo.CurrentCulture,
+                $"Source desktop ID: {sourceDesktopId:D}");
+        }
+
+        if (record.DestinationDesktopId is Guid destinationDesktopId)
+        {
+            _ = text.AppendLine(
+                CultureInfo.CurrentCulture,
+                $"Destination desktop ID: {destinationDesktopId:D}");
+        }
+
         _ = text.AppendLine(CultureInfo.CurrentCulture, $"Duration: {duration}");
         _ = text.AppendLine(
             CultureInfo.CurrentCulture,

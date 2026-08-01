@@ -83,6 +83,20 @@ public sealed class ActivityRecordFactoryTests
         Assert.AreEqual("assignment.succeeded", records[2].ResultCode);
         Assert.AreEqual(TimeSpan.FromMilliseconds(7), records[1].Duration);
         Assert.AreEqual(TimeSpan.FromMilliseconds(42), records[2].Duration);
+        Assert.AreEqual(
+            DiagnosticTestData.PreviousDesktopId,
+            records[0].SourceDesktopId);
+        Assert.AreEqual(
+            DiagnosticTestData.TargetDesktopId,
+            records[0].DestinationDesktopId);
+        Assert.IsNull(records[1].SourceDesktopId);
+        Assert.IsNull(records[1].DestinationDesktopId);
+        Assert.AreEqual(
+            DiagnosticTestData.PreviousDesktopId,
+            records[2].SourceDesktopId);
+        Assert.AreEqual(
+            DiagnosticTestData.TargetDesktopId,
+            records[2].DestinationDesktopId);
     }
 
     [TestMethod]

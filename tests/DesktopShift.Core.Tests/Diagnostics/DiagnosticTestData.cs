@@ -25,6 +25,12 @@ internal static class DiagnosticTestData
     public static readonly DateTimeOffset Occurred =
         new(2026, 7, 28, 9, 30, 0, TimeSpan.Zero);
 
+    public static readonly Guid TargetDesktopId =
+        Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    public static readonly Guid PreviousDesktopId =
+        Guid.Parse("ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb");
+
     /// <summary>
     /// A resolved identity carrying every field the projections must never
     /// reveal, so a leak in any layer shows up as a literal string match.
@@ -100,8 +106,8 @@ internal static class DiagnosticTestData
             skipReason,
             ruleId,
             targetDesktopKey,
-            Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-            Guid.Parse("ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb"),
+            TargetDesktopId,
+            PreviousDesktopId,
             identity ?? SafeIdentity(),
             error,
             moveOutcome,

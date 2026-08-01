@@ -126,6 +126,22 @@ public sealed class ObservationActivityPresentationTests
     }
 
     [TestMethod]
+    public void Create_UnansweredActivation_DoesNotClaimRuleMatchingFailed()
+    {
+        WindowObservationActivity activity = CreateActivity(
+            WindowObservationOutcome.Skipped,
+            WindowSkipReason.ActivationNotSwept,
+            TerminalIdentity);
+
+        ObservationActivityPresentation presentation =
+            ObservationActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Skipped: Activation Not Swept", presentation.Decision);
+        Assert.AreEqual("Not evaluated", presentation.Rule);
+        Assert.DoesNotContain("No matching rule", presentation.AutomationName);
+    }
+
+    [TestMethod]
     public void Create_BrowserHelperSurfaceExplainsWhyItWasNotAnIndependentWindow()
     {
         WindowObservationActivity activity = CreateActivity(

@@ -11,6 +11,8 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
     public const uint EventObjectCreate = 0x8000;
     public const uint EventObjectDestroy = 0x8001;
     public const uint EventObjectShow = 0x8002;
+    public const uint EventObjectCloaked = 0x8017;
+    public const uint EventObjectUncloaked = 0x8018;
 
     private const int ObjectIdWindow = 0;
     private const int ChildIdSelf = 0;
@@ -23,6 +25,8 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
         (EventObjectShow, WindowEventKind.Shown),
         (EventSystemForeground, WindowEventKind.ForegroundActivated),
         (EventObjectDestroy, WindowEventKind.Destroyed),
+        (EventObjectCloaked, WindowEventKind.Cloaked),
+        (EventObjectUncloaked, WindowEventKind.Uncloaked),
     ];
 
     private readonly object syncRoot = new();

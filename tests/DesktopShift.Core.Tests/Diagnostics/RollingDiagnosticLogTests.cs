@@ -141,6 +141,36 @@ public sealed class RollingDiagnosticLogTests
     }
 
     [TestMethod]
+    public void MoveAndAssignmentLines_CarryRuntimeDesktopIds()
+    {
+        InMemoryDiagnosticLogStore store = new();
+        RollingDiagnosticLog log = new(store);
+
+        foreach (ActivityRecord record in ActivityRecordFactory
+            .FromAssignment(
+                DiagnosticTestData.Assignment(),
+                DiagnosticTestData.Session)
+            .Where(static record => record.Source is
+                ActivityEventSource.Move or ActivityEventSource.Assignment))
+        {
+            log.Write(record);
+        }
+
+        foreach (string line in ReadLines(log, store))
+        {
+            using JsonDocument document = JsonDocument.Parse(line);
+            Assert.AreEqual(
+                DiagnosticTestData.PreviousDesktopId,
+                document.RootElement.GetProperty("sourceDesktopId").GetGuid());
+            Assert.AreEqual(
+                DiagnosticTestData.TargetDesktopId,
+                document.RootElement
+                    .GetProperty("destinationDesktopId")
+                    .GetGuid());
+        }
+    }
+
+    [TestMethod]
     public void LogLines_NeverCarryTitlesCommandLinesOrExecutablePaths()
     {
         InMemoryDiagnosticLogStore store = new();

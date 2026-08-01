@@ -635,6 +635,24 @@ public sealed class WindowObservationProcessor : IDisposable
         }
 
         WindowIdentity identity = resolution.Identity;
+
+        // Cloak transitions are instrumentation for the external-relocation
+        // spike. Resolve a privacy-safe identity when Windows leaves enough of
+        // the window available to do so, then stop: neither a user rule nor the
+        // unmanaged sweep is allowed to turn this measurement into placement
+        // behaviour before the signal has been validated on a real capture.
+        if (windowEvent.Kind is
+            WindowEventKind.Cloaked or WindowEventKind.Uncloaked)
+        {
+            return await RecordSkipAsync(
+                windowEvent,
+                window.RootWindowHandle,
+                WindowSkipReason.CloakStateChangeObserved,
+                correlationId,
+                identity.ToSafeIdentity(),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
         WindowSkipReason identitySkip =
             classifier.ClassifyIdentity(window, identity);
         if (identitySkip != WindowSkipReason.None)
@@ -690,14 +708,22 @@ public sealed class WindowObservationProcessor : IDisposable
             // application, never whether one matched this event. Reusing the
             // match result would turn narrowing a rule's triggers into
             // banishing its windows.
-            if (!answersEvent || matcher.IsNamedByAnyRule(identity, rules))
+            bool hasEnabledRules =
+                rules.Any(static candidate => candidate.IsEnabled);
+            bool isNamedByAnyRule =
+                hasEnabledRules && matcher.IsNamedByAnyRule(identity, rules);
+            if (!answersEvent || isNamedByAnyRule)
             {
+                WindowSkipReason reason = !hasEnabledRules
+                    ? WindowSkipReason.NoEnabledRules
+                    : !answersEvent
+                        ? WindowSkipReason.ActivationNotSwept
+                        : WindowSkipReason.NoMatchingRule;
+
                 return await RecordSkipAsync(
                     windowEvent,
                     window.RootWindowHandle,
-                    rules.Any(static candidate => candidate.IsEnabled)
-                        ? WindowSkipReason.NoMatchingRule
-                        : WindowSkipReason.NoEnabledRules,
+                    reason,
                     correlationId,
                     identity.ToSafeIdentity(),
                     cancellationToken: cancellationToken).ConfigureAwait(false);

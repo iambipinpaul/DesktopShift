@@ -271,7 +271,9 @@ public sealed record DiagnosticLogEntry(
     string? HResult,
     int? WindowsErrorCode,
     string? TopologyReason = null,
-    string? RecoverySignal = null)
+    string? RecoverySignal = null,
+    Guid? SourceDesktopId = null,
+    Guid? DestinationDesktopId = null)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -306,7 +308,9 @@ public sealed record DiagnosticLogEntry(
             record.Error?.HResultText,
             record.Error?.NativeErrorCode,
             record.TopologyReason,
-            record.RecoverySignal);
+            record.RecoverySignal,
+            record.SourceDesktopId,
+            record.DestinationDesktopId);
     }
 
     public static string Serialize(DiagnosticLogEntry entry)
