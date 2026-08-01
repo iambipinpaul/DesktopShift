@@ -502,6 +502,11 @@ public sealed partial class ActivityPage : Page
             RequestedTheme = ActualTheme,
         };
 
+        if (XamlRoot.Content is FrameworkElement root)
+        {
+            dialog.InheritAccentResources(root);
+        }
+
         _ = await dialog.ShowAsync();
     }
 

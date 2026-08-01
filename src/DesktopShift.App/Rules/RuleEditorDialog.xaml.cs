@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using DesktopShift.Core.Configuration;
@@ -54,14 +55,66 @@ public sealed partial class RuleEditorDialog : ContentDialog
 
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     public RuleEditorViewModel ViewModel { get; }
 
+    /// <summary>
+    /// ContentDialog is hosted in a popup and does not inherit resource
+    /// overrides placed on the window root. Copy the effective app accent into
+    /// the popup so its buttons, toggles, checks, and focus visuals match the
+    /// page behind it.
+    /// </summary>
+    public void InheritAccentResources(FrameworkElement owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+
+        foreach (string key in AccentResourceKeys)
+        {
+            if (owner.Resources.TryGetValue(key, out object? value))
+            {
+                Resources[key] = value;
+            }
+        }
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
         Loaded -= OnLoaded;
+        if (XamlRoot is not null)
+        {
+            XamlRoot.Changed += OnXamlRootChanged;
+        }
+
+        CenterInWindow();
         await ReadRunningApplicationsAsync();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs args)
+    {
+        Unloaded -= OnUnloaded;
+        if (XamlRoot is not null)
+        {
+            XamlRoot.Changed -= OnXamlRootChanged;
+        }
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
+        CenterInWindow();
+
+    private void CenterInWindow()
+    {
+        if (XamlRoot is null || ActualWidth <= 0)
+        {
+            return;
+        }
+
+        // WinUI's popup starts at the window edge but measures the dialog
+        // against the page content. Derive the translation from the live root
+        // width so the dialog stays centered at every window size.
+        double horizontalOffset = Math.Max(0, (XamlRoot.Size.Width - ActualWidth) / 2);
+        Translation = new Vector3((float)horizontalOffset, 0, 0);
     }
 
     private async void OnRefreshRunningApplicationsClick(
@@ -184,4 +237,35 @@ public sealed partial class RuleEditorDialog : ContentDialog
             ViewModel.IsLoadingRunningApplications = false;
         }
     }
+
+    private static readonly string[] AccentResourceKeys =
+    [
+        "DesktopShift.AccentBrush",
+        "DesktopShift.AccentStrongBrush",
+        "DesktopShift.AccentSoftBrush",
+        "AccentFillColorDefaultBrush",
+        "AccentFillColorSecondaryBrush",
+        "AccentFillColorTertiaryBrush",
+        "AccentTextFillColorPrimaryBrush",
+        "AccentTextFillColorSecondaryBrush",
+        "AccentTextFillColorTertiaryBrush",
+        "AccentButtonBackground",
+        "AccentButtonBackgroundPointerOver",
+        "AccentButtonBackgroundPressed",
+        "AccentButtonForeground",
+        "AccentButtonForegroundPointerOver",
+        "AccentButtonForegroundPressed",
+        "ToggleSwitchFillOn",
+        "ToggleSwitchFillOnPointerOver",
+        "ToggleSwitchFillOnPressed",
+        "TextControlBorderBrushFocused",
+        "FocusStrokeColorOuterBrush",
+        "CheckBoxCheckBackgroundFillChecked",
+        "CheckBoxCheckBackgroundFillCheckedPointerOver",
+        "CheckBoxCheckBackgroundFillCheckedPressed",
+        "CheckBoxCheckBackgroundStrokeChecked",
+        "CheckBoxCheckBackgroundStrokeCheckedPointerOver",
+        "CheckBoxCheckBackgroundStrokeCheckedPressed",
+        "ProgressRingForegroundThemeBrush",
+    ];
 }
