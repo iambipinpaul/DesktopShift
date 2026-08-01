@@ -48,8 +48,9 @@ public static class SettingsBehaviorEditor
 
     public static BehaviorSettings WithAppearance(
         BehaviorSettings current,
-        AppTheme theme) =>
-        current with { Theme = theme };
+        AppTheme theme,
+        AppAccent accent) =>
+        current with { Theme = theme, Accent = accent };
 
     public static BehaviorSettings WithHotkeys(
         BehaviorSettings current,

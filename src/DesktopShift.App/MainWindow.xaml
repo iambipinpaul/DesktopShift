@@ -17,7 +17,7 @@
         <Grid
             x:Name="AppTitleBar"
             Grid.Row="0"
-            Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
+            Background="{ThemeResource DesktopShift.TitleBarBackgroundBrush}"
             AutomationProperties.Name="DesktopShift title bar">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -32,8 +32,8 @@
                 Orientation="Horizontal"
                 Spacing="{StaticResource DesktopShift.ItemSpacing}">
                 <Border
-                    Width="24"
-                    Height="24"
+                    Width="27"
+                    Height="27"
                     Background="{ThemeResource DesktopShift.AccentSoftBrush}"
                     CornerRadius="{StaticResource DesktopShift.ControlCornerRadius}">
                     <FontIcon
@@ -65,7 +65,7 @@
                 FontFamily="Segoe UI Variable Text"
                 FontSize="11"
                 Foreground="{ThemeResource DesktopShift.TextSecondaryBrush}"
-                Text="WINDOW WORKSPACE COMPANION"
+                Text="Windows workspace companion"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
@@ -75,38 +75,77 @@
             AlwaysShowHeader="False"
             AutomationProperties.Name="Primary navigation"
             Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
-            CompactModeThresholdWidth="720"
-            ExpandedModeThresholdWidth="1000"
             IsBackButtonVisible="Collapsed"
-            IsPaneToggleButtonVisible="True"
+            IsPaneToggleButtonVisible="False"
             IsSettingsVisible="False"
             IsTitleBarAutoPaddingEnabled="False"
+            OpenPaneLength="284"
             PaneDisplayMode="Left"
-            PaneTitle="Workspace"
             SelectionChanged="OnNavigationSelectionChanged">
+
+            <NavigationView.PaneHeader>
+                <StackPanel Margin="21,16,16,14" Spacing="15">
+                    <Grid ColumnSpacing="11">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Width="44"
+                            Height="44"
+                            Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                            BorderBrush="{ThemeResource DesktopShift.BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                            <FontIcon
+                                FontSize="19"
+                                Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                                Glyph="&#xE8B7;" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock
+                                FontFamily="Segoe UI Variable Display"
+                                FontSize="15"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                                Text="DesktopShift" />
+                            <TextBlock
+                                Style="{StaticResource DesktopShift.CaptionStyle}"
+                                Text="Workspace settings" />
+                        </StackPanel>
+                    </Grid>
+                    <AutoSuggestBox
+                        x:Name="SettingsSearchBox"
+                        Height="34"
+                        AutomationProperties.Name="Find a setting"
+                        PlaceholderText="Find a setting"
+                        QueryIcon="Find" />
+                </StackPanel>
+            </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
                 <NavigationViewItem
                     x:Name="OverviewNavigationItem"
-                    AutomationProperties.Name="Overview"
-                    Content="Overview"
+                    AutomationProperties.Name="Home"
+                    Content="Home"
                     IsSelected="True"
+                    Margin="8,0,4,0"
                     Tag="overview">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Application Rules" Content="Rules" Tag="rules">
+                <NavigationViewItem AutomationProperties.Name="Application rules" Content="Application rules" Margin="8,0,4,0" Tag="rules">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8EF;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Managed Desktops" Content="Desktops" Tag="desktops">
+                <NavigationViewItem AutomationProperties.Name="Managed desktops" Content="Managed desktops" Margin="8,0,4,0" Tag="desktops">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7F4;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Assignment Activity" Content="Activity" Tag="activity">
+                <NavigationViewItem AutomationProperties.Name="Assignment Activity" Content="Activity" Margin="8,0,4,0" Tag="activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
@@ -114,39 +153,17 @@
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem AutomationProperties.Name="Settings" Content="Settings" Tag="settings">
+                <NavigationViewItem AutomationProperties.Name="System settings" Content="System settings" Margin="8,0,4,0" Tag="settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="About DesktopShift" Content="About" Tag="about">
+                <NavigationViewItem AutomationProperties.Name="About DesktopShift" Content="About" Margin="8,0,4,0" Tag="about">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
-
-            <NavigationView.PaneFooter>
-                <!--
-                    The label is the control's own Header rather than a caption
-                    floating above it, so Windows ties the two together: the
-                    screen reader reads the same word the user can see, and the
-                    label grows with the system text size instead of staying put.
-                -->
-                <StackPanel Margin="8,12,8,8">
-                    <ComboBox
-                        x:Name="ThemeSelector"
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.HelpText="Choose whether DesktopShift follows Windows or uses a fixed light or dark appearance."
-                        AutomationProperties.Name="Appearance"
-                        Header="Appearance"
-                        SelectionChanged="OnThemeSelectionChanged">
-                        <ComboBoxItem Content="Use system setting" Tag="System" />
-                        <ComboBoxItem Content="Light" Tag="Light" />
-                        <ComboBoxItem Content="Dark" Tag="Dark" />
-                    </ComboBox>
-                </StackPanel>
-            </NavigationView.PaneFooter>
 
             <Frame
                 x:Name="ContentFrame"

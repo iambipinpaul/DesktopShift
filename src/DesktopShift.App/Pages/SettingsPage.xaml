@@ -4,19 +4,27 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:settings="using:DesktopShift.App.Settings"
-    AutomationProperties.Name="Settings page"
+    AutomationProperties.Name="System settings page"
     Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer
+        HorizontalContentAlignment="Stretch"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
         <StackPanel
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Left"
+            HorizontalAlignment="Center"
             Spacing="{StaticResource DesktopShift.SectionSpacing}">
+            <StackPanel Margin="0,0,0,-12" Orientation="Horizontal" Spacing="7">
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="System settings" />
+            </StackPanel>
             <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Settings" />
+                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="System settings" />
                 <TextBlock
                     Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                    Text="Control how DesktopShift starts, assigns windows, reports problems, and responds to global shortcuts." />
+                    Text="Configure startup, assignment behavior, compatibility, appearance, and global shortcuts." />
             </StackPanel>
 
             <InfoBar
@@ -246,16 +254,25 @@
                             Text="Appearance" />
                         <TextBlock
                             Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                            Text="The theme is saved with the rest of your configuration and applied immediately." />
+                            Text="Follow Windows personalization by default, or choose an app-specific theme and color." />
                     </StackPanel>
                     <ComboBox
                         x:Name="ThemePicker"
-                        AutomationProperties.Name="Theme"
-                        Header="Theme"
+                        AutomationProperties.Name="App theme"
+                        Header="App theme"
                         SelectionChanged="OnThemeSelectionChanged">
-                        <ComboBoxItem Content="Use system setting" Tag="System" />
+                        <ComboBoxItem Content="Use Windows setting" Tag="System" />
                         <ComboBoxItem Content="Light" Tag="Light" />
                         <ComboBoxItem Content="Dark" Tag="Dark" />
+                    </ComboBox>
+                    <ComboBox
+                        x:Name="AccentPicker"
+                        AutomationProperties.HelpText="Windows High Contrast always takes priority over this setting."
+                        AutomationProperties.Name="App color"
+                        Header="App color"
+                        SelectionChanged="OnAccentSelectionChanged">
+                        <ComboBoxItem Content="Use Windows accent color" Tag="System" />
+                        <ComboBoxItem Content="Aditi Kraft Blue" Tag="AditiKraftBlue" />
                     </ComboBox>
                 </StackPanel>
             </Border>

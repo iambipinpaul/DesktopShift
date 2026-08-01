@@ -11,11 +11,11 @@ public static class ShellNavigationCatalog
         Array.AsReadOnly(
         new ShellDestination[]
         {
-            new("overview", "Overview", 0),
-            new("rules", "Rules", 1),
-            new("desktops", "Desktops", 2),
+            new("overview", "Home", 0),
+            new("rules", "Application rules", 1),
+            new("desktops", "Managed desktops", 2),
             new("activity", "Activity", 3),
-            new("settings", "Settings", 4),
+            new("settings", "System settings", 4),
             new("about", "About", 5),
         });
 

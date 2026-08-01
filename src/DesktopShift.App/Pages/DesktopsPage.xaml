@@ -5,19 +5,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:desktops="using:DesktopShift.App.Desktops"
     xmlns:viewModels="using:DesktopShift.App.ViewModels"
-    AutomationProperties.Name="Windows desktops page"
+    AutomationProperties.Name="Managed desktops page"
     Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer
+        HorizontalContentAlignment="Stretch"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
         <StackPanel
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Left"
+            HorizontalAlignment="Center"
             Spacing="{StaticResource DesktopShift.SectionSpacing}">
+            <StackPanel Margin="0,0,0,-12" Orientation="Horizontal" Spacing="7">
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Managed desktops" />
+            </StackPanel>
             <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Windows Desktops" />
+                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Managed desktops" />
                 <TextBlock
                     Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                    Text="Managed destinations and the live virtual desktops reported by the validated Windows provider." />
+                    Text="Semantic destinations remain stable even when Windows desktop identities change." />
             </StackPanel>
 
             <StackPanel

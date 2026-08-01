@@ -156,7 +156,30 @@ public sealed partial class SettingsPage : Page
 
         BehaviorSettingsPresentation? presentation =
             await PersistBehaviorAsync(
-                SettingsBehaviorEditor.WithAppearance(currentBehavior, theme));
+                SettingsBehaviorEditor.WithAppearance(
+                    currentBehavior,
+                    theme,
+                    currentBehavior.Accent));
+        _ = presentation;
+    }
+
+    private async void OnAccentSelectionChanged(
+        object sender,
+        SelectionChangedEventArgs args)
+    {
+        if (isApplyingPresentation ||
+            AccentPicker.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+            !Enum.TryParse(tag, ignoreCase: true, out AppAccent accent))
+        {
+            return;
+        }
+
+        BehaviorSettingsPresentation? presentation =
+            await PersistBehaviorAsync(
+                SettingsBehaviorEditor.WithAppearance(
+                    currentBehavior,
+                    currentBehavior.Theme,
+                    accent));
         _ = presentation;
     }
 
@@ -241,6 +264,11 @@ public sealed partial class SettingsPage : Page
             {
                 AppTheme.Light => 1,
                 AppTheme.Dark => 2,
+                _ => 0,
+            };
+            AccentPicker.SelectedIndex = currentBehavior.Accent switch
+            {
+                AppAccent.AditiKraftBlue => 1,
                 _ => 0,
             };
             HotkeysEnabledToggle.IsOn = currentBehavior.AreHotkeysEnabled;

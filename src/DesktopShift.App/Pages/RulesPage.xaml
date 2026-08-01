@@ -5,21 +5,29 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:config="using:DesktopShift.Core.Configuration"
     xmlns:rules="using:DesktopShift.App.Rules"
-    AutomationProperties.Name="Application Rules page"
+    AutomationProperties.Name="Application rules page"
     Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer
+        HorizontalContentAlignment="Stretch"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
         <StackPanel
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Left"
+            HorizontalAlignment="Center"
             Spacing="{StaticResource DesktopShift.SectionSpacing}">
+            <StackPanel Margin="0,0,0,-12" Orientation="Horizontal" Spacing="7">
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Application rules" />
+            </StackPanel>
             <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                    <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Application Rules" />
+                    <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Application rules" />
                     <TextBlock
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
                         Text="Every rule DesktopShift matches windows against, strongest identity first. Add, edit, duplicate, or turn a rule off, then prove it against the windows you have open." />

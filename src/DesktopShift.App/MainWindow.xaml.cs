@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using DesktopShift.App.Appearance;
 using DesktopShift.App.FirstRun;
 using DesktopShift.App.Pages;
 using DesktopShift.App.Rules;
@@ -23,6 +24,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI.ViewManagement;
 
 namespace DesktopShift.App;
 
@@ -50,14 +52,17 @@ public sealed partial class MainWindow : Window
     private readonly IManagedDesktopMaintenanceService _managedDesktopMaintenanceService;
     private readonly IWindowAssignmentActivityProjection _assignmentActivityProjection;
     private readonly IWindowReassignmentService _windowReassignmentService;
+    private readonly IAutomaticAssignmentPauseController _assignmentPauseController;
     private readonly BehaviorSettingsCommand _behaviorSettingsCommand;
     private readonly IStartupRegistration _startupRegistration;
     private readonly IDiagnosticsCoordinator _diagnosticsCoordinator;
     private readonly RulesPageServices _rulesPageServices;
     private readonly SettingsPageServices _settingsPageServices;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private readonly AccessibilitySettings _accessibilitySettings;
+    private readonly HighContrastChangeMonitor _highContrastMonitor;
     private FirstRunState? _firstRunState;
-    private bool _isApplyingTheme;
+    private AppAccent _currentAccent = AppAccent.System;
     private bool _isShellStateLoaded;
 
     public MainWindow(
@@ -105,6 +110,9 @@ public sealed partial class MainWindow : Window
         _windowReassignmentService =
             windowReassignmentService ??
             throw new ArgumentNullException(nameof(windowReassignmentService));
+        _assignmentPauseController =
+            assignmentPauseController ??
+            throw new ArgumentNullException(nameof(assignmentPauseController));
         _startupRegistration =
             startupRegistration ?? throw new ArgumentNullException(nameof(startupRegistration));
         _diagnosticsCoordinator =
@@ -130,8 +138,7 @@ public sealed partial class MainWindow : Window
                 throw new ArgumentNullException(nameof(globalHotkeyCoordinator)),
             _compatibilityCoordinator,
             _diagnosticsCoordinator,
-            assignmentPauseController ??
-                throw new ArgumentNullException(nameof(assignmentPauseController)),
+            _assignmentPauseController,
             _windowReassignmentService,
             _themePreferenceService,
             timeProvider,
@@ -140,6 +147,13 @@ public sealed partial class MainWindow : Window
                 throw new ArgumentNullException(nameof(desktopSwitchHotkeyCoordinator)));
 
         InitializeComponent();
+        _accessibilitySettings = new AccessibilitySettings();
+        _highContrastMonitor = new HighContrastChangeMonitor(
+            () => _accessibilitySettings.HighContrast,
+            () => _accessibilitySettings.HighContrastChanged +=
+                OnHighContrastChanged,
+            () => _accessibilitySettings.HighContrastChanged -=
+                OnHighContrastChanged);
 
         Title = ProductInfo.ApplicationName;
         ExtendsContentIntoTitleBar = true;
@@ -156,6 +170,9 @@ public sealed partial class MainWindow : Window
         Closed += OnClosed;
 
         ApplyTheme(_themePreferenceService.CurrentTheme);
+        ApplyAccent(
+            BehaviorSettingsCommand.ResolveBehavior(
+                _configurationService.CurrentState).Accent);
         NavigateTo("overview");
     }
 
@@ -222,52 +239,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void OnThemeSelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (_isApplyingTheme || ThemeSelector.SelectedItem is not ComboBoxItem selectedItem)
-        {
-            return;
-        }
-
-        if (selectedItem.Tag is string themeName &&
-            Enum.TryParse(themeName, ignoreCase: true, out AppTheme theme))
-        {
-            try
-            {
-                BehaviorSettings current =
-                    _configurationService.CurrentState.Candidate.Behavior ??
-                    BehaviorSettingsCommand.ResolveBehavior(
-                        _configurationService.CurrentState);
-                BehaviorSettingsPresentation saved =
-                    await _behaviorSettingsCommand.ApplyAsync(
-                        current with { Theme = theme },
-                        _lifetimeCancellation.Token);
-                if (saved.Accepted)
-                {
-                    ApplyAcceptedBehavior(saved.ActiveBehavior);
-                }
-                else
-                {
-                    ApplyTheme(saved.ActiveBehavior.Theme);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception exception)
-            {
-                Debug.WriteLine(
-                    $"DesktopShift could not save the theme preference: {exception}");
-                ApplyTheme(
-                    BehaviorSettingsCommand.ResolveBehavior(
-                        _configurationService.CurrentState).Theme);
-            }
-        }
-    }
-
     private void ApplyAcceptedBehavior(BehaviorSettings behavior)
     {
         _themePreferenceService.SetTheme(behavior.Theme);
+        ApplyAccent(behavior.Accent);
         _ = _settingsPageServices.Hotkeys.Apply(
             behavior.ToHotkeySettings());
         _ = _settingsPageServices.DesktopSwitchHotkeys?.Apply(
@@ -288,31 +263,136 @@ public sealed partial class MainWindow : Window
 
     private void ApplyTheme(AppTheme theme)
     {
-        _isApplyingTheme = true;
-        try
+        RootLayout.RequestedTheme = theme switch
         {
-            RootLayout.RequestedTheme = theme switch
-            {
-                AppTheme.Light => ElementTheme.Light,
-                AppTheme.Dark => ElementTheme.Dark,
-                _ => ElementTheme.Default,
-            };
+            AppTheme.Light => ElementTheme.Light,
+            AppTheme.Dark => ElementTheme.Dark,
+            _ => ElementTheme.Default,
+        };
 
-            foreach (ComboBoxItem item in ThemeSelector.Items.Cast<ComboBoxItem>())
-            {
-                if (item.Tag is string themeName &&
-                    string.Equals(themeName, theme.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    ThemeSelector.SelectedItem = item;
-                    break;
-                }
-            }
-        }
-        finally
+        ApplyAccent(_currentAccent);
+    }
+
+    private void OnHighContrastChanged(AccessibilitySettings sender, object args)
+    {
+        if (DispatcherQueue.HasThreadAccess)
         {
-            _isApplyingTheme = false;
+            ApplyAccent(_currentAccent);
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(() => ApplyAccent(_currentAccent));
+    }
+
+    private void ApplyAccent(AppAccent accent)
+    {
+        _currentAccent = accent;
+        ClearAccentOverrides();
+
+        if (accent != AppAccent.AditiKraftBlue || _highContrastMonitor.IsHighContrast)
+        {
+            return;
+        }
+
+        SolidColorBrush primary = CreateBrush(0xFF, 0x25, 0x63, 0xEB);
+        SolidColorBrush hover = CreateBrush(0xFF, 0x1D, 0x4E, 0xD8);
+        SolidColorBrush pressed = CreateBrush(0xFF, 0x1E, 0x40, 0xAF);
+        SolidColorBrush soft = CreateBrush(0x24, 0x25, 0x63, 0xEB);
+        SolidColorBrush white = CreateBrush(0xFF, 0xFF, 0xFF, 0xFF);
+
+        SetAccentBrush("DesktopShift.AccentBrush", primary);
+        SetAccentBrush("DesktopShift.AccentStrongBrush", primary);
+        SetAccentBrush("DesktopShift.AccentSoftBrush", soft);
+        SetAccentBrush("AccentFillColorDefaultBrush", primary);
+        SetAccentBrush("AccentFillColorSecondaryBrush", hover);
+        SetAccentBrush("AccentFillColorTertiaryBrush", pressed);
+        SetAccentBrush("AccentTextFillColorPrimaryBrush", primary);
+        SetAccentBrush("AccentTextFillColorSecondaryBrush", hover);
+        SetAccentBrush("AccentTextFillColorTertiaryBrush", pressed);
+        SetAccentBrush("AccentButtonBackground", primary);
+        SetAccentBrush("AccentButtonBackgroundPointerOver", hover);
+        SetAccentBrush("AccentButtonBackgroundPressed", pressed);
+        SetAccentBrush("AccentButtonForeground", white);
+        SetAccentBrush("AccentButtonForegroundPointerOver", white);
+        SetAccentBrush("AccentButtonForegroundPressed", white);
+        SetAccentBrush("ToggleSwitchFillOn", primary);
+        SetAccentBrush("ToggleSwitchFillOnPointerOver", hover);
+        SetAccentBrush("ToggleSwitchFillOnPressed", pressed);
+        SetAccentBrush("NavigationViewSelectionIndicatorForeground", primary);
+        SetAccentBrush("TextControlBorderBrushFocused", primary);
+        SetAccentBrush("FocusStrokeColorOuterBrush", primary);
+        SetAccentBrush("HyperlinkButtonForeground", primary);
+        SetAccentBrush("HyperlinkButtonForegroundPointerOver", hover);
+        SetAccentBrush("HyperlinkButtonForegroundPressed", pressed);
+        SetAccentBrush("CheckBoxCheckBackgroundFillChecked", primary);
+        SetAccentBrush("CheckBoxCheckBackgroundFillCheckedPointerOver", hover);
+        SetAccentBrush("CheckBoxCheckBackgroundFillCheckedPressed", pressed);
+        SetAccentBrush("CheckBoxCheckBackgroundStrokeChecked", primary);
+        SetAccentBrush("CheckBoxCheckBackgroundStrokeCheckedPointerOver", hover);
+        SetAccentBrush("CheckBoxCheckBackgroundStrokeCheckedPressed", pressed);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedStroke", primary);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedStrokePointerOver", hover);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedStrokePressed", pressed);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedFill", primary);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedFillPointerOver", hover);
+        SetAccentBrush("RadioButtonOuterEllipseCheckedFillPressed", pressed);
+        SetAccentBrush("ProgressRingForegroundThemeBrush", primary);
+    }
+
+    private void SetAccentBrush(string key, SolidColorBrush brush) =>
+        RootLayout.Resources[key] = brush;
+
+    private void ClearAccentOverrides()
+    {
+        foreach (string key in AccentOverrideKeys)
+        {
+            _ = RootLayout.Resources.Remove(key);
         }
     }
+
+    private static SolidColorBrush CreateBrush(byte a, byte r, byte g, byte b) =>
+        new(global::Windows.UI.Color.FromArgb(a, r, g, b));
+
+    private static readonly string[] AccentOverrideKeys =
+    [
+        "DesktopShift.AccentBrush",
+        "DesktopShift.AccentStrongBrush",
+        "DesktopShift.AccentSoftBrush",
+        "AccentFillColorDefaultBrush",
+        "AccentFillColorSecondaryBrush",
+        "AccentFillColorTertiaryBrush",
+        "AccentTextFillColorPrimaryBrush",
+        "AccentTextFillColorSecondaryBrush",
+        "AccentTextFillColorTertiaryBrush",
+        "AccentButtonBackground",
+        "AccentButtonBackgroundPointerOver",
+        "AccentButtonBackgroundPressed",
+        "AccentButtonForeground",
+        "AccentButtonForegroundPointerOver",
+        "AccentButtonForegroundPressed",
+        "ToggleSwitchFillOn",
+        "ToggleSwitchFillOnPointerOver",
+        "ToggleSwitchFillOnPressed",
+        "NavigationViewSelectionIndicatorForeground",
+        "TextControlBorderBrushFocused",
+        "FocusStrokeColorOuterBrush",
+        "HyperlinkButtonForeground",
+        "HyperlinkButtonForegroundPointerOver",
+        "HyperlinkButtonForegroundPressed",
+        "CheckBoxCheckBackgroundFillChecked",
+        "CheckBoxCheckBackgroundFillCheckedPointerOver",
+        "CheckBoxCheckBackgroundFillCheckedPressed",
+        "CheckBoxCheckBackgroundStrokeChecked",
+        "CheckBoxCheckBackgroundStrokeCheckedPointerOver",
+        "CheckBoxCheckBackgroundStrokeCheckedPressed",
+        "RadioButtonOuterEllipseCheckedStroke",
+        "RadioButtonOuterEllipseCheckedStrokePointerOver",
+        "RadioButtonOuterEllipseCheckedStrokePressed",
+        "RadioButtonOuterEllipseCheckedFill",
+        "RadioButtonOuterEllipseCheckedFillPointerOver",
+        "RadioButtonOuterEllipseCheckedFillPressed",
+        "ProgressRingForegroundThemeBrush",
+    ];
 
     private NavigationViewItem? FindNavigationItem(string destinationKey)
     {
@@ -557,6 +637,13 @@ public sealed partial class MainWindow : Window
                 _assignmentActivityProjection,
                 _windowReassignmentService,
                 _lifetimeCancellation.Token);
+            overviewPage.UpdateQuickSettings(
+                _assignmentPauseController,
+                _managedDesktopMaintenanceService,
+                BehaviorSettingsCommand.ResolveBehavior(
+                    _configurationService.CurrentState),
+                NavigateTo,
+                _lifetimeCancellation.Token);
         }
         else if (ContentFrame.Content is SettingsPage settingsPage)
         {
@@ -709,6 +796,7 @@ public sealed partial class MainWindow : Window
     {
         _lifetimeCancellation.Cancel();
         _themePreferenceService.ThemeChanged -= OnThemePreferenceChanged;
+        _highContrastMonitor.Dispose();
         _compatibilityCoordinator.StatusChanged -= OnCompatibilityStatusChanged;
         _managedDesktopReconciliationService.Changed -=
             OnManagedDesktopReconciliationChanged;

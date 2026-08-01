@@ -7,7 +7,11 @@
     xmlns:rules="using:DesktopShift.App.Rules"
     AutomationProperties.Name="Activity page"
     Background="Transparent">
-    <Grid Margin="{StaticResource DesktopShift.PageMargin}" RowSpacing="{StaticResource DesktopShift.CardSpacing}">
+    <Grid
+        MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
+        Margin="{StaticResource DesktopShift.PageMargin}"
+        HorizontalAlignment="Center"
+        RowSpacing="{StaticResource DesktopShift.CardSpacing}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,13 +19,20 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-            <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
-            <TextBlock
-                MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
-                HorizontalAlignment="Left"
-                Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                Text="Recent decisions, window moves, desktop switches, and assignment results. DesktopShift records privacy-safe app identity only—never window titles, browser addresses, or command lines." />
+        <StackPanel Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Activity" />
+            </StackPanel>
+            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
+                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
+                <TextBlock
+                    MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                    Text="Recent decisions, window moves, desktop switches, and assignment results. DesktopShift records privacy-safe app identity only—never window titles, browser addresses, or command lines." />
+            </StackPanel>
         </StackPanel>
 
         <!--

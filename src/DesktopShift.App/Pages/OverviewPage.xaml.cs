@@ -1,5 +1,9 @@
 using DesktopShift.App.ViewModels;
+using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Hosting;
+using DesktopShift.Core.ManagedDesktops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -11,9 +15,17 @@ public sealed partial class OverviewPage : Page
     private ManagedDesktopMappingPresentationSnapshot? _mappingSnapshot;
     private IWindowAssignmentActivityProjection? _assignmentProjection;
     private IWindowReassignmentService? _reassignmentService;
+    private IAutomaticAssignmentPauseController? _assignmentPauseController;
+    private IManagedDesktopMaintenanceService? _managedDesktopMaintenanceService;
     private WindowReassignmentCommand? _reassignmentCommand;
+    private Action<string>? _navigate;
     private CancellationToken _windowCancellationToken;
     private int _mappingUpdateVersion;
+    private string _compatibilityMode = "Limited Mode";
+    private bool _isFirstRunComplete;
+    private bool _isApplyingAutomaticAssignment;
+    private bool _isApplyingRecreationPolicy;
+    private bool _isUpdatingRecreationPolicy;
 
     public OverviewPage()
     {
@@ -21,6 +33,14 @@ public sealed partial class OverviewPage : Page
         ReassignNowButton.IsEnabled = false;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        const double horizontalPageMargin = 60;
+        HomeContent.Width = Math.Max(
+            0,
+            Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
     }
 
     public void Update(OverviewPresentation presentation)
@@ -31,16 +51,46 @@ public sealed partial class OverviewPage : Page
             System.Globalization.CultureInfo.CurrentCulture);
         ManagedDesktopCount.Text = presentation.ManagedDesktopCount.ToString(
             System.Globalization.CultureInfo.CurrentCulture);
-        WorkspaceSummary.Text = presentation.IsFirstRunComplete
-            ? "Your reviewed configuration is saved. DesktopShift will only act within the capabilities shown below."
-            : "Setup has not been completed. DesktopShift will not move any windows until you review and apply the starter mappings.";
+        WorkspaceRuleCount.Text = presentation.EnabledRuleCount == 1
+            ? "1 rule"
+            : $"{presentation.EnabledRuleCount} rules";
+        WorkspaceDesktopCount.Text = presentation.ManagedDesktopCount == 1
+            ? "1 mapped"
+            : $"{presentation.ManagedDesktopCount} mapped";
+        _isFirstRunComplete = presentation.IsFirstRunComplete;
+        _compatibilityMode = presentation.Compatibility.Mode;
         ModeStatus.Text = presentation.Compatibility.Mode;
-        ProviderName.Text = presentation.Compatibility.Provider;
-        BuildInfo.Text =
-            $"{presentation.Compatibility.Build} • {presentation.Compatibility.BuildSupport}";
-        TestOutcome.Text = presentation.Compatibility.TestOutcome;
-        CompatibilityExplanation.Text = presentation.Compatibility.Explanation;
-        CapabilitySummary.Text = presentation.Compatibility.Capabilities;
+        ApplyWorkspaceStatus();
+    }
+
+    public void UpdateQuickSettings(
+        IAutomaticAssignmentPauseController assignmentPauseController,
+        IManagedDesktopMaintenanceService managedDesktopMaintenanceService,
+        BehaviorSettings behavior,
+        Action<string> navigate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(assignmentPauseController);
+        ArgumentNullException.ThrowIfNull(managedDesktopMaintenanceService);
+        ArgumentNullException.ThrowIfNull(behavior);
+        ArgumentNullException.ThrowIfNull(navigate);
+
+        if (!ReferenceEquals(_assignmentPauseController, assignmentPauseController))
+        {
+            UnsubscribeAutomaticAssignment();
+            _assignmentPauseController = assignmentPauseController;
+            if (IsLoaded)
+            {
+                SubscribeAutomaticAssignment();
+            }
+        }
+
+        _navigate = navigate;
+        _managedDesktopMaintenanceService = managedDesktopMaintenanceService;
+        _windowCancellationToken = cancellationToken;
+        AppearanceSummary.Text = DescribeAppearance(behavior);
+        ApplyAutomaticAssignment(assignmentPauseController.IsPaused);
+        ApplyRecreationPolicy();
     }
 
     public void UpdateAssignments(
@@ -104,6 +154,7 @@ public sealed partial class OverviewPage : Page
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
         SubscribeAssignments();
+        SubscribeAutomaticAssignment();
         RefreshAssignmentSnapshot();
         if (_reassignmentCommand?.IsExecuting != true)
         {
@@ -125,6 +176,191 @@ public sealed partial class OverviewPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         UnsubscribeAssignments();
+        UnsubscribeAutomaticAssignment();
+    }
+
+    private void SubscribeAutomaticAssignment()
+    {
+        if (_assignmentPauseController is null)
+        {
+            return;
+        }
+
+        _assignmentPauseController.PauseStateChanged -=
+            OnAutomaticAssignmentPauseChanged;
+        _assignmentPauseController.PauseStateChanged +=
+            OnAutomaticAssignmentPauseChanged;
+    }
+
+    private void UnsubscribeAutomaticAssignment()
+    {
+        if (_assignmentPauseController is not null)
+        {
+            _assignmentPauseController.PauseStateChanged -=
+                OnAutomaticAssignmentPauseChanged;
+        }
+    }
+
+    private void OnAutomaticAssignmentPauseChanged(
+        object? sender,
+        AutomaticAssignmentPauseChangedEventArgs args)
+    {
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            ApplyAutomaticAssignment(args.IsPaused);
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(
+            () => ApplyAutomaticAssignment(args.IsPaused));
+    }
+
+    private void ApplyAutomaticAssignment(bool isPaused)
+    {
+        _isApplyingAutomaticAssignment = true;
+        try
+        {
+            AutomaticAssignmentToggle.IsOn = !isPaused;
+        }
+        finally
+        {
+            _isApplyingAutomaticAssignment = false;
+        }
+
+        ApplyWorkspaceStatus();
+    }
+
+    private void ApplyWorkspaceStatus()
+    {
+        if (!_isFirstRunComplete)
+        {
+            WorkspaceStatusTitle.Text = "DesktopShift needs setup";
+            WorkspaceSummary.Text =
+                "Review and apply the starter mappings before DesktopShift moves windows.";
+            return;
+        }
+
+        if (_compatibilityMode.Contains("Limited", StringComparison.OrdinalIgnoreCase))
+        {
+            WorkspaceStatusTitle.Text = "DesktopShift is in Limited Mode";
+            WorkspaceSummary.Text =
+                "Supported movement remains available; desktop creation, switching, or topology features may be limited on this Windows build.";
+            return;
+        }
+
+        if (_assignmentPauseController?.IsPaused == true)
+        {
+            WorkspaceStatusTitle.Text = "Automatic assignment is paused";
+            WorkspaceSummary.Text =
+                "Manual reassignment remains available while window events are paused.";
+            return;
+        }
+
+        WorkspaceStatusTitle.Text = "Your workspace is organized";
+        WorkspaceSummary.Text =
+            "All managed desktops are mapped and automatic assignment is active.";
+    }
+
+    private void OnAutomaticAssignmentToggled(object sender, RoutedEventArgs args)
+    {
+        if (_isApplyingAutomaticAssignment || _assignmentPauseController is null)
+        {
+            return;
+        }
+
+        if (AutomaticAssignmentToggle.IsOn)
+        {
+            _assignmentPauseController.Resume();
+        }
+        else
+        {
+            _assignmentPauseController.Pause();
+        }
+
+        ApplyAutomaticAssignment(_assignmentPauseController.IsPaused);
+    }
+
+    private void ApplyRecreationPolicy()
+    {
+        ManagedDesktopCatalog catalog =
+            _managedDesktopMaintenanceService?.GetCatalog() ??
+            ManagedDesktopCatalog.Empty;
+        _isApplyingRecreationPolicy = true;
+        try
+        {
+            RecreateMissingToggle.IsEnabled =
+                !catalog.Entries.IsEmpty && !_isUpdatingRecreationPolicy;
+            RecreateMissingToggle.IsOn =
+                !catalog.Entries.IsEmpty &&
+                catalog.Entries.All(static entry => entry.RecreateWhenMissing);
+        }
+        finally
+        {
+            _isApplyingRecreationPolicy = false;
+        }
+    }
+
+    private async void OnRecreateMissingToggled(object sender, RoutedEventArgs args)
+    {
+        if (_isApplyingRecreationPolicy ||
+            _isUpdatingRecreationPolicy ||
+            _managedDesktopMaintenanceService is null)
+        {
+            return;
+        }
+
+        _isUpdatingRecreationPolicy = true;
+        RecreateMissingToggle.IsEnabled = false;
+        bool recreateWhenMissing = RecreateMissingToggle.IsOn;
+        try
+        {
+            ManagedDesktopCatalog catalog =
+                _managedDesktopMaintenanceService.GetCatalog();
+            foreach (ManagedDesktopCatalogEntry entry in catalog.Entries)
+            {
+                if (entry.RecreateWhenMissing != recreateWhenMissing)
+                {
+                    _ = await _managedDesktopMaintenanceService
+                        .SetRecreationPolicyAsync(
+                            entry.SemanticKey,
+                            recreateWhenMissing,
+                            _windowCancellationToken);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+            when (_windowCancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _isUpdatingRecreationPolicy = false;
+            ApplyRecreationPolicy();
+        }
+    }
+
+    private void OnNavigateClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: string destination })
+        {
+            _navigate?.Invoke(destination);
+        }
+    }
+
+    private static string DescribeAppearance(BehaviorSettings behavior)
+    {
+        string theme = behavior.Theme switch
+        {
+            AppTheme.Light => "Light theme",
+            AppTheme.Dark => "Dark theme",
+            _ => "Windows theme",
+        };
+        string accent = behavior.Accent switch
+        {
+            AppAccent.AditiKraftBlue => "Aditi Kraft Blue",
+            _ => "Windows accent color",
+        };
+        return $"{theme} and {accent}.";
     }
 
     private void SubscribeAssignments()
@@ -173,11 +409,8 @@ public sealed partial class OverviewPage : Page
             _assignmentProjection?.Snapshot.LastOrDefault();
         if (latest is null)
         {
-            LastAssignmentSummary.Text = "No assignment has completed yet.";
-            LastAssignmentDetails.Visibility = Visibility.Collapsed;
-            AutomationProperties.SetName(
-                AssignmentCard,
-                "Last assignment. No assignment has completed yet.");
+            LastAssignmentMetric.Text = "—";
+            LastAssignmentMetricCaption.Text = "No completed assignment";
             return;
         }
 
@@ -188,26 +421,10 @@ public sealed partial class OverviewPage : Page
     {
         AssignmentActivityPresentation presentation =
             AssignmentActivityPresentation.Create(activity);
-        LastAssignmentSummary.Text = presentation.Decision;
-        LastAssignmentOutcome.Text = presentation.Outcome;
-        LastAssignmentTime.Text = presentation.OccurredAt;
-        LastAssignmentProcess.Text = presentation.ProcessName;
-        LastAssignmentTarget.Text = presentation.TargetDesktop;
-        LastAssignmentDuration.Text = presentation.Duration;
-        LastAssignmentCorrelation.Text = activity.CorrelationId.ToString("D");
-        LastAssignmentMovement.Text = presentation.Movement;
-        LastAssignmentNavigation.Text = presentation.DesktopNavigation;
-        LastAssignmentSwitchPolicy.Text = presentation.SwitchPolicy;
-        LastAssignmentSwitchDuration.Text = presentation.SwitchDuration;
-        LastAssignmentRelatedCorrelation.Text =
-            activity.RelatedCorrelationId?.ToString("D") ?? string.Empty;
-        LastAssignmentRelatedCorrelationPanel.Visibility =
-            activity.RelatedCorrelationId.HasValue
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        LastAssignmentDetails.Visibility = Visibility.Visible;
+        LastAssignmentMetric.Text = presentation.Duration;
+        LastAssignmentMetricCaption.Text = presentation.Trigger.ToLowerInvariant();
         AutomationProperties.SetName(
-            AssignmentCard,
+            LastAssignmentMetric,
             $"Last assignment. {presentation.AutomationName}");
     }
 
@@ -281,17 +498,9 @@ public sealed partial class OverviewPage : Page
 
     private void ApplyMappingSnapshot(ManagedDesktopMappingPresentationSnapshot snapshot)
     {
-        ManagedMappingSummary.Text = snapshot.Summary;
-        ManagedMappingOutcome.Text = snapshot.Outcome;
-        MappedDesktopCount.Text = snapshot.MappedCount.ToString(
-            System.Globalization.CultureInfo.CurrentCulture);
-        MappingAttentionCount.Text = snapshot.AttentionCount.ToString(
-            System.Globalization.CultureInfo.CurrentCulture);
-        ManagedMappingProvider.Text =
-            $"{snapshot.ProviderSummary} • {snapshot.ObservedAt}";
-        ManagedMappingCard.Visibility = Visibility.Visible;
-        AutomationProperties.SetName(
-            ManagedMappingCard,
-            $"Managed desktop mapping. {snapshot.Outcome}. {snapshot.Summary}");
+        WorkspaceDesktopCount.Text = snapshot.MappedCount == 1
+            ? "1 mapped"
+            : $"{snapshot.MappedCount} mapped";
+        ApplyRecreationPolicy();
     }
 }

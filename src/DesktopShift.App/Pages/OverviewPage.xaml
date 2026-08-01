@@ -3,34 +3,114 @@
     x:Class="DesktopShift.App.Pages.OverviewPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    AutomationProperties.Name="Overview page"
-    Background="Transparent">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    AutomationProperties.Name="Home page"
+    Background="Transparent"
+    SizeChanged="OnPageSizeChanged">
+    <Page.Resources>
+        <Style x:Key="HomeRowButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="68" />
+            <Setter Property="Padding" Value="15,10" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style x:Key="HomeRowTitleStyle" BasedOn="{StaticResource DesktopShift.BodyStyle}" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Page.Resources>
+    <ScrollViewer
+        HorizontalContentAlignment="Stretch"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
         <StackPanel
+            x:Name="HomeContent"
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Left"
-            Spacing="{StaticResource DesktopShift.SectionSpacing}">
-            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Overview" />
-                <TextBlock Style="{StaticResource DesktopShift.PageSubtitleStyle}" Text="A calm home for your automatic desktop assignments." />
+            HorizontalAlignment="Center">
+            <StackPanel
+                Margin="0,0,0,12"
+                Orientation="Horizontal"
+                Spacing="7">
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
+                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Home" />
             </StackPanel>
 
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <Grid ColumnSpacing="{StaticResource DesktopShift.SectionSpacing}">
+            <Grid Margin="0,0,0,22" ColumnSpacing="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Home" />
+                    <TextBlock
+                        Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                        Text="Review workspace health and manage the most important DesktopShift behavior." />
+                </StackPanel>
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Top"
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                    <ProgressRing
+                        x:Name="ReassignmentProgress"
+                        Width="20"
+                        Height="20"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Reassigning windows"
+                        IsActive="False"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="ReassignNowButton"
+                        AutomationProperties.HelpText="Enumerates open windows once and awaits the completed reassignment batch."
+                        AutomationProperties.Name="Reassign windows now"
+                        Click="OnReassignNowClick"
+                        Padding="12,7"
+                        Style="{StaticResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon FontSize="12" Glyph="&#xE895;" />
+                            <TextBlock Text="Reassign now" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Border
+                MinHeight="83"
+                Margin="0,0,0,14"
+                Padding="18"
+                Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                        <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Your workspace, automatically organized" />
+                    <Border
+                        Width="44"
+                        Height="44"
+                        Background="{ThemeResource DesktopShift.AccentSoftBrush}"
+                        CornerRadius="8">
+                        <FontIcon
+                            FontSize="18"
+                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
+                            Glyph="&#xE7F4;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock
+                            x:Name="WorkspaceStatusTitle"
+                            Style="{StaticResource DesktopShift.SectionHeadingStyle}"
+                            Text="Your workspace is organized" />
                         <TextBlock
                             x:Name="WorkspaceSummary"
                             MaxWidth="600"
-                            Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
+                            Style="{StaticResource DesktopShift.CaptionStyle}" />
                     </StackPanel>
                     <Border
-                        Grid.Column="1"
+                        Grid.Column="2"
+                        VerticalAlignment="Top"
                         AutomationProperties.Name="Compatibility mode"
                         Style="{StaticResource DesktopShift.PillStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
@@ -38,356 +118,222 @@
                                 Width="8"
                                 Height="8"
                                 VerticalAlignment="Center"
-                                Fill="{ThemeResource DesktopShift.WarningBrush}" />
+                                Fill="{ThemeResource DesktopShift.SuccessBrush}" />
                             <TextBlock x:Name="ModeStatus" Style="{StaticResource DesktopShift.PillTextStyle}" />
                         </StackPanel>
                     </Border>
                 </Grid>
             </Border>
 
-            <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
+            <Grid Margin="0,0,0,24" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Style="{StaticResource DesktopShift.CardStyle}">
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <Border MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel VerticalAlignment="Center" Spacing="3">
+                        <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="ENABLED RULES" />
                         <TextBlock
                             x:Name="EnabledRuleCount"
                             AutomationProperties.Name="Enabled application rule count"
                             Style="{StaticResource DesktopShift.MetricStyle}" />
-                        <StackPanel
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Enabled rules" />
-                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Persisted application mappings" />
-                        </StackPanel>
-                    </Grid>
+                        <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="persisted mappings" />
+                    </StackPanel>
                 </Border>
-                <Border Grid.Column="1" Style="{StaticResource DesktopShift.CardStyle}">
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <Border Grid.Column="1" MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel VerticalAlignment="Center" Spacing="3">
+                        <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="MANAGED DESKTOPS" />
                         <TextBlock
                             x:Name="ManagedDesktopCount"
                             AutomationProperties.Name="Managed desktop count"
                             Style="{StaticResource DesktopShift.MetricStyle}" />
-                        <StackPanel
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Managed desktops" />
-                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Semantic workspace destinations" />
-                        </StackPanel>
-                    </Grid>
+                        <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="all mapped" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel VerticalAlignment="Center" Spacing="3">
+                        <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="LAST ASSIGNMENT" />
+                        <TextBlock
+                            x:Name="LastAssignmentMetric"
+                            AutomationProperties.Name="Last assignment duration"
+                            Style="{StaticResource DesktopShift.MetricStyle}"
+                            Text="—" />
+                        <TextBlock
+                            x:Name="LastAssignmentMetricCaption"
+                            FontSize="10"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="No completed assignment" />
+                    </StackPanel>
                 </Border>
             </Grid>
 
-            <Border
-                x:Name="ManagedMappingCard"
-                AutomationProperties.LiveSetting="Polite"
-                Style="{StaticResource DesktopShift.CardStyle}"
-                Visibility="Collapsed">
-                <StackPanel Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource DesktopShift.IconTileStyle}">
-                            <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE7F4;" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                Style="{StaticResource DesktopShift.SectionHeadingStyle}"
-                                Text="Managed desktop mapping" />
-                            <TextBlock
-                                x:Name="ManagedMappingSummary"
-                                Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
-                        </StackPanel>
-                        <TextBlock
-                            x:Name="ManagedMappingOutcome"
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                            Style="{StaticResource DesktopShift.SectionTitleStyle}" />
-                    </Grid>
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource DesktopShift.BadgeStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                                <TextBlock
-                                    x:Name="MappedDesktopCount"
-                                    AutomationProperties.Name="Mapped managed desktop count"
-                                    FontWeight="SemiBold"
-                                    Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                                    Style="{StaticResource DesktopShift.BodyStyle}" />
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource DesktopShift.CaptionStyle}"
-                                    Text="mapped" />
+            <StackPanel Margin="0,0,0,24" Spacing="10">
+                <TextBlock
+                    FontSize="15"
+                    FontWeight="SemiBold"
+                    Style="{StaticResource DesktopShift.BodyStyle}"
+                    Text="Workspace" />
+                <Border Padding="0" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel>
+                        <Button
+                            AutomationProperties.Name="Open application rules"
+                            Click="OnNavigateClick"
+                            Style="{StaticResource HomeRowButtonStyle}"
+                            Tag="rules">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE8EF;" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                    <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Application rules" />
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Choose which desktop each application belongs to." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
+                                    <TextBlock x:Name="WorkspaceRuleCount" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                                    <FontIcon AutomationProperties.AccessibilityView="Raw" Glyph="&#xE76C;" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <Border Style="{StaticResource DesktopShift.SeparatorStyle}" />
+                        <Button
+                            AutomationProperties.Name="Open managed desktops"
+                            Click="OnNavigateClick"
+                            Style="{StaticResource HomeRowButtonStyle}"
+                            Tag="desktops">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE7F4;" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                    <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Managed desktops" />
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Review semantic destinations and their live Windows mappings." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
+                                    <TextBlock x:Name="WorkspaceDesktopCount" Style="{StaticResource DesktopShift.CaptionStyle}" />
+                                    <FontIcon AutomationProperties.AccessibilityView="Raw" Glyph="&#xE76C;" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <Border Style="{StaticResource DesktopShift.SeparatorStyle}" />
+                        <Button
+                            AutomationProperties.Name="Open recent activity"
+                            Click="OnNavigateClick"
+                            Style="{StaticResource HomeRowButtonStyle}"
+                            Tag="activity">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE9D9;" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                    <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Recent activity" />
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="See movements, skips, failures, and timing details." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Current session" />
+                                    <FontIcon AutomationProperties.AccessibilityView="Raw" Glyph="&#xE76C;" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,24" Spacing="10">
+                <TextBlock
+                    FontSize="15"
+                    FontWeight="SemiBold"
+                    Style="{StaticResource DesktopShift.BodyStyle}"
+                    Text="Quick settings" />
+                <Border Padding="0" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel>
+                        <Grid
+                            MinHeight="68"
+                            Padding="15,10"
+                            ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon VerticalAlignment="Center" Glyph="&#xE73E;" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Automatic assignment" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Apply enabled rules when windows are created, shown, or activated." />
                             </StackPanel>
-                        </Border>
-                        <Border
-                            Grid.Column="1"
-                            Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
-                            Style="{StaticResource DesktopShift.BadgeStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                                <TextBlock
-                                    x:Name="MappingAttentionCount"
-                                    AutomationProperties.Name="Managed desktop mappings needing attention"
-                                    FontWeight="SemiBold"
-                                    Style="{StaticResource DesktopShift.BodyStyle}" />
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource DesktopShift.CaptionStyle}"
-                                    Text="need attention" />
+                            <ToggleSwitch
+                                x:Name="AutomaticAssignmentToggle"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Automatic assignment"
+                                Toggled="OnAutomaticAssignmentToggled" />
+                        </Grid>
+                        <Border Style="{StaticResource DesktopShift.SeparatorStyle}" />
+                        <Grid
+                            MinHeight="68"
+                            Padding="15,10"
+                            ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon VerticalAlignment="Center" Glyph="&#xE72C;" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Recreate missing managed desktops" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Restore semantic destinations after a desktop is deleted." />
                             </StackPanel>
-                        </Border>
-                    </Grid>
-                    <TextBlock
-                        x:Name="ManagedMappingProvider"
-                        Style="{StaticResource DesktopShift.CaptionStyle}" />
-                </StackPanel>
-            </Border>
+                            <ToggleSwitch
+                                x:Name="RecreateMissingToggle"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Recreate missing managed desktops"
+                                Toggled="OnRecreateMissingToggled" />
+                        </Grid>
+                        <Border Style="{StaticResource DesktopShift.SeparatorStyle}" />
+                        <Button
+                            AutomationProperties.Name="Open appearance settings"
+                            Click="OnNavigateClick"
+                            Style="{StaticResource HomeRowButtonStyle}"
+                            Tag="settings">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE790;" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
+                                    <TextBlock Style="{StaticResource HomeRowTitleStyle}" Text="Appearance" />
+                                    <TextBlock
+                                        x:Name="AppearanceSummary"
+                                        Style="{StaticResource DesktopShift.CaptionStyle}"
+                                        Text="Use Windows theme and accent color." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Windows setting" />
+                                    <FontIcon AutomationProperties.AccessibilityView="Raw" Glyph="&#xE76C;" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
-            <Border
-                x:Name="AssignmentCard"
-                AutomationProperties.LiveSetting="Polite"
-                Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource DesktopShift.IconTileStyle}">
-                            <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE8FB;" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                Style="{StaticResource DesktopShift.SectionHeadingStyle}"
-                                Text="Last assignment" />
-                            <TextBlock
-                                x:Name="LastAssignmentSummary"
-                                Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                                Text="No assignment has completed yet." />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Column="2"
-                            Orientation="Horizontal"
-                            Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                            <ProgressRing
-                                x:Name="ReassignmentProgress"
-                                Width="20"
-                                Height="20"
-                                AutomationProperties.Name="Reassigning windows"
-                                IsActive="False"
-                                Visibility="Collapsed" />
-                            <Button
-                                x:Name="ReassignNowButton"
-                                AutomationProperties.HelpText="Enumerates open windows once and awaits the completed reassignment batch."
-                                AutomationProperties.Name="Reassign windows now"
-                                Click="OnReassignNowClick"
-                                Content="Reassign now"
-                                Style="{StaticResource AccentButtonStyle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid
-                        x:Name="LastAssignmentDetails"
-                        ColumnSpacing="24"
-                        RowSpacing="{StaticResource DesktopShift.ItemSpacing}"
-                        Visibility="Collapsed">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="OutcomeLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Outcome" />
-                            <TextBlock
-                                x:Name="LastAssignmentOutcome"
-                                AutomationProperties.LabeledBy="{x:Bind OutcomeLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="CompletedLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Completed" />
-                            <TextBlock
-                                x:Name="LastAssignmentTime"
-                                AutomationProperties.LabeledBy="{x:Bind CompletedLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="ProcessLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Process" />
-                            <TextBlock
-                                x:Name="LastAssignmentProcess"
-                                AutomationProperties.LabeledBy="{x:Bind ProcessLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="TargetDesktopLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Target desktop" />
-                            <TextBlock
-                                x:Name="LastAssignmentTarget"
-                                AutomationProperties.LabeledBy="{x:Bind TargetDesktopLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="2" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="DurationLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Duration" />
-                            <TextBlock
-                                x:Name="LastAssignmentDuration"
-                                AutomationProperties.LabeledBy="{x:Bind DurationLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Row="2"
-                            Grid.Column="1"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="CorrelationLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Correlation ID" />
-                            <TextBlock
-                                x:Name="LastAssignmentCorrelation"
-                                AutomationProperties.LabeledBy="{x:Bind CorrelationLabel}"
-                                Style="{StaticResource DesktopShift.MonospaceStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="3" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="MovementLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Window movement" />
-                            <TextBlock
-                                x:Name="LastAssignmentMovement"
-                                AutomationProperties.LabeledBy="{x:Bind MovementLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Row="3"
-                            Grid.Column="1"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="NavigationLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Desktop navigation" />
-                            <TextBlock
-                                x:Name="LastAssignmentNavigation"
-                                AutomationProperties.LabeledBy="{x:Bind NavigationLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="4" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="SwitchPolicyLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Switch policy" />
-                            <TextBlock
-                                x:Name="LastAssignmentSwitchPolicy"
-                                AutomationProperties.LabeledBy="{x:Bind SwitchPolicyLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Row="4"
-                            Grid.Column="1"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock
-                                x:Name="SwitchDurationLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Switch duration" />
-                            <TextBlock
-                                x:Name="LastAssignmentSwitchDuration"
-                                AutomationProperties.LabeledBy="{x:Bind SwitchDurationLabel}"
-                                Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel
-                            x:Name="LastAssignmentRelatedCorrelationPanel"
-                            Grid.Row="5"
-                            Grid.ColumnSpan="2"
-                            Spacing="{StaticResource DesktopShift.TightSpacing}"
-                            Visibility="Collapsed">
-                            <TextBlock
-                                x:Name="RelatedCorrelationLabel"
-                                Style="{StaticResource DesktopShift.FieldLabelStyle}"
-                                Text="Related correlation ID" />
-                            <TextBlock
-                                x:Name="LastAssignmentRelatedCorrelation"
-                                AutomationProperties.LabeledBy="{x:Bind RelatedCorrelationLabel}"
-                                Style="{StaticResource DesktopShift.MonospaceStyle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <InfoBar
-                        x:Name="ReassignmentResult"
-                        AutomationProperties.Name="Manual reassignment result"
-                        IsClosable="True"
-                        IsOpen="False" />
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <FontIcon
-                            VerticalAlignment="Top"
-                            AutomationProperties.AccessibilityView="Raw"
-                            FontSize="20"
-                            Foreground="{ThemeResource DesktopShift.WarningBrush}"
-                            Glyph="&#xE7BA;" />
-                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock x:Name="ProviderName" Style="{StaticResource DesktopShift.SectionHeadingStyle}" />
-                            <TextBlock x:Name="BuildInfo" Style="{StaticResource DesktopShift.CaptionStyle}" />
-                        </StackPanel>
-                        <TextBlock
-                            x:Name="TestOutcome"
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Style="{StaticResource DesktopShift.CaptionStyle}" />
-                    </Grid>
-                    <TextBlock x:Name="CompatibilityExplanation" Style="{StaticResource DesktopShift.PageSubtitleStyle}" />
-                    <TextBlock x:Name="CapabilitySummary" Style="{StaticResource DesktopShift.CaptionStyle}" />
-                </StackPanel>
-            </Border>
+            <InfoBar
+                x:Name="ReassignmentResult"
+                AutomationProperties.Name="Manual reassignment result"
+                IsClosable="True"
+                IsOpen="False" />
 
         </StackPanel>
     </ScrollViewer>

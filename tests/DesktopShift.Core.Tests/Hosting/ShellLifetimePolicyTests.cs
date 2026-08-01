@@ -16,7 +16,10 @@ public sealed class ShellLifetimePolicyTests
 
         Assert.AreEqual(
             ShellLaunchDisposition.StayInNotificationArea,
-            ShellLifetimePolicy.ResolveLaunch(behavior, isFirstRunComplete: true));
+            ShellLifetimePolicy.ResolveLaunch(
+                behavior,
+                isFirstRunComplete: true,
+                isAutomaticStartup: true));
     }
 
     [TestMethod]
@@ -31,7 +34,10 @@ public sealed class ShellLifetimePolicyTests
         // leave the user with no way to complete it.
         Assert.AreEqual(
             ShellLaunchDisposition.ShowWindow,
-            ShellLifetimePolicy.ResolveLaunch(behavior, isFirstRunComplete: false));
+            ShellLifetimePolicy.ResolveLaunch(
+                behavior,
+                isFirstRunComplete: false,
+                isAutomaticStartup: true));
     }
 
     [TestMethod]
@@ -44,7 +50,26 @@ public sealed class ShellLifetimePolicyTests
 
         Assert.AreEqual(
             ShellLaunchDisposition.ShowWindow,
-            ShellLifetimePolicy.ResolveLaunch(behavior, isFirstRunComplete: true));
+            ShellLifetimePolicy.ResolveLaunch(
+                behavior,
+                isFirstRunComplete: true,
+                isAutomaticStartup: true));
+    }
+
+    [TestMethod]
+    public void ResolveLaunch_ManualClickShowsWindowDespiteStartMinimized()
+    {
+        BehaviorSettings behavior = new(
+            StartWithWindows: true,
+            StartMinimized: true,
+            CloseToTray: true);
+
+        Assert.AreEqual(
+            ShellLaunchDisposition.ShowWindow,
+            ShellLifetimePolicy.ResolveLaunch(
+                behavior,
+                isFirstRunComplete: true,
+                isAutomaticStartup: false));
     }
 
     [TestMethod]

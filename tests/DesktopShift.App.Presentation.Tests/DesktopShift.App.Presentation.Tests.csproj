@@ -16,6 +16,9 @@
 
   <ItemGroup>
     <Compile
+      Include="..\..\src\DesktopShift.App\Appearance\HighContrastChangeMonitor.cs"
+      Link="Production\HighContrastChangeMonitor.cs" />
+    <Compile
       Include="..\..\src\DesktopShift.App\ViewModels\ManagedDesktopMappingPresentation.cs"
       Link="Production\ManagedDesktopMappingPresentation.cs" />
     <Compile

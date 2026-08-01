@@ -83,7 +83,12 @@ public sealed class SettingsPresentationTests
             notifications.Hotkeys.ToArray());
 
         BehaviorSettings appearance =
-            SettingsBehaviorEditor.WithAppearance(original, AppTheme.Light);
+            SettingsBehaviorEditor.WithAppearance(
+                original,
+                AppTheme.Light,
+                AppAccent.AditiKraftBlue);
+        Assert.AreEqual(AppTheme.Light, appearance.Theme);
+        Assert.AreEqual(AppAccent.AditiKraftBlue, appearance.Accent);
         Assert.AreEqual(
             original.NotifyOnAssignmentFailure,
             appearance.NotifyOnAssignmentFailure);

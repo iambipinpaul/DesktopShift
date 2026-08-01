@@ -33,11 +33,14 @@ public static class ShellLifetimePolicy
     /// </remarks>
     public static ShellLaunchDisposition ResolveLaunch(
         BehaviorSettings behavior,
-        bool isFirstRunComplete)
+        bool isFirstRunComplete,
+        bool isAutomaticStartup)
     {
         ArgumentNullException.ThrowIfNull(behavior);
 
-        return behavior.StartMinimized && isFirstRunComplete
+        return behavior.StartMinimized &&
+            isFirstRunComplete &&
+            isAutomaticStartup
             ? ShellLaunchDisposition.StayInNotificationArea
             : ShellLaunchDisposition.ShowWindow;
     }

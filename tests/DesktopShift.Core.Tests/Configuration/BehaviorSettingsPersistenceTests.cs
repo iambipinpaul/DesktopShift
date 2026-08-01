@@ -37,6 +37,7 @@ public sealed class BehaviorSettingsPersistenceTests
             StartMinimized: false,
             CloseToTray: false,
             Theme: AppTheme.Dark,
+            Accent: AppAccent.AditiKraftBlue,
             StartAssignmentPaused: true,
             NotifyOnAssignmentFailure: false,
             NotifyOnCompatibilityWarning: false,
@@ -87,6 +88,7 @@ public sealed class BehaviorSettingsPersistenceTests
         Assert.AreEqual(expected.StartMinimized, actual.StartMinimized);
         Assert.AreEqual(expected.CloseToTray, actual.CloseToTray);
         Assert.AreEqual(expected.Theme, actual.Theme);
+        Assert.AreEqual(expected.Accent, actual.Accent);
         Assert.AreEqual(expected.StartAssignmentPaused, actual.StartAssignmentPaused);
         Assert.AreEqual(
             expected.NotifyOnAssignmentFailure,
@@ -118,6 +120,7 @@ public sealed class BehaviorSettingsPersistenceTests
         Assert.IsEmpty(state.Issues);
         BehaviorSettings behavior = state.Active!.Behavior;
         Assert.AreEqual(AppTheme.System, behavior.Theme);
+        Assert.AreEqual(AppAccent.System, behavior.Accent);
         Assert.IsFalse(behavior.StartAssignmentPaused);
         Assert.IsTrue(behavior.NotifyOnAssignmentFailure);
         Assert.IsTrue(behavior.NotifyOnCompatibilityWarning);

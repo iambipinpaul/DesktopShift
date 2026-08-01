@@ -25,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
 
 namespace DesktopShift.App;
 
@@ -158,7 +159,9 @@ public partial class App : Application
             }
 
             await _host.StartAsync().ConfigureAwait(true);
-            await StartNotificationAreaAsync(startupConfiguration)
+            await StartNotificationAreaAsync(
+                    startupConfiguration,
+                    IsAutomaticStartupActivation())
                 .ConfigureAwait(true);
         }
         catch (Exception exception)
@@ -170,7 +173,8 @@ public partial class App : Application
     }
 
     private async Task StartNotificationAreaAsync(
-        ConfigurationState configuration)
+        ConfigurationState configuration,
+        bool isAutomaticStartup)
     {
         MainWindow window = CreateMainWindow();
         BehaviorSettings behavior =
@@ -200,7 +204,8 @@ public partial class App : Application
         _shutdownSequence = CreateShutdownSequence(notificationArea);
         ShellLaunchDisposition disposition = ShellLifetimePolicy.ResolveLaunch(
             behavior,
-            isFirstRunComplete: !configuration.IsFirstRun);
+            isFirstRunComplete: !configuration.IsFirstRun,
+            isAutomaticStartup);
 
         notificationArea.Start(disposition);
         StartHotkeys(behavior);
@@ -215,6 +220,22 @@ public partial class App : Application
                 .GetRequiredService<ICompatibilityCoordinator>()
                 .RunCompatibilityTestAsync()
                 .ConfigureAwait(true);
+        }
+    }
+
+    private static bool IsAutomaticStartupActivation()
+    {
+        try
+        {
+            return AppInstance.GetCurrent().GetActivatedEventArgs().Kind ==
+                ExtendedActivationKind.StartupTask;
+        }
+        catch (Exception)
+        {
+            // If activation metadata is unavailable, showing the shell is the
+            // safe behavior. A user-initiated click must never look like a
+            // failed launch merely because startup context could not be read.
+            return false;
         }
     }
 

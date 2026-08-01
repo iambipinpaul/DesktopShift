@@ -10,11 +10,11 @@ public sealed class ShellNavigationCatalogTests
     {
         string[] expectedLabels =
         [
-            "Overview",
-            "Rules",
-            "Desktops",
+            "Home",
+            "Application rules",
+            "Managed desktops",
             "Activity",
-            "Settings",
+            "System settings",
             "About",
         ];
 

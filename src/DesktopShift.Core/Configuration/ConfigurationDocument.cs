@@ -233,6 +233,10 @@ public sealed record ApplicationRule(
 /// The modifiers the Custom profile uses. Kept even while a built-in profile is
 /// selected, so switching to Custom and back does not discard the user's choice.
 /// </param>
+/// <param name="Accent">
+/// The accent source used by the app. Windows personalization remains the
+/// backward-compatible default; the fixed product blue is strictly opt in.
+/// </param>
 public sealed record BehaviorSettings(
     bool StartWithWindows,
     bool StartMinimized,
@@ -248,7 +252,8 @@ public sealed record BehaviorSettings(
     DesktopSwitchShortcutProfile DesktopSwitchProfile =
         DesktopSwitchShortcutProfile.CtrlAlt,
     HotkeyModifiers DesktopSwitchCustomModifiers =
-        DesktopSwitchShortcuts.CtrlAltModifiers)
+        DesktopSwitchShortcuts.CtrlAltModifiers,
+    AppAccent Accent = AppAccent.System)
 {
     /// <summary>
     /// Hotkey bindings, normalized so an omitted collection is empty rather than
