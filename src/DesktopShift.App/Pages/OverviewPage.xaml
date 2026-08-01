@@ -106,6 +106,7 @@
                         <TextBlock
                             x:Name="WorkspaceSummary"
                             MaxWidth="600"
+                            HorizontalAlignment="Left"
                             Style="{StaticResource DesktopShift.CaptionStyle}" />
                     </StackPanel>
                     <Border

@@ -283,6 +283,7 @@
                                                 <ColumnDefinition Width="32" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="96" />
                                             </Grid.ColumnDefinitions>
                                             <FontIcon
                                                 VerticalAlignment="Center"
@@ -296,23 +297,22 @@
                                                     <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind DesktopId}" />
                                                 </StackPanel>
                                             </StackPanel>
-                                            <Border
+                                            <StackPanel
                                                 Grid.Column="2"
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
-                                                Style="{StaticResource DesktopShift.BadgeStyle}"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
                                                 Visibility="{x:Bind CurrentVisibility}">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <FontIcon
-                                                        FontSize="11"
-                                                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                                                        Glyph="&#xE73E;" />
-                                                    <TextBlock
-                                                        Foreground="{ThemeResource DesktopShift.AccentStrongBrush}"
-                                                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                                                        Text="{x:Bind CurrentLabel}" />
-                                                </StackPanel>
-                                            </Border>
+                                                <FontIcon
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource DesktopShift.SuccessBrush}"
+                                                    Glyph="&#xE73E;" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource DesktopShift.SuccessBrush}"
+                                                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                                                    Text="{x:Bind CurrentLabel}" />
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
