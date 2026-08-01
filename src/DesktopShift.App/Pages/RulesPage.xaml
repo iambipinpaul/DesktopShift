@@ -6,22 +6,24 @@
     xmlns:config="using:DesktopShift.Core.Configuration"
     xmlns:rules="using:DesktopShift.App.Rules"
     AutomationProperties.Name="Application rules page"
-    Background="Transparent">
+    Background="Transparent"
+    SizeChanged="OnPageSizeChanged">
     <ScrollViewer
         HorizontalContentAlignment="Stretch"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
         <StackPanel
+            x:Name="RulesContent"
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Center"
-            Spacing="{StaticResource DesktopShift.SectionSpacing}">
-            <StackPanel Margin="0,0,0,-12" Orientation="Horizontal" Spacing="7">
+            HorizontalAlignment="Center">
+            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="7">
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Application rules" />
             </StackPanel>
-            <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
+
+            <Grid Margin="0,0,0,22" ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -29,38 +31,56 @@
                 <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                     <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Application rules" />
                     <TextBlock
+                        MaxWidth="700"
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                        Text="Every rule DesktopShift matches windows against, strongest identity first. Add, edit, duplicate, or turn a rule off, then prove it against the windows you have open." />
+                        Text="Rules are evaluated using the strongest available application identity." />
                 </StackPanel>
-                <StackPanel
-                    Grid.Column="1"
-                    VerticalAlignment="Top"
-                    Orientation="Horizontal"
-                    Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <Button
                         x:Name="RefreshButton"
                         AutomationProperties.Name="Refresh application rules"
-                        Click="OnRefreshClick"
-                        Content="Refresh" />
+                        Click="OnRefreshClick">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                            <TextBlock Text="Refresh" />
+                        </StackPanel>
+                    </Button>
                     <Button
                         x:Name="NewRuleButton"
                         AutomationProperties.Name="Create a new application rule"
                         Click="OnNewRuleClick"
-                        Content="New rule"
-                        Style="{StaticResource AccentButtonStyle}" />
+                        Style="{StaticResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon FontSize="14" Glyph="&#xE710;" />
+                            <TextBlock Text="Add rule" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
 
+            <Border
+                Margin="0,0,0,14"
+                Padding="12"
+                Style="{StaticResource DesktopShift.GroupCardStyle}">
+                <AutoSuggestBox
+                    x:Name="RuleSearchBox"
+                    AutomationProperties.Name="Search application rules"
+                    PlaceholderText="Search rules"
+                    QueryIcon="Find"
+                    TextChanged="OnRuleSearchTextChanged" />
+            </Border>
+
             <InfoBar
                 x:Name="StatusBar"
+                Margin="0,0,0,12"
                 AutomationProperties.LiveSetting="Polite"
                 AutomationProperties.Name="Application rule status"
                 IsClosable="True"
                 IsOpen="False"
                 Severity="Success" />
-
             <InfoBar
                 x:Name="ValidationBar"
+                Margin="0,0,0,12"
                 AutomationProperties.Name="Configuration validation issues"
                 IsClosable="False"
                 IsOpen="False"
@@ -71,10 +91,7 @@
                 x:Name="EmptyState"
                 MinHeight="260"
                 Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Spacing="{StaticResource DesktopShift.GroupSpacing}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
                     <FontIcon
                         HorizontalAlignment="Center"
                         Style="{StaticResource DesktopShift.EmptyStateIconStyle}"
@@ -86,7 +103,7 @@
                     <TextBlock
                         MaxWidth="500"
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                        Text="Create a rule to send an application's windows to a Managed Desktop."
+                        Text="Create a rule to send an application's windows to a managed desktop."
                         TextAlignment="Center" />
                 </StackPanel>
             </Border>
@@ -100,19 +117,18 @@
                     <DataTemplate x:DataType="config:ApplicationRulePresentation">
                         <Border
                             AutomationProperties.Name="{x:Bind AutomationName}"
-                            Style="{StaticResource DesktopShift.CardStyle}">
-                            <Grid ColumnSpacing="{StaticResource DesktopShift.CardSpacing}">
+                            Style="{StaticResource DesktopShift.ListCardStyle}">
+                            <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Style="{StaticResource DesktopShift.IconTileStyle}">
+                                <Border Width="38" Height="38" Style="{StaticResource DesktopShift.IconTileStyle}">
                                     <Grid>
                                         <Image
-                                            Width="24"
-                                            Height="24"
-                                            AutomationProperties.AccessibilityView="Raw"
+                                            Width="22"
+                                            Height="22"
                                             Source="{x:Bind rules:RuleIconSource.Create(Icon)}"
                                             Visibility="{x:Bind rules:RuleIconSource.IconVisibility(Icon)}" />
                                         <FontIcon
@@ -121,107 +137,61 @@
                                             Visibility="{x:Bind rules:RuleIconSource.GlyphVisibility(Icon)}" />
                                     </Grid>
                                 </Border>
-                                <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                                    <Grid ColumnSpacing="{StaticResource DesktopShift.GroupSpacing}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                                            <TextBlock
-                                                Style="{StaticResource DesktopShift.SectionTitleStyle}"
-                                                Text="{x:Bind DisplayName}" />
-                                            <TextBlock
-                                                Style="{StaticResource DesktopShift.CaptionStyle}"
-                                                Text="{x:Bind IdentityStrengthLabel}" />
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Style="{StaticResource DesktopShift.PillStyle}">
-                                            <TextBlock
-                                                Style="{StaticResource DesktopShift.PillTextStyle}"
-                                                Text="{x:Bind EnabledLabel}" />
-                                        </Border>
-                                    </Grid>
-                                    <TextBlock
-                                        Style="{StaticResource DesktopShift.BodyStyle}"
-                                        Text="{x:Bind MatchSummary}" />
-                                    <TextBlock
-                                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{x:Bind TargetSummary}" />
-                                    <TextBlock
-                                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{x:Bind TriggerSummary}" />
-                                    <TextBlock
-                                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{x:Bind SwitchPolicySummary}" />
-                                    <TextBlock
-                                        Style="{StaticResource DesktopShift.CaptionStyle}"
-                                        Text="{x:Bind LastMatchSummary}" />
-                                    <!--
-                                        Every row shows the same words on its
-                                        controls, so the rule's name rides along
-                                        as help text. A screen reader then says
-                                        which rule it is about to expand, edit,
-                                        or delete instead of repeating "Delete
-                                        rule" down the whole list.
-                                    -->
-                                    <Expander
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Stretch"
-                                        AutomationProperties.HelpText="{x:Bind DisplayName}"
-                                        Header="Advanced details">
-                                        <!--
-                                            No accessible name of its own: a name
-                                            on a TextBlock replaces the text it is
-                                            meant to introduce, and the expander
-                                            around it has already said what it
-                                            holds and which rule it belongs to.
-                                        -->
-                                        <TextBlock
-                                            Padding="0,8,0,2"
-                                            Style="{StaticResource DesktopShift.MonospaceStyle}"
-                                            Text="{x:Bind AdvancedDetails}" />
-                                    </Expander>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                    <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="{x:Bind DisplayName}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind MatchSummary}" />
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="•" />
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind TargetSummary}" />
+                                    </StackPanel>
                                 </StackPanel>
-                                <StackPanel
-                                    Grid.Column="2"
-                                    VerticalAlignment="Top"
-                                    Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
+                                    <Border Style="{StaticResource DesktopShift.BadgeStyle}">
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind EnabledLabel}" />
+                                    </Border>
                                     <ToggleSwitch
+                                        MinWidth="40"
                                         AutomationProperties.HelpText="{x:Bind DisplayName}"
                                         AutomationProperties.Name="Rule enabled"
                                         IsOn="{x:Bind IsEnabled}"
-                                        OffContent="Disabled"
-                                        OnContent="Enabled"
+                                        OffContent=""
+                                        OnContent=""
                                         Tag="{x:Bind RuleId}"
                                         Toggled="OnRuleEnabledToggled" />
-                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                                        <Button
-                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
-                                            AutomationProperties.Name="Edit rule"
-                                            Click="OnEditRuleClick"
-                                            Content="Edit"
-                                            Tag="{x:Bind RuleId}" />
-                                        <Button
-                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
-                                            AutomationProperties.Name="Duplicate rule"
-                                            Click="OnDuplicateRuleClick"
-                                            Content="Duplicate"
-                                            Tag="{x:Bind RuleId}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
-                                        <Button
-                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
-                                            AutomationProperties.Name="Test this rule and reassign its matching windows"
-                                            Click="OnReassignRuleClick"
-                                            Content="Test and reassign"
-                                            Tag="{x:Bind RuleId}" />
-                                        <Button
-                                            AutomationProperties.HelpText="{x:Bind DisplayName}"
-                                            AutomationProperties.Name="Delete rule"
-                                            Click="OnDeleteRuleClick"
-                                            Content="Delete"
-                                            Tag="{x:Bind RuleId}" />
-                                    </StackPanel>
+                                    <Button
+                                        AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                        AutomationProperties.Name="Edit rule"
+                                        Click="OnEditRuleClick"
+                                        Tag="{x:Bind RuleId}">
+                                        <StackPanel Orientation="Horizontal" Spacing="7">
+                                            <FontIcon FontSize="14" Glyph="&#xE70F;" />
+                                            <TextBlock Text="Edit" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button
+                                        Width="34"
+                                        Padding="0"
+                                        AutomationProperties.HelpText="{x:Bind DisplayName}"
+                                        AutomationProperties.Name="More rule actions">
+                                        <FontIcon FontSize="16" Glyph="&#xE712;" />
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem
+                                                    Click="OnReassignRuleClick"
+                                                    Tag="{x:Bind RuleId}"
+                                                    Text="Test and reassign" />
+                                                <MenuFlyoutItem
+                                                    Click="OnDuplicateRuleClick"
+                                                    Tag="{x:Bind RuleId}"
+                                                    Text="Duplicate" />
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem
+                                                    Click="OnDeleteRuleClick"
+                                                    Tag="{x:Bind RuleId}"
+                                                    Text="Delete" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
                                 </StackPanel>
                             </Grid>
                         </Border>

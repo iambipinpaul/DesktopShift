@@ -18,6 +18,14 @@ namespace DesktopShift.App.Pages;
 /// <summary>The complete Settings experience.</summary>
 public sealed partial class SettingsPage : Page
 {
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        const double horizontalPageMargin = 60;
+        SettingsContent.Width = Math.Max(
+            0,
+            Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+    }
+
     private readonly ObservableCollection<HotkeyBindingEditor> hotkeyBindings = [];
     private readonly SemaphoreSlim behaviorSaveGate = new(1, 1);
     private DesktopSwitchShortcutEditor? desktopSwitchEditor;

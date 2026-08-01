@@ -38,10 +38,19 @@ public sealed partial class RulesPage : Page
     private CancellationToken cancellationToken = CancellationToken.None;
     private ConfigurationDocument? document;
     private bool isApplyingPresentation;
+    private ImmutableArray<ApplicationRulePresentation> allRules = [];
 
     public RulesPage()
     {
         InitializeComponent();
+    }
+
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        const double horizontalPageMargin = 60;
+        RulesContent.Width = Math.Max(
+            0,
+            Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
     }
 
     /// <summary>
@@ -85,17 +94,32 @@ public sealed partial class RulesPage : Page
     private void ShowRules(
         ImmutableArray<ApplicationRulePresentation> presentations)
     {
+        allRules = presentations;
+        ApplyRuleFilter();
+    }
+
+    private void ApplyRuleFilter()
+    {
+        string query = RuleSearchBox.Text.Trim();
+        ApplicationRulePresentation[] presentations = allRules
+            .Where(rule =>
+                query.Length == 0 ||
+                rule.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                rule.MatchSummary.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                rule.TargetSummary.Contains(query, StringComparison.CurrentCultureIgnoreCase))
+            .ToArray();
+
         // The enabled switches are bound to the items being replaced, so the
         // toggles they raise while the list is rebuilt are the list telling
         // itself what it already knows, not a user asking for a change.
         isApplyingPresentation = true;
         try
         {
-            RuleList.ItemsSource = presentations.ToArray();
-            RuleList.Visibility = presentations.IsEmpty
+            RuleList.ItemsSource = presentations;
+            RuleList.Visibility = presentations.Length == 0
                 ? Visibility.Collapsed
                 : Visibility.Visible;
-            EmptyState.Visibility = presentations.IsEmpty
+            EmptyState.Visibility = presentations.Length == 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
@@ -104,6 +128,10 @@ public sealed partial class RulesPage : Page
             isApplyingPresentation = false;
         }
     }
+
+    private void OnRuleSearchTextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args) => ApplyRuleFilter();
 
     private void ShowValidationIssues(
         ImmutableArray<ConfigurationValidationIssue> issues)

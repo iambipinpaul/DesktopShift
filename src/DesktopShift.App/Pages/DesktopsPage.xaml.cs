@@ -10,6 +10,14 @@ namespace DesktopShift.App.Pages;
 
 public sealed partial class DesktopsPage : Page
 {
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        const double horizontalPageMargin = 60;
+        DesktopsContent.Width = Math.Max(
+            0,
+            Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+    }
+
     private IDesktopTopologyProvider? _provider;
     private DesktopTopologyProviderState? _providerState;
     private IManagedDesktopMaintenanceService? _maintenance;

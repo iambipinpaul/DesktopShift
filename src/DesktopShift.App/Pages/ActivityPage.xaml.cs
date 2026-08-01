@@ -28,6 +28,14 @@ namespace DesktopShift.App.Pages;
 /// </remarks>
 public sealed partial class ActivityPage : Page
 {
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        const double horizontalPageMargin = 60;
+        ActivityContent.Width = Math.Max(
+            0,
+            Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+    }
+
     private const int MaximumDisplayedActivities = 2000;
     private const string AllApplicationsTag = "all";
     private const string AllRulesTag = "all";
