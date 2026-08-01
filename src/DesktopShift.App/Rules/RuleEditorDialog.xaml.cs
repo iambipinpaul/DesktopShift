@@ -55,6 +55,7 @@ public sealed partial class RuleEditorDialog : ContentDialog
 
         InitializeComponent();
         Loaded += OnLoaded;
+        SizeChanged += OnDialogSizeChanged;
         Unloaded += OnUnloaded;
     }
 
@@ -87,13 +88,14 @@ public sealed partial class RuleEditorDialog : ContentDialog
             XamlRoot.Changed += OnXamlRootChanged;
         }
 
-        CenterInWindow();
+        UpdateResponsiveLayout();
         await ReadRunningApplicationsAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         Unloaded -= OnUnloaded;
+        SizeChanged -= OnDialogSizeChanged;
         if (XamlRoot is not null)
         {
             XamlRoot.Changed -= OnXamlRootChanged;
@@ -101,7 +103,24 @@ public sealed partial class RuleEditorDialog : ContentDialog
     }
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
+        UpdateResponsiveLayout();
+
+    private void OnDialogSizeChanged(object sender, SizeChangedEventArgs args) =>
         CenterInWindow();
+
+    private void UpdateResponsiveLayout()
+    {
+        if (XamlRoot is null)
+        {
+            return;
+        }
+
+        // The template adds roughly 80px around the content. Preserve a 16px
+        // window inset on each side, while retaining the 1040px large layout.
+        double targetOuterWidth = Math.Min(1040, XamlRoot.Size.Width - 32);
+        Width = Math.Max(320, targetOuterWidth - 80);
+        CenterInWindow();
+    }
 
     private void CenterInWindow()
     {

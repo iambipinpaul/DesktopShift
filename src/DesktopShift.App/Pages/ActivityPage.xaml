@@ -26,11 +26,18 @@
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Activity" />
             </StackPanel>
-            <Grid Margin="0,0,0,22" ColumnSpacing="20">
+            <Grid
+                x:Name="ActivityHeaderGrid"
+                Margin="0,0,0,22"
+                ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <StackPanel Spacing="4">
                     <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Activity" />
                     <TextBlock
@@ -38,7 +45,11 @@
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
                         Text="Privacy-safe assignment decisions from the current session." />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <StackPanel
+                    x:Name="ActivityHeaderActions"
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8">
                     <Button
                         x:Name="ClearActivityButton"
                         AutomationProperties.Name="Clear local activity"
@@ -61,13 +72,22 @@
             Padding="12"
             AutomationProperties.Name="Activity filters"
             Style="{StaticResource DesktopShift.GroupCardStyle}">
-            <Grid ColumnSpacing="10">
+            <Grid
+                x:Name="ActivityFilterGrid"
+                ColumnSpacing="10"
+                RowSpacing="10">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="FilterColumn0" Width="*" />
+                    <ColumnDefinition x:Name="FilterColumn1" Width="*" />
+                    <ColumnDefinition x:Name="FilterColumn2" Width="*" />
+                    <ColumnDefinition x:Name="FilterColumn3" Width="*" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <ComboBox
                     x:Name="ResultFilter"
                     HorizontalAlignment="Stretch"
@@ -105,13 +125,22 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,0,0,12" ColumnSpacing="8">
+        <Grid
+            x:Name="ActivityCommandGrid"
+            Grid.Row="2"
+            Margin="0,0,0,12"
+            ColumnSpacing="8"
+            RowSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Button
                 x:Name="CopyEventButton"
                 AutomationProperties.Name="Copy the selected event"
@@ -145,13 +174,21 @@
                         <Border
                             AutomationProperties.Name="{Binding AutomationName}"
                             Style="{StaticResource DesktopShift.ListCardStyle}">
-                            <Grid ColumnSpacing="13">
+                            <Grid ColumnSpacing="13" SizeChanged="OnActivityCardSizeChanged">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="34" Height="34" Style="{StaticResource DesktopShift.IconTileStyle}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Border
+                                    Grid.RowSpan="2"
+                                    Width="34"
+                                    Height="34"
+                                    Style="{StaticResource DesktopShift.IconTileStyle}">
                                     <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE9D9;" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="4">
@@ -175,6 +212,7 @@
                                     </StackPanel>
                                 </StackPanel>
                                 <TextBlock
+                                    x:Name="ActivityTimestamp"
                                     Grid.Column="2"
                                     VerticalAlignment="Top"
                                     Style="{StaticResource DesktopShift.CaptionStyle}"

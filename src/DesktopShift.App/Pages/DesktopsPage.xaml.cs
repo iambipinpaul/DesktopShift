@@ -16,6 +16,67 @@ public sealed partial class DesktopsPage : Page
         DesktopsContent.Width = Math.Max(
             0,
             Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+
+        bool useStackedHeader = args.NewSize.Width < 620;
+        Grid.SetRow(MaintenanceCommands, useStackedHeader ? 1 : 0);
+        Grid.SetColumn(MaintenanceCommands, useStackedHeader ? 0 : 1);
+        DesktopsHeaderGrid.RowSpacing = useStackedHeader ? 14 : 0;
+
+        bool useStackedSummary = args.NewSize.Width < 560;
+        Grid.SetRow(ManagedSummaryStatus, useStackedSummary ? 1 : 0);
+        Grid.SetColumn(ManagedSummaryStatus, useStackedSummary ? 1 : 2);
+        ManagedSummaryStatus.HorizontalAlignment = useStackedSummary
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        ManagedSummaryStatus.Margin = useStackedSummary
+            ? new Thickness(0, 10, 0, 0)
+            : new Thickness(0);
+    }
+
+    private void OnManagedDesktopCardSizeChanged(
+        object sender,
+        SizeChangedEventArgs args)
+    {
+        if (sender is not Grid card ||
+            card.FindName("ManagedDesktopCardActions") is not FrameworkElement actions)
+        {
+            return;
+        }
+
+        PositionCardActions(actions, args.NewSize.Width < 620);
+    }
+
+    private void OnInventoryRowSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (sender is not Grid row ||
+            row.FindName("CurrentDesktopIndicator") is not FrameworkElement indicator ||
+            row.FindName("CurrentActionColumn") is not ColumnDefinition reservedColumn)
+        {
+            return;
+        }
+
+        bool stack = args.NewSize.Width < 520;
+        Grid.SetRow(indicator, stack ? 1 : 0);
+        Grid.SetColumn(indicator, stack ? 1 : 2);
+        indicator.HorizontalAlignment = stack
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        indicator.Margin = stack
+            ? new Thickness(0, 8, 0, 0)
+            : new Thickness(0);
+        reservedColumn.Width = new GridLength(stack ? 0 : 96);
+    }
+
+    private static void PositionCardActions(FrameworkElement actions, bool stack)
+    {
+        Grid.SetRow(actions, stack ? 1 : 0);
+        Grid.SetColumn(actions, stack ? 1 : 2);
+        actions.HorizontalAlignment = stack
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        actions.Margin = stack
+            ? new Thickness(0, 10, 0, 0)
+            : new Thickness(0);
     }
 
     private IDesktopTopologyProvider? _provider;

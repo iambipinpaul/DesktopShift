@@ -239,6 +239,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnNavigationDisplayModeChanged(
+        NavigationView sender,
+        NavigationViewDisplayModeChangedEventArgs args)
+    {
+        if (ContentFrame is null)
+        {
+            return;
+        }
+
+        // Minimal mode places the hamburger over the content surface. Reserve
+        // its row so breadcrumbs and page headings never render underneath it.
+        ContentFrame.Margin = args.DisplayMode == NavigationViewDisplayMode.Minimal
+            ? new Thickness(0, 44, 0, 0)
+            : new Thickness(0);
+    }
+
     private void ApplyAcceptedBehavior(BehaviorSettings behavior)
     {
         _themePreferenceService.SetTheme(behavior.Theme);

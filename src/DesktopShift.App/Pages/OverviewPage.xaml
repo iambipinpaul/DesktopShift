@@ -38,11 +38,18 @@
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Home" />
             </StackPanel>
 
-            <Grid Margin="0,0,0,22" ColumnSpacing="20">
+            <Grid
+                x:Name="HomeHeaderGrid"
+                Margin="0,0,0,22"
+                ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <StackPanel Spacing="6">
                     <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Home" />
                     <TextBlock
@@ -50,6 +57,7 @@
                         Text="Review workspace health and manage the most important DesktopShift behavior." />
                 </StackPanel>
                 <StackPanel
+                    x:Name="HomeHeaderActions"
                     Grid.Column="1"
                     VerticalAlignment="Top"
                     Orientation="Horizontal"
@@ -82,13 +90,18 @@
                 Margin="0,0,0,14"
                 Padding="18"
                 Style="{StaticResource DesktopShift.CardStyle}">
-                <Grid ColumnSpacing="20">
+                <Grid x:Name="WorkspaceStatusGrid" ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Border
+                        Grid.RowSpan="2"
                         Width="44"
                         Height="44"
                         Background="{ThemeResource DesktopShift.AccentSoftBrush}"
@@ -110,6 +123,7 @@
                             Style="{StaticResource DesktopShift.CaptionStyle}" />
                     </StackPanel>
                     <Border
+                        x:Name="ModeStatusPill"
                         Grid.Column="2"
                         VerticalAlignment="Top"
                         AutomationProperties.Name="Compatibility mode"
@@ -126,13 +140,26 @@
                 </Grid>
             </Border>
 
-            <Grid Margin="0,0,0,24" ColumnSpacing="10">
+            <Grid
+                x:Name="HomeMetricsGrid"
+                Margin="0,0,0,24"
+                ColumnSpacing="10"
+                RowSpacing="10">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="MetricColumn0" Width="*" />
+                    <ColumnDefinition x:Name="MetricColumn1" Width="*" />
+                    <ColumnDefinition x:Name="MetricColumn2" Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Border
+                    x:Name="EnabledRulesMetricCard"
+                    MinHeight="83"
+                    Padding="12"
+                    Style="{StaticResource DesktopShift.CardStyle}">
                     <StackPanel VerticalAlignment="Center" Spacing="3">
                         <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="ENABLED RULES" />
                         <TextBlock
@@ -142,7 +169,12 @@
                         <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="persisted mappings" />
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="1" MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                <Border
+                    x:Name="ManagedDesktopsMetricCard"
+                    Grid.Column="1"
+                    MinHeight="83"
+                    Padding="12"
+                    Style="{StaticResource DesktopShift.CardStyle}">
                     <StackPanel VerticalAlignment="Center" Spacing="3">
                         <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="MANAGED DESKTOPS" />
                         <TextBlock
@@ -152,7 +184,12 @@
                         <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="all mapped" />
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="2" MinHeight="83" Padding="12" Style="{StaticResource DesktopShift.CardStyle}">
+                <Border
+                    x:Name="LastAssignmentMetricCard"
+                    Grid.Column="2"
+                    MinHeight="83"
+                    Padding="12"
+                    Style="{StaticResource DesktopShift.CardStyle}">
                     <StackPanel VerticalAlignment="Center" Spacing="3">
                         <TextBlock FontSize="10" Style="{StaticResource DesktopShift.CaptionStyle}" Text="LAST ASSIGNMENT" />
                         <TextBlock

@@ -23,11 +23,18 @@
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Managed desktops" />
             </StackPanel>
 
-            <Grid Margin="0,0,0,22" ColumnSpacing="20">
+            <Grid
+                x:Name="DesktopsHeaderGrid"
+                Margin="0,0,0,22"
+                ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <StackPanel Spacing="4">
                     <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Managed desktops" />
                     <TextBlock
@@ -74,13 +81,21 @@
                 AutomationProperties.Name="Managed desktop definitions"
                 Visibility="Collapsed">
                 <Border Margin="0,0,0,14" Padding="18" Style="{StaticResource DesktopShift.CardStyle}">
-                    <Grid ColumnSpacing="20">
+                    <Grid x:Name="ManagedSummaryGrid" ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="44" Height="44" Style="{StaticResource DesktopShift.IconTileStyle}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Border
+                            Grid.RowSpan="2"
+                            Width="44"
+                            Height="44"
+                            Style="{StaticResource DesktopShift.IconTileStyle}">
                             <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE7F4;" />
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
@@ -91,7 +106,11 @@
                                 x:Name="ManagedMappingProvider"
                                 Style="{StaticResource DesktopShift.CaptionStyle}" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2" HorizontalAlignment="Right" Spacing="5">
+                        <StackPanel
+                            x:Name="ManagedSummaryStatus"
+                            Grid.Column="2"
+                            HorizontalAlignment="Right"
+                            Spacing="5">
                             <Border HorizontalAlignment="Right" Style="{StaticResource DesktopShift.PillStyle}">
                                 <TextBlock
                                     x:Name="ManagedMappingOutcome"
@@ -142,13 +161,21 @@
                             <Border
                                 AutomationProperties.Name="{x:Bind AutomationName}"
                                 Style="{StaticResource DesktopShift.ListCardStyle}">
-                                <Grid ColumnSpacing="14">
+                                <Grid ColumnSpacing="14" SizeChanged="OnManagedDesktopCardSizeChanged">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="42" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="36" Height="36" Style="{StaticResource DesktopShift.IconTileStyle}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Border
+                                        Grid.RowSpan="2"
+                                        Width="36"
+                                        Height="36"
+                                        Style="{StaticResource DesktopShift.IconTileStyle}">
                                         <TextBlock
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
@@ -166,7 +193,12 @@
                                             <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind RuleSummary}" />
                                         </StackPanel>
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                    <StackPanel
+                                        x:Name="ManagedDesktopCardActions"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="8">
                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
                                             <FontIcon
                                                 FontSize="12"
@@ -278,14 +310,19 @@
                                         AutomationProperties.Name="{x:Bind AutomationName}"
                                         BorderBrush="{ThemeResource DesktopShift.BorderBrush}"
                                         BorderThickness="0,0,0,1">
-                                        <Grid ColumnSpacing="14">
+                                        <Grid ColumnSpacing="14" SizeChanged="OnInventoryRowSizeChanged">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="32" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="96" />
+                                                <ColumnDefinition x:Name="CurrentActionColumn" Width="96" />
                                             </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
                                             <FontIcon
+                                                Grid.RowSpan="2"
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource DesktopShift.TextSecondaryBrush}"
                                                 Glyph="&#xE7F4;" />
@@ -298,6 +335,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                             <StackPanel
+                                                x:Name="CurrentDesktopIndicator"
                                                 Grid.Column="2"
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"

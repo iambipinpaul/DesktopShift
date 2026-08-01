@@ -75,12 +75,13 @@
             AlwaysShowHeader="False"
             AutomationProperties.Name="Primary navigation"
             Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
+            DisplayModeChanged="OnNavigationDisplayModeChanged"
             IsBackButtonVisible="Collapsed"
-            IsPaneToggleButtonVisible="False"
+            IsPaneToggleButtonVisible="True"
             IsSettingsVisible="False"
             IsTitleBarAutoPaddingEnabled="False"
             OpenPaneLength="284"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Auto"
             SelectionChanged="OnNavigationSelectionChanged">
 
             <NavigationView.PaneHeader>

@@ -41,6 +41,42 @@ public sealed partial class OverviewPage : Page
         HomeContent.Width = Math.Max(
             0,
             Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+
+        bool useCompactHeader = args.NewSize.Width < 540;
+        Grid.SetRow(HomeHeaderActions, useCompactHeader ? 1 : 0);
+        Grid.SetColumn(HomeHeaderActions, useCompactHeader ? 0 : 1);
+        HomeHeaderGrid.RowSpacing = useCompactHeader ? 14 : 0;
+
+        bool useCompactStatus = args.NewSize.Width < 560;
+        Grid.SetRow(ModeStatusPill, useCompactStatus ? 1 : 0);
+        Grid.SetColumn(ModeStatusPill, useCompactStatus ? 1 : 2);
+        ModeStatusPill.HorizontalAlignment = useCompactStatus
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        ModeStatusPill.Margin = useCompactStatus
+            ? new Thickness(0, 10, 0, 0)
+            : new Thickness(0);
+
+        bool stackMetrics = args.NewSize.Width < 620;
+        MetricColumn0.Width = new GridLength(1, GridUnitType.Star);
+        MetricColumn1.Width = stackMetrics
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        MetricColumn2.Width = stackMetrics
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        PositionMetricCard(EnabledRulesMetricCard, 0, stackMetrics);
+        PositionMetricCard(ManagedDesktopsMetricCard, 1, stackMetrics);
+        PositionMetricCard(LastAssignmentMetricCard, 2, stackMetrics);
+    }
+
+    private static void PositionMetricCard(
+        FrameworkElement card,
+        int index,
+        bool stack)
+    {
+        Grid.SetRow(card, stack ? index : 0);
+        Grid.SetColumn(card, stack ? 0 : index);
     }
 
     public void Update(OverviewPresentation presentation)

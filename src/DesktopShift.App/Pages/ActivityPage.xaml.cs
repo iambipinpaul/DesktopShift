@@ -34,6 +34,66 @@ public sealed partial class ActivityPage : Page
         ActivityContent.Width = Math.Max(
             0,
             Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+
+        bool stackHeader = args.NewSize.Width < 620;
+        Grid.SetRow(ActivityHeaderActions, stackHeader ? 1 : 0);
+        Grid.SetColumn(ActivityHeaderActions, stackHeader ? 0 : 1);
+        ActivityHeaderGrid.RowSpacing = stackHeader ? 14 : 0;
+
+        ArrangeFilters(args.NewSize.Width);
+
+        bool stackCount = args.NewSize.Width < 600;
+        Grid.SetRow(ActivityCount, stackCount ? 1 : 0);
+        Grid.SetColumn(ActivityCount, stackCount ? 0 : 3);
+        Grid.SetColumnSpan(ActivityCount, stackCount ? 4 : 1);
+        ActivityCount.HorizontalAlignment = stackCount
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+    }
+
+    private void ArrangeFilters(double pageWidth)
+    {
+        bool singleColumn = pageWidth < 430;
+        bool twoColumns = !singleColumn && pageWidth < 760;
+
+        FilterColumn0.Width = new GridLength(1, GridUnitType.Star);
+        FilterColumn1.Width = singleColumn
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        FilterColumn2.Width = twoColumns || singleColumn
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        FilterColumn3.Width = twoColumns || singleColumn
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+
+        ComboBox[] filters = [ResultFilter, ApplicationFilter, RuleFilter, DateFilter];
+        for (int index = 0; index < filters.Length; index++)
+        {
+            int row = singleColumn ? index : twoColumns ? index / 2 : 0;
+            int column = singleColumn ? 0 : twoColumns ? index % 2 : index;
+            Grid.SetRow(filters[index], row);
+            Grid.SetColumn(filters[index], column);
+        }
+    }
+
+    private void OnActivityCardSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (sender is not Grid card ||
+            card.FindName("ActivityTimestamp") is not FrameworkElement timestamp)
+        {
+            return;
+        }
+
+        bool stack = args.NewSize.Width < 520;
+        Grid.SetRow(timestamp, stack ? 1 : 0);
+        Grid.SetColumn(timestamp, stack ? 1 : 2);
+        timestamp.HorizontalAlignment = stack
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        timestamp.Margin = stack
+            ? new Thickness(0, 8, 0, 0)
+            : new Thickness(0);
     }
 
     private const int MaximumDisplayedActivities = 2000;

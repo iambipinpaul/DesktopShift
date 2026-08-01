@@ -23,11 +23,18 @@
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Application rules" />
             </StackPanel>
 
-            <Grid Margin="0,0,0,22" ColumnSpacing="20">
+            <Grid
+                x:Name="PageHeaderGrid"
+                Margin="0,0,0,22"
+                ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
                     <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="Application rules" />
                     <TextBlock
@@ -35,7 +42,12 @@
                         Style="{StaticResource DesktopShift.PageSubtitleStyle}"
                         Text="Rules are evaluated using the strongest available application identity." />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <StackPanel
+                    x:Name="HeaderActions"
+                    Grid.Column="1"
+                    HorizontalAlignment="Left"
+                    Orientation="Horizontal"
+                    Spacing="8">
                     <Button
                         x:Name="RefreshButton"
                         AutomationProperties.Name="Refresh application rules"
@@ -118,13 +130,21 @@
                         <Border
                             AutomationProperties.Name="{x:Bind AutomationName}"
                             Style="{StaticResource DesktopShift.ListCardStyle}">
-                            <Grid ColumnSpacing="14">
+                            <Grid ColumnSpacing="14" SizeChanged="OnRuleCardSizeChanged">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="38" Height="38" Style="{StaticResource DesktopShift.IconTileStyle}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Border
+                                    Grid.RowSpan="2"
+                                    Width="38"
+                                    Height="38"
+                                    Style="{StaticResource DesktopShift.IconTileStyle}">
                                     <Grid>
                                         <Image
                                             Width="22"
@@ -145,7 +165,12 @@
                                         <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind TargetSummary}" />
                                     </StackPanel>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="9">
+                                <StackPanel
+                                    x:Name="RuleActions"
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="9">
                                     <ToggleSwitch
                                         MinWidth="40"
                                         AutomationProperties.HelpText="{x:Bind DisplayName}"

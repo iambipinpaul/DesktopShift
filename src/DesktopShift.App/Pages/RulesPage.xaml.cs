@@ -51,6 +51,30 @@ public sealed partial class RulesPage : Page
         RulesContent.Width = Math.Max(
             0,
             Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
+
+        bool useStackedHeader = args.NewSize.Width < 540;
+        Grid.SetRow(HeaderActions, useStackedHeader ? 1 : 0);
+        Grid.SetColumn(HeaderActions, useStackedHeader ? 0 : 1);
+        PageHeaderGrid.RowSpacing = useStackedHeader ? 14 : 0;
+    }
+
+    private void OnRuleCardSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (sender is not Grid card ||
+            card.FindName("RuleActions") is not FrameworkElement actions)
+        {
+            return;
+        }
+
+        bool useStackedActions = args.NewSize.Width < 520;
+        Grid.SetRow(actions, useStackedActions ? 1 : 0);
+        Grid.SetColumn(actions, useStackedActions ? 1 : 2);
+        actions.HorizontalAlignment = useStackedActions
+            ? HorizontalAlignment.Left
+            : HorizontalAlignment.Right;
+        actions.Margin = useStackedActions
+            ? new Thickness(0, 10, 0, 0)
+            : new Thickness(0);
     }
 
     /// <summary>
