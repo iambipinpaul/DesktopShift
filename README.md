@@ -8,6 +8,19 @@ which desktop. After that, windows go where they belong on their own.
 This page explains what the app does, in plain words. It is meant to be read
 before you use it, so nothing it does comes as a surprise.
 
+## Install
+
+Get it from the
+[Microsoft Store](https://apps.microsoft.com/detail/9mvqdq26sccg), or install it
+from a terminal:
+
+```powershell
+winget install 9MVQDQ26SCCG -s msstore
+```
+
+![The DesktopShift Home page, showing workspace health, enabled rule and managed
+desktop counts, and quick settings for automatic assignment](docs/images/home.png)
+
 ## The one idea to remember
 
 **Your screen follows a window only when you asked for that window.**
@@ -56,6 +69,11 @@ clicking it.
 | You pause the app | Nowhere. Nothing moves. | No |
 | DesktopShift just moved your screen | — | It ignores its own change, so it cannot loop. |
 
+Both live in the tray menu, along with the current error state.
+
+![The DesktopShift tray menu, offering Open DesktopShift, Reassign all windows,
+Pause automatic assignment, and Exit](docs/images/tray-menu.png)
+
 ## Rules
 
 Every window gets one of three answers.
@@ -81,6 +99,10 @@ passkey prompts are shown separately on the Rules page and are always left
 where Windows opens them. Everything else is your decision.
 When a window is swept to the first desktop, the Activity page offers a
 **Create a rule for this app** button on that row.
+
+![The Application rules page, listing rules that map processes and packages to
+desktops, above the Windows-managed windows DesktopShift never
+moves](docs/images/application-rules.png)
 
 Local activity recording starts **off**. Turn on **Record local activity** in
 First Run, Activity, or Settings when you want privacy-safe assignment history
