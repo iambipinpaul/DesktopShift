@@ -1,20 +1,25 @@
 # MSIX code signing
 
-DesktopShift release packages must be signed. Windows verifies that the
-certificate subject matches the `Publisher` in
-`src/DesktopShift.App/Package.appxmanifest`; the current value is
-`CN=Bipin Paul`. Changing that publisher changes the package identity and must
-be treated as a migration, not as a routine certificate renewal.
+DesktopShift ships through the Microsoft Store, and Partner Center signs the
+published package. Signing in this repository serves one purpose: producing a
+package a test machine will actually install, so the validation and
+install-launch-uninstall gates can run before a submission goes out. The
+artifact uploaded to Partner Center is the unsigned build.
+
+Windows verifies that the certificate subject matches the `Publisher` in
+`src/DesktopShift.App/Package.appxmanifest`, which is the Store publisher ID
+`CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47`. Changing that publisher changes the
+package identity and must be treated as a migration, not as a routine
+certificate renewal.
 
 ## Certificate requirements
 
-Use a code-signing certificate whose subject is exactly `CN=Bipin Paul`, whose
-private key is available to the signing job, and whose certificate chain is
-trusted by the target machines. Production releases should use an
-organization-controlled certificate or a managed signing service. A
-self-signed certificate is suitable only for development and must be installed
-in the test account's trusted certificate store before that account installs
-the package.
+Use a code-signing certificate whose subject is exactly
+`CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47`, whose private key is available to the
+signing job, and whose certificate chain is trusted by the machine that installs
+the package. Because users receive the Store-signed package and never this one,
+a self-signed certificate is appropriate; it must be installed in the test
+account's trusted certificate store before that account installs the package.
 
 Never commit a `.pfx`, password, exported private key, or base64-encoded
 certificate. The repository ignores common package and certificate file
@@ -62,22 +67,18 @@ finally {
 ```
 
 `Build-Msix.ps1` sends the password to MSBuild through the process environment,
-not the command line. The certificate path and password are optional for a
-local construction check, but an unsigned package is not a releasable artifact.
+not the command line. Omit the certificate to build the unsigned package that
+goes to Partner Center; supply it to produce the signed copy the install gates
+need, because an unsigned package cannot be installed for the smoke test.
 `Validate-Msix.ps1 -RequireTrustedSignature` runs SignTool verification and must
-pass before publication.
-
-If the production signing service signs an already-built package instead, use
-the service’s supported MSIX flow, SHA-256, and an RFC 3161 timestamp. Run
-`Validate-Msix.ps1 -RequireTrustedSignature` after signing; signing is the final
-package mutation.
+pass on the signed copy before the submission is uploaded.
 
 ## Certificate rotation
 
 For a normal renewal:
 
 1. Obtain a replacement certificate with the same subject,
-   `CN=Bipin Paul`.
+   `CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47`.
 2. Update only CI secret or signing-service configuration.
 3. Build a version greater than the latest published four-part MSIX version.
 4. Install the new package over the previous signed release and verify that

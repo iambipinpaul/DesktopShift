@@ -66,7 +66,7 @@ public sealed class PackagingArtifactContractTests
             "BipinPaul.DesktopShift",
             PackagingRepository.RequireAttribute(identity, "Name"));
         Assert.AreEqual(
-            "CN=Bipin Paul",
+            "CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47",
             PackagingRepository.RequireAttribute(identity, "Publisher"));
         Assert.AreEqual(
             expectedArchitecture,

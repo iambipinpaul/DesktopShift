@@ -5,7 +5,7 @@ param(
 
     [string] $ExpectedIdentityName = "BipinPaul.DesktopShift",
 
-    [string] $ExpectedPublisher = "CN=Bipin Paul",
+    [string] $ExpectedPublisher = "CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47",
 
     [ValidateSet("x64", "arm64")]
     [string] $ExpectedArchitecture = "x64",

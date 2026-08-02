@@ -36,8 +36,10 @@ public sealed partial class PackagingRepositoryContractTests
             "BipinPaul.DesktopShift",
             PackagingRepository.RequireAttribute(identity, "Name"));
         Assert.AreEqual(
-            "CN=Bipin Paul",
-            PackagingRepository.RequireAttribute(identity, "Publisher"));
+            "CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47",
+            PackagingRepository.RequireAttribute(identity, "Publisher"),
+            "Publisher must stay the Microsoft Store publisher ID; changing it " +
+            "changes the package identity and orphans installed copies.");
         Assert.AreEqual(
             "x64",
             PackagingRepository.RequireAttribute(identity, "ProcessorArchitecture"));
@@ -50,6 +52,21 @@ public sealed partial class PackagingRepositoryContractTests
             new Version(0, 0, 0, 0),
             Version.Parse(version),
             "A release package cannot use the all-zero version.");
+
+        string[] resourceLanguages = manifest
+            .Descendants()
+            .Where(element => element.Name.LocalName.Equals(
+                "Resource",
+                StringComparison.Ordinal))
+            .Select(element => element.Attribute("Language")?.Value)
+            .OfType<string>()
+            .ToArray();
+        CollectionAssert.AreEqual(
+            new[] { "en-us" },
+            resourceLanguages,
+            "DesktopShift ships English only. A generated language set derives " +
+            "the Store listing's supported languages from build inputs, so it " +
+            "drifts whenever the resource layout changes.");
 
         string[] assetReferences = manifest
             .Descendants()
@@ -205,7 +222,7 @@ public sealed partial class PackagingRepositoryContractTests
                 project,
                 "AppxPackageSigningTimestampDigestAlgorithm"));
         Assert.AreEqual(
-            "0.1.0.0",
+            "1.0.0.0",
             PackagingRepository.RequireProperty(project, "AppxPackageVersion"));
 
         XElement nativeBridge = project

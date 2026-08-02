@@ -115,10 +115,11 @@ jobs:
             $env:DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD,
             [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
           try {
-            if ($certificate.Subject -ne 'CN=Bipin Paul') {
+            $publisher = 'CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47'
+            if ($certificate.Subject -ne $publisher) {
               throw (
                 "Signing certificate subject '$($certificate.Subject)' does not " +
-                "match the package publisher 'CN=Bipin Paul'.")
+                "match the package publisher '$publisher'.")
             }
             if (-not $certificate.HasPrivateKey) {
               throw 'The signing certificate does not contain a private key.'
@@ -246,37 +247,3 @@ jobs:
               Remove-Item -LiteralPath $path -Force
             }
           }
-
-  publish-release:
-    name: Publish GitHub release
-    if: github.ref_type == 'tag'
-    needs:
-      - release-version
-      - signed-msix
-    runs-on: windows-2025-vs2026
-    permissions:
-      contents: write
-    steps:
-      - name: Download validated packages
-        uses: actions/download-artifact@v5
-        with:
-          pattern: DesktopShift-${{ needs.release-version.outputs.package }}-*
-          path: .artifacts/release
-          merge-multiple: true
-
-      - name: Publish GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          $assets = Get-ChildItem -LiteralPath .artifacts/release -File |
-            ForEach-Object { $_.FullName }
-          if ($assets.Count -ne 4) {
-            throw "Expected two MSIX packages and two digests, found $($assets.Count) files."
-          }
-
-          gh release create $env:GITHUB_REF_NAME @assets `
-            --verify-tag `
-            --generate-notes `
-            --title "DesktopShift $env:GITHUB_REF_NAME"

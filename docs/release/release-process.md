@@ -1,17 +1,23 @@
 # DesktopShift release process
 
-This process produces separate reproducible x64 (AMD64) and ARM64 per-user MSIX
-packages. It assumes Windows 11 22H2 or newer and a Visual Studio installation
-with MSBuild, the .NET desktop and WinUI workloads, MSIX tooling, the Windows
-SDK, and x64 and ARM64 C++ desktop build tools.
+DesktopShift is distributed through the Microsoft Store, submitted by hand in
+Partner Center. This process produces the separate reproducible x64 (AMD64) and
+ARM64 per-user MSIX packages that submission carries. It assumes Windows 11 22H2
+or newer and a Visual Studio installation with MSBuild, the .NET desktop and
+WinUI workloads, MSIX tooling, the Windows SDK, and x64 and ARM64 C++ desktop
+build tools.
 
 The package is self-contained for the Windows App SDK and carries
 `DesktopShift.NativeBridge.dll`. Users install the MSIX; they do not copy DLLs,
 install the Windows App Runtime separately, or edit configuration files.
 The manifest declares the versioned
 `Microsoft.VCLibs.140.00.UWPDesktop` framework dependency required by the
-native bridge. The chosen distribution channel must resolve that dependency;
-never instruct users to copy Visual C++ runtime DLLs into the package.
+native bridge. The Store resolves that dependency at install time; never
+instruct users to copy Visual C++ runtime DLLs into the package.
+
+The package declares `en-us` as its only resource language. DesktopShift ships
+in English, and the Store listing's supported-language list is read from that
+declaration.
 
 ## Version
 
@@ -52,8 +58,10 @@ bridge, Windows target, icons, opt-in startup task, capabilities, versioned
 VCLibs declaration, Windows App Runtime payload, and absence of private-key
 files.
 
-Use the signed command in [code-signing.md](code-signing.md) for a releasable
-candidate. Do not publish the unsigned construction artifact.
+The unsigned package is the submission artifact; Partner Center signs what it
+publishes. Use the signed command in [code-signing.md](code-signing.md) to
+produce the locally installable copy the install and smoke gates need. Do not
+submit a package that has not passed those gates.
 
 ## Required gates
 
@@ -114,6 +122,32 @@ somebody has to take in writing rather than one that happens by omission.
 Record the package SHA-256, four-part version, signing-certificate thumbprint,
 runner Windows build, automated workflow URL, manual-test result, and the
 exported performance report in the release notes.
+
+## Store submission
+
+Partner Center holds the reserved name `DesktopShift` and the publisher ID
+`CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47` that `Identity.Publisher` carries. A
+package whose publisher does not match the account is rejected on upload.
+Submission is manual:
+
+1. Confirm every gate above passed for both architectures at the version being
+   submitted.
+2. Create a submission for DesktopShift and upload the two unsigned `.msix`
+   packages, x64 and ARM64, built at that version. Partner Center signs what it
+   publishes; the locally signed copies exist only for the install gates.
+3. Keep the listing in English, matching the `en-us` resource declaration.
+4. Record the submission and the package SHA-256 digests with the release notes.
+
+The four-part version must be greater than the highest version already accepted
+under this identity, so a resubmission after failed certification still needs a
+version bump.
+
+`Package.StoreAssociation.xml` is Visual Studio's association output. Nothing in
+`eng/packaging` reads it and it is not tracked; regenerate it from Partner
+Center if a Visual Studio packaging wizard ever needs it. Note that the wizard
+rewrites `Package.appxmanifest` and `DesktopShift.App.csproj` when it runs,
+including a machine-specific output directory and an `mp:PhoneIdentity` element
+that fails manifest validation. Prefer `eng/packaging/Build-Msix.ps1`.
 
 ## Install and uninstall for support
 

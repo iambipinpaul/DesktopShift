@@ -28,8 +28,8 @@
     <Authors>Bipin Paul</Authors>
     <Description>Automatically assign application windows to managed Windows Virtual Desktops.</Description>
     <Copyright>© 2026 Bipin Paul. All rights reserved.</Copyright>
-    <AppxPackageVersion Condition="'$(AppxPackageVersion)' == ''">0.1.0.0</AppxPackageVersion>
-    <Version>0.1.0</Version>
+    <AppxPackageVersion Condition="'$(AppxPackageVersion)' == ''">1.0.0.0</AppxPackageVersion>
+    <Version>1.0.0</Version>
     <FileVersion>$(AppxPackageVersion)</FileVersion>
     <AssemblyVersion>$(AppxPackageVersion)</AssemblyVersion>
   </PropertyGroup>

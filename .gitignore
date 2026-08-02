@@ -17,3 +17,4 @@ TestResults/
 *.msixbundle
 *.msixupload
 *.wapproj.user
+Package.StoreAssociation.xml
