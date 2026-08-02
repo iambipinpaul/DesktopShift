@@ -70,6 +70,7 @@
             AlwaysShowHeader="False"
             AutomationProperties.Name="Primary navigation"
             Background="{ThemeResource DesktopShift.PaneBackgroundBrush}"
+            CompactPaneLength="52"
             DisplayModeChanged="OnNavigationDisplayModeChanged"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="True"
@@ -87,23 +88,23 @@
                     AutomationProperties.Name="Home"
                     Content="Home"
                     IsSelected="True"
-                    Margin="8,4,4,0"
+                    Margin="0,4,0,0"
                     Tag="overview">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Application rules" Content="Application rules" Margin="8,0,4,0" Tag="rules">
+                <NavigationViewItem AutomationProperties.Name="Application rules" Content="Application rules" Tag="rules">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8EF;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Managed desktops" Content="Managed desktops" Margin="8,0,4,0" Tag="desktops">
+                <NavigationViewItem AutomationProperties.Name="Managed desktops" Content="Managed desktops" Tag="desktops">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7F4;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="Assignment Activity" Content="Activity" Margin="8,0,4,0" Tag="activity">
+                <NavigationViewItem AutomationProperties.Name="Assignment Activity" Content="Activity" Tag="activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
@@ -111,12 +112,12 @@
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem AutomationProperties.Name="System settings" Content="System settings" Margin="8,0,4,0" Tag="settings">
+                <NavigationViewItem AutomationProperties.Name="System settings" Content="System settings" Tag="settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.Name="About DesktopShift" Content="About" Margin="8,0,4,0" Tag="about">
+                <NavigationViewItem AutomationProperties.Name="About DesktopShift" Content="About" Tag="about">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
