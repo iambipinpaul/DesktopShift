@@ -124,8 +124,8 @@ namespace DesktopShift::NativeBridge::ShellAbi
     IVirtualDesktopNotification24H2 : public IUnknown
     {
         // Shell revisions have exposed both per-monitor and global callback
-        // shapes under this IID. DesktopShift's x64 sink deliberately accepts
-        // the superset and never dereferences callback arguments. Extra x64
+        // shapes under this IID. DesktopShift's native sink deliberately accepts
+        // the superset and never dereferences callback arguments. Extra native
         // register/stack arguments are caller-owned, so this remains safe for
         // both shapes while preserving the common vtable slot ordering.
         virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(

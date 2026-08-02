@@ -7,12 +7,13 @@ namespace DesktopShift.Windows.Tests.Configuration;
 public sealed class SolutionConfigurationContractTests
 {
     [TestMethod]
-    public void X64OnlyManagedProjects_ExplicitlyMapSolutionX64ToProjectX64()
+    public void ArchitectureSpecificManagedProjects_MapBothSupportedPlatforms()
     {
         string root = PackagingRepository.RequireRoot();
         XDocument solution = PackagingRepository.LoadXml(
             Path.Combine(root, "DesktopShift.slnx"));
 
+        string[] supportedPlatforms = ["x64", "ARM64"];
         string[] missingMappings = solution
             .Descendants()
             .Where(element =>
@@ -25,20 +26,23 @@ public sealed class SolutionConfigurationContractTests
             .Where(project =>
                 project.Path?.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ==
                 true)
-            .Where(project => IsX64OnlyProject(root, project.Path!))
-            .Where(project => !HasX64SolutionMapping(project.Element))
-            .Select(project => project.Path!)
+            .Where(project => IsArchitectureSpecificProject(root, project.Path!))
+            .SelectMany(project => supportedPlatforms
+                .Where(platform => !HasSolutionMapping(project.Element, platform))
+                .Select(platform => $"{project.Path} ({platform})"))
             .ToArray();
 
         Assert.IsEmpty(
             missingMappings,
-            "Every x64-only managed project must map the solution's x64 platform " +
-            "to project platform x64:" +
+            "Every architecture-specific managed project must map both supported " +
+            "solution platforms to the matching project platform:" +
             Environment.NewLine +
             string.Join(Environment.NewLine, missingMappings));
     }
 
-    private static bool IsX64OnlyProject(string root, string relativePath)
+    private static bool IsArchitectureSpecificProject(
+        string root,
+        string relativePath)
     {
         string projectPath = Path.Combine(
             root,
@@ -58,11 +62,11 @@ public sealed class SolutionConfigurationContractTests
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return platforms.Length == 1 &&
-            platforms[0].Equals("x64", StringComparison.OrdinalIgnoreCase);
+        return platforms.Contains("x64", StringComparer.OrdinalIgnoreCase) ||
+            platforms.Contains("ARM64", StringComparer.OrdinalIgnoreCase);
     }
 
-    private static bool HasX64SolutionMapping(XElement project)
+    private static bool HasSolutionMapping(XElement project, string platform)
     {
         return project
             .Elements()
@@ -76,11 +80,11 @@ public sealed class SolutionConfigurationContractTests
                 string? solutionPlatform = element.Attribute("Solution")?.Value;
                 return string.Equals(
                         projectPlatform,
-                        "x64",
+                        platform,
                         StringComparison.OrdinalIgnoreCase) &&
                     (solutionPlatform is null ||
                         solutionPlatform.EndsWith(
-                            "|x64",
+                            $"|{platform}",
                             StringComparison.OrdinalIgnoreCase));
             });
     }

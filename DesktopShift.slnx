@@ -1,10 +1,12 @@
 <Solution>
   <Configurations>
     <Platform Name="x64" />
+    <Platform Name="ARM64" />
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/DesktopShift.App/DesktopShift.App.csproj">
       <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
       <Deploy />
     </Project>
     <Project Path="src/DesktopShift.Core/DesktopShift.Core.csproj" />
@@ -12,6 +14,7 @@
     <Project Path="src/DesktopShift.NativeBridge/DesktopShift.NativeBridge.vcxproj" Id="59e930d4-b6d9-4da1-9a77-3ad4b4328d98" />
     <Project Path="src/DesktopShift.Windows/DesktopShift.Windows.csproj">
       <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
     </Project>
   </Folder>
   <Folder Name="/tests/">
@@ -19,9 +22,11 @@
     <Project Path="tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj" />
     <Project Path="tests/DesktopShift.TestWindowHost/DesktopShift.TestWindowHost.csproj">
       <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
     </Project>
     <Project Path="tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj">
       <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
     </Project>
   </Folder>
 </Solution>

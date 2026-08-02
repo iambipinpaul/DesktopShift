@@ -1,8 +1,9 @@
 # DesktopShift release process
 
-This process produces one reproducible x64, per-user MSIX. It assumes Windows
-11 22H2 or newer and a Visual Studio installation with MSBuild, the .NET desktop
-and WinUI workloads, MSIX tooling, the Windows SDK, and C++ desktop build tools.
+This process produces separate reproducible x64 (AMD64) and ARM64 per-user MSIX
+packages. It assumes Windows 11 22H2 or newer and a Visual Studio installation
+with MSBuild, the .NET desktop and WinUI workloads, MSIX tooling, the Windows
+SDK, and x64 and ARM64 C++ desktop build tools.
 
 The package is self-contained for the Windows App SDK and carries
 `DesktopShift.NativeBridge.dll`. Users install the MSIX; they do not copy DLLs,
@@ -27,21 +28,29 @@ The release command supplies the exact package version through
 
 ## Local release candidate
 
-An unsigned build is useful for construction and payload validation:
+Unsigned builds are useful for construction and payload validation:
 
 ```powershell
-$package = & .\eng\packaging\Build-Msix.ps1 `
-    -Configuration Release `
-    -PackageVersion 1.2.3.4
+foreach ($architecture in 'x64', 'arm64') {
+    $package = & .\eng\packaging\Build-Msix.ps1 `
+        -Configuration Release `
+        -Architecture $architecture `
+        -PackageVersion 1.2.3.4 `
+        -OutputDirectory ".artifacts\package\$architecture"
 
-& .\eng\packaging\Validate-Msix.ps1 -PackagePath $package
+    & .\eng\packaging\Validate-Msix.ps1 `
+        -PackagePath $package `
+        -ExpectedArchitecture $architecture
+}
 ```
 
-The default output is `.artifacts\package`. The build fails unless exactly one
-`.msix` is produced. The validator checks the package identity, publisher,
-version, x64 architecture, Windows target, icons, opt-in startup task,
-capabilities, versioned VCLibs declaration, application executable, native
-bridge, Windows App Runtime payload, and absence of private-key files.
+The default output is `.artifacts\package`. Use a clean, architecture-specific
+output directory for each invocation; the build fails unless exactly one
+`.msix` is present. The validator checks the package identity, publisher,
+version, selected architecture, PE machine type of the application and native
+bridge, Windows target, icons, opt-in startup task, capabilities, versioned
+VCLibs declaration, Windows App Runtime payload, and absence of private-key
+files.
 
 Use the signed command in [code-signing.md](code-signing.md) for a releasable
 candidate. Do not publish the unsigned construction artifact.
@@ -51,19 +60,21 @@ candidate. Do not publish the unsigned construction artifact.
 The release workflow must complete these gates in order:
 
 1. Restore dependencies.
-2. Run warnings-as-errors Debug and Release x64 builds.
+2. Run warnings-as-errors Debug and Release builds for x64 and ARM64.
 3. Run formatting/static analysis, host tests, unit tests, and the supported
    non-destructive Windows contract tests.
-4. Construct exactly one Release x64 MSIX with
-   `eng/packaging/Build-Msix.ps1`.
-5. Sign it without placing key material in the repository or artifact.
-6. Set `DESKTOPSHIFT_MSIX_PATH` to that signed file and run
-   `PackagingArtifactContractTests`.
-7. Run `eng/packaging/Validate-Msix.ps1 -RequireTrustedSignature`.
-8. On a clean interactive x64 Windows test account, run
-   `eng/packaging/Smoke-Test-Msix.ps1`.
-9. Upload only the package that passed all preceding gates, plus its SHA-256
-   digest.
+4. Construct one Release MSIX per architecture with
+   `eng/packaging/Build-Msix.ps1 -Architecture <x64|arm64>`.
+5. Sign both without placing key material in the repository or artifact.
+6. Set `DESKTOPSHIFT_MSIX_PATH` and `DESKTOPSHIFT_MSIX_ARCHITECTURE` for each
+   signed file and run `PackagingArtifactContractTests`.
+7. Run `eng/packaging/Validate-Msix.ps1 -ExpectedArchitecture
+   <x64|arm64> -RequireTrustedSignature` for each package.
+8. On clean interactive Windows test accounts of the matching architectures,
+   run `eng/packaging/Smoke-Test-Msix.ps1` for both packages. CI smoke-tests x64
+   on its x64 runner; ARM64 launch acceptance requires an ARM64 machine.
+9. Upload only packages that passed the applicable gates, plus their SHA-256
+   digests.
 
 The smoke script intentionally refuses to run when DesktopShift is already
 installed or running. It installs for the current user, verifies the installed

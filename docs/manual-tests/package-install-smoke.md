@@ -1,15 +1,16 @@
 # Signed package install, startup, and uninstall matrix
 
-Run this matrix against the exact signed x64 MSIX that passed automated package
-validation. Use a clean, interactive, non-administrator Windows 11 22H2-or-newer
-test account with no existing DesktopShift package or process.
+Run this matrix once against each exact signed MSIX (x64 on AMD64 Windows and
+ARM64 on ARM64 Windows) that passed automated package validation. Use a clean,
+interactive, non-administrator Windows 11 22H2-or-newer test account with no
+existing DesktopShift package or process.
 
 Record the package path, SHA-256, package version, certificate thumbprint,
 Windows build, tester, and result for every row.
 
 | # | Action | Expected result |
 |---|---|---|
-| 1 | Run `eng/packaging/Validate-Msix.ps1 -PackagePath <path> -RequireTrustedSignature`. | Validation reports identity `BipinPaul.DesktopShift`, x64, the expected four-part version, a trusted signature, and no missing payload. |
+| 1 | Run `eng/packaging/Validate-Msix.ps1 -PackagePath <path> -ExpectedArchitecture <x64\|arm64> -RequireTrustedSignature`. | Validation reports identity `BipinPaul.DesktopShift`, the expected architecture and four-part version, matching PE machine types, a trusted signature, and no missing payload. |
 | 2 | Confirm `Get-AppxPackage -Name BipinPaul.DesktopShift` and `Get-Process DesktopShift` return nothing. Run `eng/packaging/Smoke-Test-Msix.ps1 -PackagePath <path>`. | The script installs for this user, launches DesktopShift, closes the launched process, uninstalls, and reports success. No elevation prompt appears. |
 | 3 | Install the same MSIX through the supported distribution route (App Installer, Store, enterprise deployment, or `Add-AppxPackage -Path <path>` on a machine where its declared VCLibs framework dependency is available). | Installation succeeds for the current user without requesting DLL copies, a separate Windows App Runtime install, or configuration edits. |
 | 4 | Launch DesktopShift from Start. | The WinUI window and notification-area icon appear. No console window appears. Only one DesktopShift process owns the application instance. |

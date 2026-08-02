@@ -7,9 +7,11 @@ namespace DesktopShift.Windows.Tests.Packaging;
 public sealed class PackagingArtifactContractTests
 {
     private const string PackagePathVariable = "DESKTOPSHIFT_MSIX_PATH";
+    private const string PackageArchitectureVariable =
+        "DESKTOPSHIFT_MSIX_ARCHITECTURE";
 
     [TestMethod]
-    public void SignedPackage_IsACompleteInstallableX64Application()
+    public void SignedPackage_IsACompleteInstallableApplicationForExpectedArchitecture()
     {
         string? packagePath = Environment.GetEnvironmentVariable(
             PackagePathVariable);
@@ -41,13 +43,21 @@ public sealed class PackagingArtifactContractTests
             manifest = XDocument.Load(manifestStream);
         }
 
-        AssertPackageIdentity(manifest);
+        string expectedArchitecture =
+            Environment.GetEnvironmentVariable(PackageArchitectureVariable) ?? "x64";
+        Assert.IsTrue(
+            expectedArchitecture is "x64" or "arm64",
+            $"{PackageArchitectureVariable} must be x64 or arm64.");
+
+        AssertPackageIdentity(manifest, expectedArchitecture);
         AssertStartupContract(manifest);
         AssertVisualAssetsArePresent(manifest, archive);
         AssertPayloadIsSelfContained(archive);
     }
 
-    private static void AssertPackageIdentity(XDocument manifest)
+    private static void AssertPackageIdentity(
+        XDocument manifest,
+        string expectedArchitecture)
     {
         XElement identity = PackagingRepository.RequireSingleDescendant(
             manifest,
@@ -59,7 +69,7 @@ public sealed class PackagingArtifactContractTests
             "CN=Bipin Paul",
             PackagingRepository.RequireAttribute(identity, "Publisher"));
         Assert.AreEqual(
-            "x64",
+            expectedArchitecture,
             PackagingRepository.RequireAttribute(identity, "ProcessorArchitecture"));
 
         Version version = Version.Parse(

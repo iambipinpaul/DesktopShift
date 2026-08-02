@@ -7,9 +7,10 @@
     <AssemblyName>DesktopShift</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <Platforms>x64</Platforms>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
@@ -41,7 +42,7 @@
 
   <ItemGroup>
     <None
-      Include="..\DesktopShift.NativeBridge\bin\x64\$(Configuration)\DesktopShift.NativeBridge.dll"
+      Include="..\DesktopShift.NativeBridge\bin\$(Platform)\$(Configuration)\DesktopShift.NativeBridge.dll"
       Link="DesktopShift.NativeBridge.dll"
       CopyToOutputDirectory="PreserveNewest"
       CopyToPublishDirectory="PreserveNewest" />
@@ -88,10 +89,15 @@
     <PropertyGroup>
       <_VersionedPackageManifest>$(IntermediateOutputPath)VersionedPackage.appxmanifest</_VersionedPackageManifest>
       <_IsValidAppxPackageVersion>$([System.Text.RegularExpressions.Regex]::IsMatch('$(AppxPackageVersion)', '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$'))</_IsValidAppxPackageVersion>
+      <_PackageProcessorArchitecture Condition="'$(Platform)' == 'x64'">x64</_PackageProcessorArchitecture>
+      <_PackageProcessorArchitecture Condition="'$(Platform)' == 'ARM64'">arm64</_PackageProcessorArchitecture>
     </PropertyGroup>
     <Error
       Condition="'$(_IsValidAppxPackageVersion)' != 'True'"
       Text="AppxPackageVersion must contain four numeric components (for example, 1.2.3.4)." />
+    <Error
+      Condition="'$(_PackageProcessorArchitecture)' == ''"
+      Text="Platform must be x64 or ARM64 when constructing an MSIX package." />
     <Copy
       SourceFiles="@(AppxManifest)"
       DestinationFiles="$(_VersionedPackageManifest)" />
@@ -99,6 +105,10 @@
       XmlInputPath="$(_VersionedPackageManifest)"
       Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version"
       Value="$(AppxPackageVersion)" />
+    <XmlPoke
+      XmlInputPath="$(_VersionedPackageManifest)"
+      Query="/*[local-name()='Package']/*[local-name()='Identity']/@ProcessorArchitecture"
+      Value="$(_PackageProcessorArchitecture)" />
     <ItemGroup>
       <AppxManifest Remove="@(AppxManifest)" />
       <AppxManifest Include="$(_VersionedPackageManifest)" />

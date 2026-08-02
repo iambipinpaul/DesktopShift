@@ -7,6 +7,9 @@ param(
 
     [string] $ExpectedPublisher = "CN=Bipin Paul",
 
+    [ValidateSet("x64", "arm64")]
+    [string] $ExpectedArchitecture = "x64",
+
     [switch] $RequireTrustedSignature
 )
 
@@ -72,6 +75,40 @@ function Assert-LogicalAsset {
     }
 }
 
+function Get-PeMachine {
+    param(
+        [Parameter(Mandatory)]
+        [IO.Compression.ZipArchiveEntry] $Entry
+    )
+
+    $entryStream = $Entry.Open()
+    $buffer = [IO.MemoryStream]::new()
+    try {
+        $entryStream.CopyTo($buffer)
+        $buffer.Position = 0
+        $reader = [IO.BinaryReader]::new($buffer, [Text.Encoding]::UTF8, $true)
+        try {
+            Assert-Condition ($reader.ReadUInt16() -eq 0x5A4D) `
+                "'$($Entry.FullName)' has no DOS executable header."
+            $buffer.Position = 0x3C
+            $peOffset = $reader.ReadInt32()
+            Assert-Condition ($peOffset -gt 0 -and $peOffset -le ($buffer.Length - 6)) `
+                "'$($Entry.FullName)' has an invalid PE header offset."
+            $buffer.Position = $peOffset
+            Assert-Condition ($reader.ReadUInt32() -eq 0x00004550) `
+                "'$($Entry.FullName)' has no PE signature."
+            return $reader.ReadUInt16()
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+    finally {
+        $entryStream.Dispose()
+        $buffer.Dispose()
+    }
+}
+
 function Resolve-SignTool {
     $kitsRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
     $versioned = @(
@@ -134,8 +171,8 @@ try {
         "Expected identity '$ExpectedIdentityName', found '$identityName'."
     Assert-Condition ($publisher -eq $ExpectedPublisher) `
         "Expected publisher '$ExpectedPublisher', found '$publisher'."
-    Assert-Condition ($architecture -eq "x64") `
-        "Expected x64 package architecture, found '$architecture'."
+    Assert-Condition ($architecture -eq $ExpectedArchitecture) `
+        "Expected $ExpectedArchitecture package architecture, found '$architecture'."
     Assert-Condition ($version -match '^\d+\.\d+\.\d+\.\d+$') `
         "Package identity version '$version' is not a four-part MSIX version."
 
@@ -199,6 +236,18 @@ try {
         Get-Entry -Entries $entries -Name $requiredFile | Out-Null
     }
 
+    $expectedMachine = switch ($ExpectedArchitecture) {
+        "x64" { 0x8664 }
+        "arm64" { 0xAA64 }
+    }
+    foreach ($nativeFile in @("DesktopShift.exe", "DesktopShift.NativeBridge.dll")) {
+        $entry = Get-Entry -Entries $entries -Name $nativeFile
+        $machine = Get-PeMachine -Entry $entry
+        Assert-Condition ($machine -eq $expectedMachine) `
+            ("Expected {0} to target {1} (PE machine 0x{2:X4}), found 0x{3:X4}." -f `
+                $nativeFile, $ExpectedArchitecture, $expectedMachine, $machine)
+    }
+
     $forbiddenPayload = @(
         $entries.Keys |
             Where-Object { $_ -match '\.(pfx|p12|snk|key)$' }
@@ -228,7 +277,7 @@ $hash = (Get-FileHash -LiteralPath $resolvedPackagePath -Algorithm SHA256).Hash
     Path = $resolvedPackagePath
     Identity = $ExpectedIdentityName
     Version = $version
-    Architecture = "x64"
+    Architecture = $architecture
     Signed = $hasSignature
     Sha256 = $hash
 }

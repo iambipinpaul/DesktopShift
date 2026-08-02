@@ -52,7 +52,7 @@ internal sealed class ShellNativeVirtualDesktopBridgeFactory :
             new NativeBridgeError(
                 "native.bridge_unavailable",
                 "NativeBridgeLoad",
-                "The x64 DesktopShift native bridge could not be loaded.",
+                $"The {RuntimeInformation.ProcessArchitecture} DesktopShift native bridge could not be loaded.",
                 exception.HResult));
 
     internal static NativeBridgeError ToError(

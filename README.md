@@ -106,4 +106,8 @@ The solution needs real MSBuild, because it contains a C++ project.
 
 ```bash
 msbuild DesktopShift.slnx -p:Platform=x64
+msbuild DesktopShift.slnx -p:Platform=ARM64
 ```
+
+Release packaging produces separate `x64` (AMD64) and `arm64` MSIX files; each
+contains a native bridge compiled for the matching processor architecture.

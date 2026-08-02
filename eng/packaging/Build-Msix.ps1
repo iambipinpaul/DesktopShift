@@ -3,6 +3,9 @@ param(
     [ValidateSet("Debug", "Release")]
     [string] $Configuration = "Release",
 
+    [ValidateSet("x64", "arm64")]
+    [string] $Architecture = "x64",
+
     [string] $PackageVersion = "0.1.0.0",
 
     [string] $OutputDirectory = ".artifacts\package",
@@ -49,6 +52,8 @@ if ($PackageVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $projectPath = Join-Path $repositoryRoot "src\DesktopShift.App\DesktopShift.App.csproj"
+$platform = if ($Architecture -ieq "arm64") { "ARM64" } else { "x64" }
+$runtimeIdentifier = "win-$($Architecture.ToLowerInvariant())"
 $resolvedOutputDirectory = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 }
@@ -65,8 +70,8 @@ $arguments = @(
     "/m"
     "/verbosity:minimal"
     "/p:Configuration=$Configuration"
-    "/p:Platform=x64"
-    "/p:RuntimeIdentifier=win-x64"
+    "/p:Platform=$platform"
+    "/p:RuntimeIdentifier=$runtimeIdentifier"
     "/p:TreatWarningsAsErrors=true"
     "/p:GenerateAppxPackageOnBuild=true"
     "/p:AppxBundle=Never"
@@ -126,7 +131,7 @@ if ($packages.Count -ne 1) {
     else {
         ($packages.FullName -join "', '")
     }
-    throw "Expected exactly one x64 MSIX below '$resolvedOutputDirectory', but found $found."
+    throw "Expected exactly one $Architecture MSIX below '$resolvedOutputDirectory', but found $found."
 }
 
 $package = $packages[0]

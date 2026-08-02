@@ -29,29 +29,12 @@ jobs:
       contents: read
     uses: ./.github/workflows/ci.yml
 
-  signed-msix:
-    name: Validate, smoke, and publish signed x64 MSIX
-    needs: quality-gates
-    runs-on: windows-2025
-    timeout-minutes: 45
-    environment: release
-    permissions:
-      contents: write
-    env:
-      DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD: ${{ secrets.DESKTOPSHIFT_SIGNING_CERTIFICATE_PASSWORD }}
-
+  release-version:
+    name: Resolve release version
+    runs-on: windows-2025-vs2026
+    outputs:
+      package: ${{ steps.version.outputs.package }}
     steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-
-      - name: Install .NET SDK from global.json
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
       - name: Resolve release version
         id: version
         shell: pwsh
@@ -73,6 +56,37 @@ jobs:
           }
 
           "package=$version" >> $env:GITHUB_OUTPUT
+
+  signed-msix:
+    name: Validate signed ${{ matrix.architecture }} MSIX
+    needs:
+      - quality-gates
+      - release-version
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 45
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x64
+          - arm64
+    permissions:
+      contents: read
+    env:
+      DESKTOPSHIFT_PACKAGE_CERTIFICATE_PASSWORD: ${{ secrets.DESKTOPSHIFT_SIGNING_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK from global.json
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
 
       - name: Materialize signing certificate
         id: signing
@@ -135,8 +149,9 @@ jobs:
           $output = @(
             & ./eng/packaging/Build-Msix.ps1 `
               -Configuration Release `
-              -PackageVersion '${{ steps.version.outputs.package }}' `
-              -OutputDirectory .artifacts/package/release `
+              -Architecture ${{ matrix.architecture }} `
+              -PackageVersion '${{ needs.release-version.outputs.package }}' `
+              -OutputDirectory .artifacts/package/release/${{ matrix.architecture }} `
               -CertificatePath '${{ steps.signing.outputs.pfx-path }}'
           )
           $package = $output |
@@ -156,6 +171,7 @@ jobs:
         shell: pwsh
         env:
           DESKTOPSHIFT_MSIX_PATH: ${{ steps.package.outputs.path }}
+          DESKTOPSHIFT_MSIX_ARCHITECTURE: ${{ matrix.architecture }}
         run: |
           msbuild tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj `
             /restore `
@@ -179,9 +195,11 @@ jobs:
         run: >-
           ./eng/packaging/Validate-Msix.ps1
           -PackagePath '${{ steps.package.outputs.path }}'
+          -ExpectedArchitecture ${{ matrix.architecture }}
           -RequireTrustedSignature
 
       - name: Install, launch, and uninstall package
+        if: matrix.architecture == 'x64'
         shell: pwsh
         run: >-
           ./eng/packaging/Smoke-Test-Msix.ps1
@@ -201,25 +219,12 @@ jobs:
       - name: Upload validated package
         uses: actions/upload-artifact@v4
         with:
-          name: DesktopShift-${{ steps.version.outputs.package }}-x64
+          name: DesktopShift-${{ needs.release-version.outputs.package }}-${{ matrix.architecture }}
           path: |
             ${{ steps.package.outputs.path }}
             ${{ steps.digest.outputs.path }}
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish GitHub release
-        if: github.ref_type == 'tag'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create $env:GITHUB_REF_NAME `
-            '${{ steps.package.outputs.path }}' `
-            '${{ steps.digest.outputs.path }}' `
-            --verify-tag `
-            --generate-notes `
-            --title "DesktopShift $env:GITHUB_REF_NAME"
 
       - name: Remove signing material from runner
         if: always()
@@ -241,3 +246,37 @@ jobs:
               Remove-Item -LiteralPath $path -Force
             }
           }
+
+  publish-release:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs:
+      - release-version
+      - signed-msix
+    runs-on: windows-2025-vs2026
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated packages
+        uses: actions/download-artifact@v5
+        with:
+          pattern: DesktopShift-${{ needs.release-version.outputs.package }}-*
+          path: .artifacts/release
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $assets = Get-ChildItem -LiteralPath .artifacts/release -File |
+            ForEach-Object { $_.FullName }
+          if ($assets.Count -ne 4) {
+            throw "Expected two MSIX packages and two digests, found $($assets.Count) files."
+          }
+
+          gh release create $env:GITHUB_REF_NAME @assets `
+            --verify-tag `
+            --generate-notes `
+            --title "DesktopShift $env:GITHUB_REF_NAME"

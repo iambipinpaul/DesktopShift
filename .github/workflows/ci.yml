@@ -23,7 +23,7 @@ env:
 jobs:
   formatting:
     name: Formatting and static checks
-    runs-on: windows-2025
+    runs-on: windows-2025-vs2026
     timeout-minutes: 20
 
     steps:
@@ -58,8 +58,8 @@ jobs:
           --verbosity minimal
 
   build-and-test:
-    name: ${{ matrix.configuration }} x64 build and tests
-    runs-on: windows-2025
+    name: ${{ matrix.configuration }} ${{ matrix.architecture }} build and tests
+    runs-on: windows-2025-vs2026
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -67,6 +67,9 @@ jobs:
         configuration:
           - Debug
           - Release
+        architecture:
+          - x64
+          - ARM64
 
     steps:
       - name: Check out source
@@ -88,7 +91,7 @@ jobs:
           /m
           /verbosity:minimal
           /p:Configuration=${{ matrix.configuration }}
-          /p:Platform=x64
+          /p:Platform=${{ matrix.architecture }}
 
       - name: Build with warnings as errors
         shell: pwsh
@@ -99,13 +102,13 @@ jobs:
           /verbosity:minimal
           /warnaserror
           /p:Configuration=${{ matrix.configuration }}
-          /p:Platform=x64
+          /p:Platform=${{ matrix.architecture }}
           /p:ContinuousIntegrationBuild=true
           /p:TreatWarningAsError=true
           /p:TreatWarningsAsErrors=true
 
       - name: Run host tests
-        if: matrix.configuration == 'Release'
+        if: matrix.configuration == 'Release' && matrix.architecture == 'x64'
         shell: pwsh
         run: >-
           dotnet test tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj
@@ -117,7 +120,7 @@ jobs:
           --results-directory .artifacts/test-results
 
       - name: Run Core unit tests
-        if: matrix.configuration == 'Release'
+        if: matrix.configuration == 'Release' && matrix.architecture == 'x64'
         shell: pwsh
         run: >-
           dotnet test tests/DesktopShift.Core.Tests/DesktopShift.Core.Tests.csproj
@@ -129,7 +132,7 @@ jobs:
           --results-directory .artifacts/test-results
 
       - name: Run presentation unit tests
-        if: matrix.configuration == 'Release'
+        if: matrix.configuration == 'Release' && matrix.architecture == 'x64'
         shell: pwsh
         run: >-
           dotnet test tests/DesktopShift.App.Presentation.Tests/DesktopShift.App.Presentation.Tests.csproj
@@ -140,7 +143,7 @@ jobs:
           --results-directory .artifacts/test-results
 
       - name: Run supported non-destructive Windows contract tests
-        if: matrix.configuration == 'Release'
+        if: matrix.configuration == 'Release' && matrix.architecture == 'x64'
         shell: pwsh
         run: >-
           dotnet test tests/DesktopShift.Windows.Tests/DesktopShift.Windows.Tests.csproj
@@ -152,7 +155,7 @@ jobs:
           -p:Platform=x64
 
       - name: Upload test results
-        if: always() && matrix.configuration == 'Release'
+        if: always() && matrix.configuration == 'Release' && matrix.architecture == 'x64'
         uses: actions/upload-artifact@v4
         with:
           name: test-results-x64-release
@@ -161,12 +164,18 @@ jobs:
           retention-days: 14
 
   construct-package:
-    name: Construct and validate unsigned x64 package
+    name: Construct and validate unsigned ${{ matrix.architecture }} package
     needs:
       - formatting
       - build-and-test
-    runs-on: windows-2025
+    runs-on: windows-2025-vs2026
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x64
+          - arm64
 
     steps:
       - name: Check out source
@@ -187,8 +196,9 @@ jobs:
           $output = @(
             & ./eng/packaging/Build-Msix.ps1 `
               -Configuration Release `
+              -Architecture ${{ matrix.architecture }} `
               -PackageVersion 0.1.0.0 `
-              -OutputDirectory .artifacts/package/ci
+              -OutputDirectory .artifacts/package/ci/${{ matrix.architecture }}
           )
           $package = $output |
             Where-Object {
@@ -208,3 +218,4 @@ jobs:
         run: >-
           ./eng/packaging/Validate-Msix.ps1
           -PackagePath '${{ steps.package.outputs.path }}'
+          -ExpectedArchitecture ${{ matrix.architecture }}

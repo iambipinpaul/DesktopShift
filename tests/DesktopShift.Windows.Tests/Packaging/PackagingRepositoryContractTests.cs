@@ -153,7 +153,7 @@ public sealed partial class PackagingRepositoryContractTests
     }
 
     [TestMethod]
-    public void AppProject_BuildsAWindowedSelfContainedX64PackageWithNativeBridge()
+    public void AppProject_BuildsWindowedSelfContainedX64AndArm64PackagesWithNativeBridge()
     {
         string root = PackagingRepository.RequireRoot();
         XDocument project = PackagingRepository.LoadXml(
@@ -166,12 +166,15 @@ public sealed partial class PackagingRepositoryContractTests
         Assert.AreEqual(
             "WinExe",
             PackagingRepository.RequireProperty(project, "OutputType"));
-        Assert.AreEqual(
-            "x64",
-            PackagingRepository.RequireProperty(project, "Platforms"));
-        Assert.AreEqual(
-            "win-x64",
-            PackagingRepository.RequireProperty(project, "RuntimeIdentifier"));
+        CollectionAssert.AreEquivalent(
+            new[] { "x64", "ARM64" },
+            SplitProperty(project, "Platforms"));
+        CollectionAssert.AreEquivalent(
+            new[] { "win-x64", "win-arm64" },
+            SplitProperty(project, "RuntimeIdentifiers"));
+        CollectionAssert.AreEquivalent(
+            new[] { "win-x64", "win-arm64" },
+            PropertyValues(project, "RuntimeIdentifier"));
         Assert.AreEqual(
             "true",
             PackagingRepository.RequireProperty(project, "EnableMsixTooling"));
@@ -215,7 +218,7 @@ public sealed partial class PackagingRepositoryContractTests
 
         StringAssert.Contains(
             PackagingRepository.RequireAttribute(nativeBridge, "Include"),
-            @"bin\x64\$(Configuration)\DesktopShift.NativeBridge.dll",
+            @"bin\$(Platform)\$(Configuration)\DesktopShift.NativeBridge.dll",
             StringComparison.OrdinalIgnoreCase);
         Assert.AreEqual(
             "DesktopShift.NativeBridge.dll",
@@ -246,6 +249,41 @@ public sealed partial class PackagingRepositoryContractTests
         Assert.IsEmpty(
             manuallyEditablePayloads,
             "The installed app must not depend on a user-edited config payload.");
+
+        XElement[] architecturePokes = project
+            .Descendants()
+            .Where(element =>
+                element.Name.LocalName.Equals("XmlPoke", StringComparison.Ordinal) &&
+                (element.Attribute("Query")?.Value.Contains(
+                    "ProcessorArchitecture",
+                    StringComparison.Ordinal) ?? false))
+            .ToArray();
+        Assert.HasCount(
+            1,
+            architecturePokes,
+            "Package generation must stamp the selected platform into the manifest.");
+
+        foreach ((string fileName, string platform, string runtimeIdentifier) in new[]
+        {
+            ("win-x64.pubxml", "x64", "win-x64"),
+            ("win-arm64.pubxml", "ARM64", "win-arm64"),
+        })
+        {
+            XDocument profile = PackagingRepository.LoadXml(
+                Path.Combine(
+                    root,
+                    "src",
+                    "DesktopShift.App",
+                    "Properties",
+                    "PublishProfiles",
+                    fileName));
+            Assert.AreEqual(
+                platform,
+                PackagingRepository.RequireProperty(profile, "Platform"));
+            Assert.AreEqual(
+                runtimeIdentifier,
+                PackagingRepository.RequireProperty(profile, "RuntimeIdentifier"));
+        }
     }
 
     [TestMethod]
@@ -285,6 +323,37 @@ public sealed partial class PackagingRepositoryContractTests
         Assert.AreEqual(packageVersion.Major, productVersion.Major);
         Assert.AreEqual(packageVersion.Minor, productVersion.Minor);
         Assert.AreEqual(packageVersion.Build, productVersion.Build);
+    }
+
+    [TestMethod]
+    public void NativeBridgeProject_BuildsX64AndArm64Configurations()
+    {
+        string root = PackagingRepository.RequireRoot();
+        XDocument project = PackagingRepository.LoadXml(
+            Path.Combine(
+                root,
+                "src",
+                "DesktopShift.NativeBridge",
+                "DesktopShift.NativeBridge.vcxproj"));
+
+        string[] configurations = project
+            .Descendants()
+            .Where(element => element.Name.LocalName.Equals(
+                "ProjectConfiguration",
+                StringComparison.Ordinal))
+            .Select(element => element.Attribute("Include")?.Value)
+            .OfType<string>()
+            .ToArray();
+
+        CollectionAssert.AreEquivalent(
+            new[]
+            {
+                "Debug|x64",
+                "Release|x64",
+                "Debug|ARM64",
+                "Release|ARM64",
+            },
+            configurations);
     }
 
     [TestMethod]
@@ -427,6 +496,26 @@ public sealed partial class PackagingRepositoryContractTests
             .EnumerateFiles(directory, stem + ".*" + extension)
             .Any();
     }
+
+    private static string[] SplitProperty(XDocument project, string propertyName) =>
+        PropertyValues(project, propertyName)
+            .SelectMany(value => value.Split(
+                ';',
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string[] PropertyValues(XDocument project, string propertyName) =>
+        project
+            .Descendants()
+            .Where(element => element.Name.LocalName.Equals(
+                propertyName,
+                StringComparison.Ordinal))
+            .Select(element => element.Value.Trim())
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     [GeneratedRegex(@"^\d+\.\d+\.\d+\.\d+$", RegexOptions.CultureInvariant)]
     private static partial Regex FourPartVersion();

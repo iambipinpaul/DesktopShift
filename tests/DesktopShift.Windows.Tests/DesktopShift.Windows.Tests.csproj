@@ -6,8 +6,10 @@
     <IsTestProject>true</IsTestProject>
     <RootNamespace>DesktopShift.Windows.Tests</RootNamespace>
     <AssemblyName>DesktopShift.Windows.Tests</AssemblyName>
-    <Platforms>x64</Platforms>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +20,7 @@
 
   <ItemGroup>
     <None
-      Include="..\..\src\DesktopShift.NativeBridge\bin\x64\$(Configuration)\DesktopShift.NativeBridge.dll"
+      Include="..\..\src\DesktopShift.NativeBridge\bin\$(Platform)\$(Configuration)\DesktopShift.NativeBridge.dll"
       Link="DesktopShift.NativeBridge.dll"
       CopyToOutputDirectory="PreserveNewest"
       CopyToPublishDirectory="PreserveNewest" />
