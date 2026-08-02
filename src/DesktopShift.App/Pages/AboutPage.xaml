@@ -4,112 +4,314 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     AutomationProperties.Name="About page"
-    Background="Transparent">
+    Background="Transparent"
+    SizeChanged="OnPageSizeChanged">
+
     <ScrollViewer
         HorizontalContentAlignment="Stretch"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
         <StackPanel
+            x:Name="AboutContent"
             MaxWidth="{StaticResource DesktopShift.PageContentMaxWidth}"
             Margin="{StaticResource DesktopShift.PageMargin}"
-            HorizontalAlignment="Center"
-            Spacing="{StaticResource DesktopShift.SectionSpacing}">
-            <StackPanel Margin="0,0,0,-12" Orientation="Horizontal" Spacing="7">
+            HorizontalAlignment="Center">
+
+            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="7">
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift" />
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="›" />
                 <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="About" />
             </StackPanel>
-            <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
+
+            <StackPanel Margin="0,0,0,22" Spacing="4">
                 <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="About" />
-                <TextBlock Style="{StaticResource DesktopShift.PageSubtitleStyle}" Text="Product, runtime, compatibility, and privacy information." />
+                <TextBlock
+                    Style="{StaticResource DesktopShift.PageSubtitleStyle}"
+                    Text="Product information, runtime details, compatibility, and privacy." />
             </StackPanel>
 
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.CardSpacing}">
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                        <Image
-                            Width="40"
-                            Height="40"
-                            AutomationProperties.AccessibilityView="Raw"
-                            Source="ms-appx:///Assets/DesktopShiftLogo.svg"
-                            Stretch="Uniform" />
-                        <StackPanel VerticalAlignment="Center" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="DesktopShift" />
-                            <TextBlock x:Name="VersionSummary" Style="{StaticResource DesktopShift.CaptionStyle}" />
-                        </StackPanel>
+            <Border
+                Margin="0,0,0,24"
+                Padding="20"
+                Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid x:Name="ProductHeroGrid" ColumnSpacing="16" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Image
+                        Width="56"
+                        Height="56"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                        Stretch="Uniform" />
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock
+                            FontSize="22"
+                            Style="{StaticResource DesktopShift.SectionHeadingStyle}"
+                            Text="DesktopShift" />
+                        <TextBlock x:Name="VersionSummary" Style="{StaticResource DesktopShift.CaptionStyle}" />
                     </StackPanel>
+
+                    <Border
+                        x:Name="PlatformPill"
+                        Grid.Column="2"
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource DesktopShift.PillStyle}">
+                        <TextBlock Style="{StaticResource DesktopShift.PillTextStyle}" Text="Windows 11" />
+                    </Border>
+
                     <TextBlock
-                        MaxWidth="680"
+                        Grid.Row="1"
+                        Grid.ColumnSpan="3"
+                        MaxWidth="760"
+                        HorizontalAlignment="Left"
                         Style="{StaticResource DesktopShift.BodyStyle}"
-                        Text="A Windows 11 utility that keeps application windows on semantic managed desktops without intercepting how external applications launch." />
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
+                        Text="Keep application windows organized on purpose-built Windows desktops—without intercepting how other applications launch." />
+
+                    <StackPanel
+                        x:Name="ProductLinksPanel"
+                        Grid.Row="2"
+                        Grid.ColumnSpan="3"
+                        Orientation="Horizontal"
+                        Spacing="8">
                         <HyperlinkButton
+                            Padding="10,6"
                             AutomationProperties.Name="Open DesktopShift documentation"
-                            Content="Documentation"
+                            Content="Read documentation"
                             NavigateUri="https://github.com/iambipinpaul/DesktopShift#readme" />
                         <HyperlinkButton
+                            Padding="10,6"
                             AutomationProperties.Name="Open DesktopShift source repository"
-                            Content="Source repository"
+                            Content="View source"
                             NavigateUri="https://github.com/iambipinpaul/DesktopShift" />
                     </StackPanel>
-                </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.CardSpacing}">
-                    <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Runtime" />
-                    <Grid ColumnSpacing="24" RowSpacing="{StaticResource DesktopShift.GroupSpacing}">
+            <TextBlock Style="{StaticResource DesktopShift.SectionLabelStyle}" Text="Runtime environment" />
+            <Grid
+                x:Name="RuntimeFactsGrid"
+                Margin="0,0,0,24"
+                ColumnSpacing="12"
+                RowSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border
+                    x:Name="RuntimeFactCard"
+                    Padding="15,13"
+                    Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="5">
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="RUNTIME" />
+                        <TextBlock
+                            x:Name="RuntimeValue"
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="ArchitectureFactCard"
+                    Grid.Column="1"
+                    Padding="15,13"
+                    Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="5">
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="ARCHITECTURE" />
+                        <TextBlock
+                            x:Name="ArchitectureValue"
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="WindowsBuildFactCard"
+                    Grid.Row="1"
+                    Padding="15,13"
+                    Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="5">
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="CURRENT WINDOWS BUILD" />
+                        <TextBlock
+                            x:Name="WindowsBuildValue"
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="SupportedBuildFactCard"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Padding="15,13"
+                    Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="5">
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="SUPPORTED WINDOWS BUILDS" />
+                        <TextBlock
+                            FontFamily="Segoe UI Variable Display"
+                            FontSize="17"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                            Text="22621 and later"
+                            TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Tested through build 28000" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <TextBlock Style="{StaticResource DesktopShift.SectionLabelStyle}" Text="Compatibility modes" />
+            <Grid
+                x:Name="CompatibilityCardsGrid"
+                Margin="0,0,0,24"
+                ColumnSpacing="12"
+                RowSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border x:Name="FullModeCard" Padding="16" Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource DesktopShift.IconTileStyle}">
+                                <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE73E;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Full Mode" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Complete automation" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.BodyStyle}"
+                            Text="Uses the validated Windows adapter to enumerate, create, switch, and move across virtual desktops." />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="LimitedModeCard"
+                    Grid.Column="1"
+                    Padding="16"
+                    Style="{StaticResource DesktopShift.CardStyle}">
+                    <StackPanel Spacing="14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource DesktopShift.IconTileStyle}">
+                                <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE7BA;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Limited Mode" />
+                                <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Safe fallback" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.BodyStyle}"
+                            Text="Keeps documented window movement available and disables private desktop operations that did not validate." />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <TextBlock Style="{StaticResource DesktopShift.SectionLabelStyle}" Text="Privacy" />
+            <Border Margin="0,0,0,16" Padding="18" Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid ColumnSpacing="14" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource DesktopShift.IconTileStyle}">
+                        <FontIcon Style="{StaticResource DesktopShift.IconTileGlyphStyle}" Glyph="&#xE946;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Privacy by design" />
+                        <TextBlock
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="DesktopShift records only what is needed to explain workspace decisions." />
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource DesktopShift.SeparatorStyle}" />
+
+                    <Grid
+                        x:Name="PrivacyPointsGrid"
+                        Grid.Row="2"
+                        Grid.ColumnSpan="2"
+                        ColumnSpacing="24"
+                        RowSpacing="14">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Runtime" />
-                            <TextBlock x:Name="RuntimeValue" Style="{StaticResource DesktopShift.BodyStyle}" />
+
+                        <StackPanel x:Name="PrivacyIdentityPoint" Spacing="4">
+                            <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Application identity only" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Rules and activity use privacy-safe process and package identity." />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Architecture" />
-                            <TextBlock x:Name="ArchitectureValue" Style="{StaticResource DesktopShift.BodyStyle}" />
+                        <StackPanel x:Name="PrivacyLocalPoint" Grid.Column="1" Spacing="4">
+                            <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Local by default" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Diagnostics stay on this device until you choose to export them." />
                         </StackPanel>
-                        <StackPanel Grid.Row="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Current Windows build" />
-                            <TextBlock x:Name="WindowsBuildValue" Style="{StaticResource DesktopShift.BodyStyle}" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
-                            <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Supported Windows build range" />
-                            <TextBlock Style="{StaticResource DesktopShift.BodyStyle}" Text="22621 and later • tested through 28000" />
+                        <StackPanel x:Name="PrivacyExcludedPoint" Grid.Column="2" Spacing="4">
+                            <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Sensitive context excluded" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Titles, URLs, command lines, and profile paths are not logged by default." />
                         </StackPanel>
                     </Grid>
-                </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.CardSpacing}">
-                    <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Compatibility modes" />
-                    <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                        <TextBlock FontWeight="SemiBold" Style="{StaticResource DesktopShift.BodyStyle}" Text="Full Mode" />
-                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="The validated Windows adapter can enumerate, create, switch, move, and receive desktop topology notifications." />
-                    </StackPanel>
-                    <StackPanel Spacing="{StaticResource DesktopShift.TightSpacing}">
-                        <TextBlock FontWeight="SemiBold" Style="{StaticResource DesktopShift.BodyStyle}" Text="Limited Mode" />
-                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="DesktopShift keeps documented window movement where Windows supports it and safely disables private desktop operations that did not validate." />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource DesktopShift.CardStyle}">
-                <StackPanel Spacing="{StaticResource DesktopShift.GroupSpacing}">
-                    <TextBlock Style="{StaticResource DesktopShift.SectionHeadingStyle}" Text="Privacy" />
-                    <TextBlock
-                        Style="{StaticResource DesktopShift.BodyStyle}"
-                        Text="Activity and diagnostic records use privacy-safe application identity. Window titles, browser URLs, command lines, and account-specific profile paths are not logged or exported by default." />
-                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="© 2026 Bipin Paul. All rights reserved." />
-                </StackPanel>
-            </Border>
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource DesktopShift.CaptionStyle}"
+                Text="© 2026 Bipin Paul · DesktopShift" />
         </StackPanel>
     </ScrollViewer>
 </Page>
