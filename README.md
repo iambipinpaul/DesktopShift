@@ -2,11 +2,16 @@
 
 Automatically assign application windows to managed Windows Virtual Desktops.
 
-DesktopShift runs in the tray. You write rules that say which app belongs on
-which desktop. After that, windows go where they belong on their own.
+Windows virtual desktops work well right up until you lose track of which one
+your editor ended up on. DesktopShift takes the bookkeeping away: you say once
+that VS Code belongs on **IDE Development**, and from then on its windows go
+there by themselves.
 
-This page explains what the app does, in plain words. It is meant to be read
-before you use it, so nothing it does comes as a surprise.
+It lives in the tray. This page explains what it does in plain words, so nothing
+it does comes as a surprise.
+
+![The DesktopShift Home page, showing workspace health, enabled rule and managed
+desktop counts, and quick settings for automatic assignment](docs/images/home.png)
 
 ## Install
 
@@ -18,8 +23,27 @@ from a terminal:
 winget install 9MVQDQ26SCCG -s msstore
 ```
 
-![The DesktopShift Home page, showing workspace health, enabled rule and managed
-desktop counts, and quick settings for automatic assignment](docs/images/home.png)
+Windows 11 22H2 or newer, on x64 or ARM64. Everything the app needs ships inside
+the package: no separate runtime to install, no DLLs to copy, no configuration
+files to edit.
+
+## Getting started
+
+1. **Launch it.** DesktopShift creates five managed desktops alongside your
+   existing first one, and starts with rules for a handful of common apps. You
+   can rename any of them.
+2. **Make it yours.** On **Application rules**, point the apps you care about at
+   the desktop where they belong. Anything without a rule goes to the first
+   desktop, so nothing is ever lost.
+3. **Open an app.** Its window lands on the right desktop, and your screen
+   follows you there.
+4. **Tidy what is already open.** Press **Reassign now** on Home, or
+   **Reassign all windows** in the tray menu.
+
+Start with Windows is off until you turn it on. So is local activity recording.
+
+![The DesktopShift tray menu, offering Open DesktopShift, Reassign all windows,
+Pause automatic assignment, and Exit](docs/images/tray-menu.png)
 
 ## The one idea to remember
 
@@ -29,7 +53,11 @@ If you open an app, you want to see it, so DesktopShift takes you to it.
 If a window appears on its own, you did not ask for it, so DesktopShift moves
 it quietly and leaves you where you are.
 
-## When a window opens
+The rest of this page is the detail behind that sentence.
+
+## What happens to a window
+
+### When a window opens
 
 | What happens | Where the window goes | Does your screen move? |
 | --- | --- | --- |
@@ -49,7 +77,7 @@ A new window is not moved the instant it appears. DesktopShift waits about
 short, and you will not notice it. It is how the app tells the two cases above
 apart.
 
-## When you use a window that is already open
+### When you use a window that is already open
 
 | What happens | Where the window goes | Does your screen move? |
 | --- | --- | --- |
@@ -60,7 +88,7 @@ apart.
 The last row is on purpose. A window must never jump away while you are
 clicking it.
 
-## Everything else
+### Everything else
 
 | What happens | Where windows go | Does your screen move? |
 | --- | --- | --- |
@@ -68,11 +96,6 @@ clicking it.
 | DesktopShift starts up | Old windows are tidied | **No.** You stay where you signed in. |
 | You pause the app | Nowhere. Nothing moves. | No |
 | DesktopShift just moved your screen | — | It ignores its own change, so it cannot loop. |
-
-Both live in the tray menu, along with the current error state.
-
-![The DesktopShift tray menu, offering Open DesktopShift, Reassign all windows,
-Pause automatic assignment, and Exit](docs/images/tray-menu.png)
 
 ## Rules
 
@@ -90,7 +113,7 @@ your managed desktops.
 
 On a fresh setup, the desktop order is **Default**, **Run & Observe**,
 **IDE Development**, **Agent Development**, **Infrastructure**, then **Remote**.
-“Default” is the existing first Windows desktop; DesktopShift creates and owns
+"Default" is the existing first Windows desktop; DesktopShift creates and owns
 only the five managed desktops that follow it.
 
 DesktopShift ships with one grouped **Anywhere** default for File Explorer and
@@ -104,12 +127,6 @@ When a window is swept to the first desktop, the Activity page offers a
 desktops, above the Windows-managed windows DesktopShift never
 moves](docs/images/application-rules.png)
 
-Local activity recording starts **off**. Turn on **Record local activity** in
-First Run, Activity, or Settings when you want privacy-safe assignment history
-and rotating troubleshooting logs. Turning it off stops new records without
-deleting existing history; **Clear local activity** remains the explicit delete
-action. Nothing is uploaded, and crash reporting is independent.
-
 ### The switch setting on each rule
 
 Each rule has its own setting for this, in the rule editor.
@@ -120,7 +137,18 @@ Each rule has its own setting for this, in the rule editor.
 | **Switches on foreground activation** | Your screen follows whenever you make the window active. |
 | **Switches on a new window's first activation** | Your screen follows only the first time, when the window is new. |
 
+## Activity and diagnostics
+
+Local activity recording starts **off**. Turn on **Record local activity** in
+First Run, Activity, or Settings when you want privacy-safe assignment history
+and rotating troubleshooting logs. Turning it off stops new records without
+deleting existing history; **Clear local activity** remains the explicit delete
+action. Nothing is uploaded, and crash reporting is independent.
+
 ## Privacy
+
+DesktopShift makes no network connections. Nothing it records leaves your
+device.
 
 By default, a rule knows only which application a window belongs to. It matches
 on the process name, the package family name, the app ID, and the executable
@@ -133,6 +161,9 @@ same app. Nothing adds them for you.
 Whatever your rules use, window titles, command lines, and profile paths are
 never written to local activity or included in a diagnostic bundle.
 
+Settings, rules, and any recorded activity live under
+`%LOCALAPPDATA%\DesktopShift`.
+
 ## Building
 
 The solution needs real MSBuild, because it contains a C++ project.
@@ -144,4 +175,6 @@ msbuild DesktopShift.slnx -p:Platform=ARM64
 ```
 
 Release packaging produces separate `x64` (AMD64) and `arm64` MSIX files; each
-contains a native bridge compiled for the matching processor architecture.
+contains a native bridge compiled for the matching processor architecture. See
+[docs/release/release-process.md](docs/release/release-process.md) for the full
+release and submission process.
