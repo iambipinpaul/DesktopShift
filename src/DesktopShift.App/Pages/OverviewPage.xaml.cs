@@ -48,12 +48,12 @@ public sealed partial class OverviewPage : Page
         HomeHeaderGrid.RowSpacing = useCompactHeader ? 14 : 0;
 
         bool useCompactStatus = args.NewSize.Width < 560;
-        Grid.SetRow(ModeStatusPill, useCompactStatus ? 1 : 0);
-        Grid.SetColumn(ModeStatusPill, useCompactStatus ? 1 : 2);
-        ModeStatusPill.HorizontalAlignment = useCompactStatus
+        Grid.SetRow(ModeStatusBadge, useCompactStatus ? 1 : 0);
+        Grid.SetColumn(ModeStatusBadge, useCompactStatus ? 1 : 2);
+        ModeStatusBadge.HorizontalAlignment = useCompactStatus
             ? HorizontalAlignment.Left
             : HorizontalAlignment.Right;
-        ModeStatusPill.Margin = useCompactStatus
+        ModeStatusBadge.Margin = useCompactStatus
             ? new Thickness(0, 10, 0, 0)
             : new Thickness(0);
 

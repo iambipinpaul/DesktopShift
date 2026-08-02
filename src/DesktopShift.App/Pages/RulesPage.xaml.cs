@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using DesktopShift.App.Rules;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Observation;
 using Microsoft.UI;
 using Microsoft.UI.Content;
 using Microsoft.UI.Xaml;
@@ -39,6 +40,9 @@ public sealed partial class RulesPage : Page
     private ConfigurationDocument? document;
     private bool isApplyingPresentation;
     private ImmutableArray<ApplicationRulePresentation> allRules = [];
+
+    public IReadOnlyList<WindowsManagedWindowEntry> WindowsManagedWindows { get; } =
+        WindowsManagedWindowCatalog.Entries;
 
     public RulesPage()
     {

@@ -56,6 +56,22 @@ public sealed class SweptWindowActivityTests
     }
 
     [TestMethod]
+    public void AWindowsManagedWindow_ExplainsWhyItStayedWhereItOpened()
+    {
+        ActivityRecord record = ActivityRecordFactory.FromObservation(
+            DiagnosticTestData.SkippedObservation(WindowSkipReason.SystemWindow),
+            DiagnosticTestData.Session);
+
+        Assert.AreEqual(
+            "observation.skipped.system_window",
+            record.ResultCode);
+        Assert.AreEqual(ActivityResult.Skipped, record.Result);
+        Assert.AreEqual(
+            "Windows manages this window, so it stays where Windows opened it.",
+            record.Summary);
+    }
+
+    [TestMethod]
     public void AnUnmatchedWindow_StillReadsAsNoMatchingRule()
     {
         // NoMatchingRule now means only "a rule names this app but none matched

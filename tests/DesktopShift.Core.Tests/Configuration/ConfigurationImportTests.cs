@@ -155,7 +155,8 @@ public sealed class ConfigurationImportTests
             Issue17ConfigurationTestSupport.CreateProvider(
                 storage,
                 schema: schema);
-        ConfigurationDocument sourceDocument = ConfigurationDefaults.Create();
+        ConfigurationDocument sourceDocument =
+            ConfigurationDefaults.Create() with { SchemaVersion = 2 };
         await using MemoryStream source = Issue17ConfigurationTestSupport.Stream(
             Issue17ConfigurationTestSupport.Serialize(sourceDocument));
 
@@ -164,9 +165,9 @@ public sealed class ConfigurationImportTests
             .ImportAsync(source);
 
         Assert.IsTrue(result.Accepted);
-        Assert.AreEqual(1, result.SourceSchemaVersion);
+        Assert.AreEqual(2, result.SourceSchemaVersion);
         CollectionAssert.AreEqual(
-            new[] { 1, 2 },
+            new[] { 2 },
             result.AppliedMigrations
                 .Select(static migration => migration.FromVersion)
                 .ToArray());
@@ -177,7 +178,7 @@ public sealed class ConfigurationImportTests
     public async Task Import_AFailedMigrationNeverOffersOrReplacesAConfiguration()
     {
         using TestConfigurationDirectory storage = new();
-        ConfigurationSchema schema = new(2, []);
+        ConfigurationSchema schema = new(4, []);
         await using ServiceProvider provider =
             Issue17ConfigurationTestSupport.CreateProvider(
                 storage,
@@ -287,7 +288,7 @@ public sealed class ConfigurationImportTests
                 .Select(static rule => rule.Action)
                 .ToArray());
         Assert.HasCount(
-            2,
+            1,
             result.State.Active.ApplicationRules
                 .Where(static rule => rule.AllowsAnywhere)
                 .ToArray());

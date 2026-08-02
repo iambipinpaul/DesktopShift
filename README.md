@@ -70,11 +70,17 @@ So every window goes somewhere. Nothing is forgotten. The first desktop is the
 one Task View shows first. DesktopShift never renames it and never adds it to
 your managed desktops.
 
-DesktopShift ships with two **Anywhere** rules: File Explorer and Notepad. Those
-two open in many places for many reasons, so moving them would be wrong more
-often than right. Everything else is your decision. When a window is swept to
-the first desktop, the Activity page offers a **Create a rule for this app**
-button on that row.
+On a fresh setup, the desktop order is **Default**, **Run & Observe**,
+**IDE Development**, **Agent Development**, **Infrastructure**, then **Remote**.
+“Default” is the existing first Windows desktop; DesktopShift creates and owns
+only the five managed desktops that follow it.
+
+DesktopShift ships with one grouped **Anywhere** default for File Explorer and
+Notepad. Windows-managed surfaces such as Settings, credential prompts, and
+passkey prompts are shown separately on the Rules page and are always left
+where Windows opens them. Everything else is your decision.
+When a window is swept to the first desktop, the Activity page offers a
+**Create a rule for this app** button on that row.
 
 ### The switch setting on each rule
 

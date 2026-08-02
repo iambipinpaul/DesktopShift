@@ -229,6 +229,38 @@ public sealed class WindowsWindowClassifierTests
                 CreateIdentity("DesktopShift.App.exe")));
     }
 
+    [TestMethod]
+    public void ClassifyIdentity_UnownedCredentialBroker_IsLeftWhereWindowsOpenedIt()
+    {
+        WindowsWindowClassifier classifier =
+            new(FakeWindowApi.Normal(), currentProcessId: 99);
+        QualifiedWindow window = new(
+            (nint)1,
+            (nint)1,
+            20,
+            "Credential Dialog Xaml Host");
+
+        WindowSkipReason result = classifier.ClassifyIdentity(
+            window,
+            CreateIdentity("CredentialUIBroker.exe"));
+
+        Assert.AreEqual(WindowSkipReason.SystemWindow, result);
+    }
+
+    [TestMethod]
+    public void ClassifyIdentity_WindowsSettings_IsLeftWhereWindowsOpenedIt()
+    {
+        WindowsWindowClassifier classifier =
+            new(FakeWindowApi.Normal(), currentProcessId: 99);
+        QualifiedWindow window = new((nint)1, (nint)1, 20, "ApplicationFrameWindow");
+
+        WindowSkipReason result = classifier.ClassifyIdentity(
+            window,
+            CreateIdentity("SystemSettings.exe"));
+
+        Assert.AreEqual(WindowSkipReason.SystemWindow, result);
+    }
+
     private static WindowIdentity CreateIdentity(string processName) =>
         new(20, processName, null, null, null, "Window", null, null);
 

@@ -8,6 +8,298 @@ namespace DesktopShift.Core.Tests.Configuration;
 public sealed class ConfigurationMigrationPipelineTests
 {
     [TestMethod]
+    public void CurrentSchema_ReordersUntouchedLegacyManagedDesktops()
+    {
+        JsonObject legacy = JsonNode.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "managedDesktops": [
+                { "semanticKey": "ide-development", "displayName": "IDE Development", "preferredOrder": 1, "recreateWhenMissing": true },
+                { "semanticKey": "run-observe", "displayName": "Run & Observe", "preferredOrder": 2, "recreateWhenMissing": true },
+                { "semanticKey": "agent-development", "displayName": "Agent Development", "preferredOrder": 3, "recreateWhenMissing": true },
+                { "semanticKey": "infrastructure", "displayName": "Infrastructure", "preferredOrder": 4, "recreateWhenMissing": true },
+                { "semanticKey": "remote", "displayName": "Remote", "preferredOrder": 5, "recreateWhenMissing": true }
+              ]
+            }
+            """)!.AsObject();
+        ConfigurationMigrationResult result =
+            ConfigurationMigrationPipeline.Migrate(
+                legacy,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual(3, result.Document!["schemaVersion"]!.GetValue<int>());
+        JsonArray desktops = result.Document["managedDesktops"]!.AsArray();
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "run-observe",
+                "ide-development",
+                "agent-development",
+                "infrastructure",
+                "remote",
+            },
+            desktops.Select(static node =>
+                node!["semanticKey"]!.GetValue<string>()).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { 1, 2, 3, 4, 5 },
+            desktops.Select(static node =>
+                node!["preferredOrder"]!.GetValue<int>()).ToArray());
+    }
+
+    [TestMethod]
+    public void CurrentSchema_PreservesCustomizedLegacyManagedDesktopOrder()
+    {
+        JsonObject customized = JsonNode.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "managedDesktops": [
+                { "semanticKey": "ide-development", "displayName": "My IDE", "preferredOrder": 1, "recreateWhenMissing": true },
+                { "semanticKey": "run-observe", "displayName": "Run & Observe", "preferredOrder": 2, "recreateWhenMissing": true },
+                { "semanticKey": "agent-development", "displayName": "Agent Development", "preferredOrder": 3, "recreateWhenMissing": true },
+                { "semanticKey": "infrastructure", "displayName": "Infrastructure", "preferredOrder": 4, "recreateWhenMissing": true },
+                { "semanticKey": "remote", "displayName": "Remote", "preferredOrder": 5, "recreateWhenMissing": true }
+              ]
+            }
+            """)!.AsObject();
+        ConfigurationMigrationResult result =
+            ConfigurationMigrationPipeline.Migrate(
+                customized,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(result.Succeeded);
+        JsonArray desktops = result.Document!["managedDesktops"]!.AsArray();
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "ide-development",
+                "run-observe",
+                "agent-development",
+                "infrastructure",
+                "remote",
+            },
+            desktops.Select(static node =>
+                node!["semanticKey"]!.GetValue<string>()).ToArray());
+        Assert.AreEqual("My IDE", desktops[0]!["displayName"]!.GetValue<string>());
+        CollectionAssert.AreEqual(
+            new[] { 1, 2, 3, 4, 5 },
+            desktops.Select(static node =>
+                node!["preferredOrder"]!.GetValue<int>()).ToArray());
+    }
+
+    [TestMethod]
+    public void CurrentSchema_CombinesUntouchedLegacyAnywhereDefaults()
+    {
+        JsonObject legacy = JsonNode.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "applicationRules": [
+                {
+                  "id": "file-explorer",
+                  "displayName": "File Explorer",
+                  "isEnabled": true,
+                  "targetDesktopKey": "",
+                  "processNames": ["explorer.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "action": "allowAnywhere",
+                  "packageFamilyNames": [],
+                  "appUserModelIds": [],
+                  "executablePaths": ["C:\\Windows\\explorer.exe"],
+                  "windowClasses": []
+                },
+                {
+                  "id": "notepad",
+                  "displayName": "Notepad",
+                  "isEnabled": true,
+                  "targetDesktopKey": "",
+                  "processNames": ["Notepad.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "action": "allowAnywhere",
+                  "packageFamilyNames": ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"],
+                  "appUserModelIds": [],
+                  "executablePaths": [],
+                  "windowClasses": []
+                }
+              ]
+            }
+            """)!.AsObject();
+
+        ConfigurationMigrationResult result =
+            ConfigurationMigrationPipeline.Migrate(
+                legacy,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual(3, result.Document!["schemaVersion"]!.GetValue<int>());
+        JsonArray rules = result.Document["applicationRules"]!.AsArray();
+        Assert.HasCount(1, rules);
+        JsonObject combined = rules[0]!.AsObject();
+        Assert.AreEqual("default-anywhere", combined["id"]!.GetValue<string>());
+        CollectionAssert.AreEqual(
+            new[] { "explorer.exe", "Notepad.exe" },
+            combined["processNames"]!.AsArray()
+                .Select(static node => node!.GetValue<string>())
+                .ToArray());
+    }
+
+    [TestMethod]
+    public void CurrentSchema_PreservesCustomizedLegacyAnywhereDefaults()
+    {
+        JsonObject customized = JsonNode.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "applicationRules": [
+                {
+                  "id": "file-explorer",
+                  "displayName": "Files for this workspace",
+                  "isEnabled": true,
+                  "targetDesktopKey": "",
+                  "processNames": ["explorer.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "action": "allowAnywhere",
+                  "packageFamilyNames": [],
+                  "appUserModelIds": [],
+                  "executablePaths": ["C:\\Windows\\explorer.exe"],
+                  "windowClasses": []
+                },
+                {
+                  "id": "notepad",
+                  "displayName": "Notepad",
+                  "isEnabled": true,
+                  "targetDesktopKey": "",
+                  "processNames": ["Notepad.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "action": "allowAnywhere",
+                  "packageFamilyNames": ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"],
+                  "appUserModelIds": [],
+                  "executablePaths": [],
+                  "windowClasses": []
+                }
+              ]
+            }
+            """)!.AsObject();
+
+        ConfigurationMigrationResult result =
+            ConfigurationMigrationPipeline.Migrate(
+                customized,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual(3, result.Document!["schemaVersion"]!.GetValue<int>());
+        CollectionAssert.AreEqual(
+            new[] { "file-explorer", "notepad" },
+            result.Document["applicationRules"]!.AsArray()
+                .Select(static node => node!["id"]!.GetValue<string>())
+                .ToArray());
+    }
+
+    [TestMethod]
+    public void CurrentSchema_MovesSettingsToBuiltInAndAlignsUntouchedRuleOrder()
+    {
+        JsonObject versionTwo = JsonNode.Parse(
+            """
+            {
+              "schemaVersion": 2,
+              "applicationRules": [
+                {
+                  "id": "ide-development",
+                  "displayName": "IDE Development",
+                  "isEnabled": true,
+                  "targetDesktopKey": "ide-development",
+                  "processNames": ["Code.exe", "devenv.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "packageFamilyNames": [],
+                  "appUserModelIds": [],
+                  "executablePaths": [],
+                  "windowClasses": [],
+                  "action": "moveToDesktop"
+                },
+                {
+                  "id": "run-observe",
+                  "displayName": "Run & Observe",
+                  "isEnabled": true,
+                  "targetDesktopKey": "run-observe",
+                  "processNames": ["msedge.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "packageFamilyNames": [],
+                  "appUserModelIds": [],
+                  "executablePaths": [],
+                  "windowClasses": [],
+                  "action": "moveToDesktop"
+                },
+                {
+                  "id": "default-anywhere",
+                  "displayName": "Default — stays where opened",
+                  "isEnabled": true,
+                  "targetDesktopKey": "",
+                  "processNames": ["explorer.exe", "Notepad.exe", "SystemSettings.exe"],
+                  "triggers": ["windowCreated", "windowShown", "foregroundActivated", "startupReconciliation", "manualReassignment"],
+                  "switchPolicy": "onForegroundActivation",
+                  "packageFamilyNames": ["Microsoft.WindowsNotepad_8wekyb3d8bbwe", "windows.immersivecontrolpanel_cw5n1h2txyewy"],
+                  "appUserModelIds": [],
+                  "executablePaths": ["C:\\Windows\\explorer.exe"],
+                  "windowClasses": [],
+                  "action": "allowAnywhere"
+                }
+              ]
+            }
+            """)!.AsObject();
+        JsonObject customized = (JsonObject)versionTwo.DeepClone();
+        JsonArray customizedRules = customized["applicationRules"]!.AsArray();
+        customizedRules[0]!["displayName"] = "My IDE";
+        customizedRules[2]!["displayName"] = "My Anywhere";
+
+        ConfigurationMigrationResult result =
+            ConfigurationMigrationPipeline.Migrate(
+                versionTwo,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual(3, result.Document!["schemaVersion"]!.GetValue<int>());
+        JsonArray rules = result.Document["applicationRules"]!.AsArray();
+        CollectionAssert.AreEqual(
+            new[] { "run-observe", "ide-development", "default-anywhere" },
+            rules.Select(static node => node!["id"]!.GetValue<string>()).ToArray());
+        JsonObject anywhere = rules[2]!.AsObject();
+        CollectionAssert.AreEqual(
+            new[] { "explorer.exe", "Notepad.exe" },
+            anywhere["processNames"]!.AsArray()
+                .Select(static node => node!.GetValue<string>())
+                .ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "Microsoft.WindowsNotepad_8wekyb3d8bbwe" },
+            anywhere["packageFamilyNames"]!.AsArray()
+                .Select(static node => node!.GetValue<string>())
+                .ToArray());
+
+        ConfigurationMigrationResult customizedResult =
+            ConfigurationMigrationPipeline.Migrate(
+                customized,
+                ConfigurationSchema.Current);
+
+        Assert.IsTrue(customizedResult.Succeeded);
+        JsonArray preserved = customizedResult.Document!["applicationRules"]!.AsArray();
+        CollectionAssert.AreEqual(
+            new[] { "ide-development", "run-observe", "default-anywhere" },
+            preserved.Select(static node => node!["id"]!.GetValue<string>()).ToArray());
+        Assert.Contains(
+            "SystemSettings.exe",
+            preserved[2]!["processNames"]!.AsArray()
+                .Select(static node => node!.GetValue<string>())
+                .ToArray());
+    }
+
+    [TestMethod]
     public void Migrate_ChainsByVersionAndRecordsTheActualOrder()
     {
         List<int> executionOrder = [];

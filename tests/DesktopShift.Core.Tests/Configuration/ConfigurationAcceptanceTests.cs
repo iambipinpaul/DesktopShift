@@ -46,12 +46,12 @@ public sealed class ConfigurationAcceptanceTests
     {
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
 
-        Assert.AreEqual(1, defaults.SchemaVersion);
+        Assert.AreEqual(3, defaults.SchemaVersion);
         CollectionAssert.AreEqual(
             new[]
             {
-                "ide-development",
                 "run-observe",
+                "ide-development",
                 "agent-development",
                 "infrastructure",
                 "remote",
@@ -60,8 +60,8 @@ public sealed class ConfigurationAcceptanceTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "IDE Development",
                 "Run & Observe",
+                "IDE Development",
                 "Agent Development",
                 "Infrastructure",
                 "Remote",
@@ -74,16 +74,16 @@ public sealed class ConfigurationAcceptanceTests
 
         AssertRule(
             defaults.ApplicationRules[0],
-            "ide-development",
-            "IDE Development",
-            "ide-development",
-            ["Code.exe", "devenv.exe"]);
-        AssertRule(
-            defaults.ApplicationRules[1],
             "run-observe",
             "Run & Observe",
             "run-observe",
             ["msedge.exe"]);
+        AssertRule(
+            defaults.ApplicationRules[1],
+            "ide-development",
+            "IDE Development",
+            "ide-development",
+            ["Code.exe", "devenv.exe"]);
         AssertRule(
             defaults.ApplicationRules[2],
             "agent-development",
@@ -129,35 +129,36 @@ public sealed class ConfigurationAcceptanceTests
             .. defaults.ApplicationRules.Where(static rule => rule.AllowsAnywhere),
         ];
 
-        // Two, and only two. Every shipped Anywhere rule unmanages an
-        // application for everybody who installs DesktopShift, so the list is
-        // kept to the ones opened from wherever the user already is and expected
-        // to stay there.
+        // One visible default groups the applications expected to stay on the
+        // desktop from which the user opened them.
         CollectionAssert.AreEqual(
-            new[] { "file-explorer", "notepad" },
+            new[] { "default-anywhere" },
             anywhere.Select(static rule => rule.Id).ToArray());
         Assert.IsTrue(anywhere.All(static rule => rule.IsEnabled));
 
+        ApplicationRule defaultAnywhere = GetDefaultRule("default-anywhere");
         Assert.Contains(
             "explorer.exe",
-            GetDefaultRule("file-explorer").ProcessNames);
+            defaultAnywhere.ProcessNames);
         Assert.Contains(
             @"C:\Windows\explorer.exe",
-            GetDefaultRule("file-explorer").ExecutablePaths);
+            defaultAnywhere.ExecutablePaths);
         Assert.Contains(
             "Microsoft.WindowsNotepad_8wekyb3d8bbwe",
-            GetDefaultRule("notepad").PackageFamilyNames);
-        Assert.Contains("Notepad.exe", GetDefaultRule("notepad").ProcessNames);
+            defaultAnywhere.PackageFamilyNames);
+        Assert.Contains("Notepad.exe", defaultAnywhere.ProcessNames);
+        Assert.DoesNotContain("SystemSettings.exe", defaultAnywhere.ProcessNames);
+        Assert.DoesNotContain(
+            "windows.immersivecontrolpanel_cw5n1h2txyewy",
+            defaultAnywhere.PackageFamilyNames);
     }
 
     [TestMethod]
-    public void Defaults_ShipNoExemptionTheUserDidNotAskFor()
+    public void Defaults_ShipNoAdditionalOrdinaryApplicationExemptions()
     {
-        // Calculator, Task Manager, Settings, Paint, and Photos were all
-        // verified to exist and none is shipped. An exemption the user added
-        // unmanages an application for them; one shipped in the defaults
-        // unmanages it for everybody, and none of these five is opened often
-        // enough from an arbitrary desktop to earn that.
+        // Calculator, Task Manager, Paint, and Photos remain ordinary
+        // applications. An exemption the user adds unmanages an application for
+        // them; one shipped in the defaults unmanages it for everybody.
         ConfigurationDocument defaults = ConfigurationDefaults.Create();
 
         foreach (string identity in new[]
@@ -176,7 +177,6 @@ public sealed class ConfigurationAcceptanceTests
         foreach (string path in new[]
         {
             @"C:\Windows\System32\Taskmgr.exe",
-            @"C:\Windows\ImmersiveControlPanel\SystemSettings.exe",
         })
         {
             Assert.IsFalse(
@@ -317,9 +317,10 @@ public sealed class ConfigurationAcceptanceTests
         // not have to move.
         Assert.AreEqual(ApplicationRuleAction.MoveToDesktop, rule.Action);
         Assert.IsFalse(rule.AllowsAnywhere);
-        // The document declared version 1 and is current as it stands: adding
-        // action did not move the schema version, so nothing was migrated.
-        Assert.AreEqual(1, state.Active.SchemaVersion);
+        // The missing optional members still deserialize with their historical
+        // defaults after the schema-1 document is advanced to the current
+        // version.
+        Assert.AreEqual(3, state.Active.SchemaVersion);
         Assert.AreEqual(
             ConfigurationDefaults.CurrentSchemaVersion,
             state.Active.SchemaVersion);
@@ -349,7 +350,7 @@ public sealed class ConfigurationAcceptanceTests
         string json = await File.ReadAllTextAsync(
             Path.Combine(storage.DirectoryPath, "configuration.json"));
         Assert.Contains("\"allowAnywhere\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"schemaVersion\": 1", json, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 3", json, StringComparison.Ordinal);
 
         await using ServiceProvider reloadedProvider = CreateProvider(storage);
         ConfigurationState reloaded = await reloadedProvider
@@ -357,14 +358,14 @@ public sealed class ConfigurationAcceptanceTests
             .LoadAsync();
 
         Assert.IsEmpty(reloaded.Issues);
-        ApplicationRule explorer = reloaded.Active!.ApplicationRules.Single(
-            static rule => rule.Id == "file-explorer");
-        Assert.AreEqual(ApplicationRuleAction.AllowAnywhere, explorer.Action);
-        Assert.IsTrue(explorer.AllowsAnywhere);
+        ApplicationRule defaultAnywhere = reloaded.Active!.ApplicationRules.Single(
+            static rule => rule.Id == "default-anywhere");
+        Assert.AreEqual(ApplicationRuleAction.AllowAnywhere, defaultAnywhere.Action);
+        Assert.IsTrue(defaultAnywhere.AllowsAnywhere);
 
         // Its ignored destination survives untouched rather than being
         // normalized to a sentinel that could collide with a real key.
-        Assert.IsEmpty(explorer.TargetDesktopKey);
+        Assert.IsEmpty(defaultAnywhere.TargetDesktopKey);
         Assert.AreEqual(
             ApplicationRuleAction.MoveToDesktop,
             reloaded.Active.ApplicationRules
@@ -426,7 +427,7 @@ public sealed class ConfigurationAcceptanceTests
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.RequiredValue,
-            "ide-development");
+            "run-observe");
     }
 
     [TestMethod]
@@ -723,7 +724,7 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsFalse(result.Accepted);
         Assert.IsNull(result.State.Active);
         Assert.AreEqual(6, result.State.Candidate.ManagedDesktops.Length);
-        Assert.AreEqual(8, result.State.Candidate.ApplicationRules.Length);
+        Assert.AreEqual(7, result.State.Candidate.ApplicationRules.Length);
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateDesktopSemanticKey,
@@ -731,11 +732,11 @@ public sealed class ConfigurationAcceptanceTests
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateRuleId,
-            "ide-development");
+            "run-observe");
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
-            "ide-development");
+            "run-observe");
 
         string candidateJson = await File.ReadAllTextAsync(
             Path.Combine(storage.DirectoryPath, "configuration.candidate.json"));
@@ -759,7 +760,7 @@ public sealed class ConfigurationAcceptanceTests
 
             Assert.IsFalse(initial.IsCompleted);
             Assert.HasCount(5, initial.Candidate.ManagedDesktops);
-            Assert.HasCount(7, initial.Candidate.ApplicationRules);
+            Assert.HasCount(6, initial.Candidate.ApplicationRules);
 
             ImmutableArray<ApplicationRule> editedRules =
                 initial.Candidate.ApplicationRules.SetItem(
@@ -795,12 +796,12 @@ public sealed class ConfigurationAcceptanceTests
                 .GetRequiredService<IOverviewConfigurationProjection>()
                 .GetSnapshot();
             Assert.AreEqual(5, overview.ManagedDesktopCount);
-            Assert.AreEqual(6, overview.EnabledRuleCount);
+            Assert.AreEqual(5, overview.EnabledRuleCount);
         }
 
         string json = await File.ReadAllTextAsync(
             Path.Combine(storage.DirectoryPath, "configuration.json"));
-        Assert.Contains("\"schemaVersion\": 1", json, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 3", json, StringComparison.Ordinal);
         Assert.Contains("\"startWithWindows\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"onForegroundActivation\"", json, StringComparison.Ordinal);
         Assert.Contains(Environment.NewLine, json, StringComparison.Ordinal);
@@ -847,19 +848,19 @@ public sealed class ConfigurationAcceptanceTests
                 await service.SaveCandidateAsync(invalid);
 
             Assert.IsFalse(rejected.Accepted);
-            Assert.HasCount(8, rejected.State.Candidate.ApplicationRules);
-            Assert.HasCount(7, rejected.State.Active!.ApplicationRules);
+            Assert.HasCount(7, rejected.State.Candidate.ApplicationRules);
+            Assert.HasCount(6, rejected.State.Active!.ApplicationRules);
             Assert.AreEqual(
                 "Candidate duplicate",
-                rejected.State.Candidate.ApplicationRules[7].DisplayName);
+                rejected.State.Candidate.ApplicationRules[6].DisplayName);
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.DuplicateRuleId,
-                "ide-development");
+                "run-observe");
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.UnknownDesktopReference,
-                "ide-development");
+                "run-observe");
         }
 
         await using ServiceProvider reloadedProvider = CreateProvider(storage);
@@ -867,15 +868,15 @@ public sealed class ConfigurationAcceptanceTests
             .GetRequiredService<IConfigurationService>()
             .LoadAsync();
 
-        Assert.HasCount(8, reloaded.Candidate.ApplicationRules);
-        Assert.HasCount(7, reloaded.Active!.ApplicationRules);
+        Assert.HasCount(7, reloaded.Candidate.ApplicationRules);
+        Assert.HasCount(6, reloaded.Active!.ApplicationRules);
         Assert.AreEqual(
             "Candidate duplicate",
-            reloaded.Candidate.ApplicationRules[7].DisplayName);
+            reloaded.Candidate.ApplicationRules[6].DisplayName);
         AssertHasIssue(
             reloaded.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
-            "ide-development");
+            "run-observe");
     }
 
     [TestMethod]
@@ -914,7 +915,7 @@ public sealed class ConfigurationAcceptanceTests
             .LoadAsync();
 
         Assert.IsNotNull(recovered.Active);
-        Assert.AreEqual("IDE Development", recovered.Active.ManagedDesktops[0].DisplayName);
+        Assert.AreEqual("Run & Observe", recovered.Active.ManagedDesktops[0].DisplayName);
         Assert.AreEqual(
             "Code Workspace",
             recovered.Candidate.ManagedDesktops[0].DisplayName);
@@ -950,7 +951,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(state.IsFirstRun);
         Assert.IsNotNull(state.Active);
-        Assert.HasCount(7, state.Candidate.ApplicationRules);
+        Assert.HasCount(6, state.Candidate.ApplicationRules);
         AssertHasIssue(
             state.Issues,
             ConfigurationValidationCode.CandidateUnreadable);
@@ -982,7 +983,7 @@ public sealed class ConfigurationAcceptanceTests
             () => service.SaveCandidateAsync(edited, cancellation.Token));
 
         Assert.AreEqual(
-            "IDE Development",
+            "Run & Observe",
             service.CurrentState.Active!.ManagedDesktops[0].DisplayName);
     }
 

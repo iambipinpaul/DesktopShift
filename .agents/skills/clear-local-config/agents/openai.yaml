@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clear DesktopShift Local Config"
+  short_description: "Safely reset DesktopShift local configuration"
+  default_prompt: "Use $clear-local-config to safely reset DesktopShift local configuration and desktop bindings."

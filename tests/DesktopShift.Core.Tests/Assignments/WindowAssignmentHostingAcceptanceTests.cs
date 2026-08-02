@@ -194,7 +194,8 @@ public sealed class WindowAssignmentHostingAcceptanceTests
             TimeProvider.System);
         WindowObservationRule rule =
             new ConfigurationWindowRuleSource(ConfigurationDefaults.Create)
-                .GetRules()[0];
+                .GetRules()
+                .Single(static candidate => candidate.Id == "ide-development");
 
         WindowAssignmentActivity activity = await service.AssignAsync(
             new WindowAssignmentRequest(

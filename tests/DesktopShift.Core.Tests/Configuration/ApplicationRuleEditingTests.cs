@@ -38,8 +38,8 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsEmpty(draft.Validate(document));
             document = draft.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.HasCount(8, document.ApplicationRules);
-            Assert.AreEqual("paint", document.ApplicationRules[7].Id);
+            Assert.HasCount(7, document.ApplicationRules);
+            Assert.AreEqual("paint", document.ApplicationRules[6].Id);
 
             // Edited in place: the rule keeps its position, which is the
             // matcher's tie breaker.
@@ -52,10 +52,10 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsEmpty(edit.Validate(document));
             document = edit.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.AreEqual("ide-development", document.ApplicationRules[0].Id);
+            Assert.AreEqual("ide-development", document.ApplicationRules[1].Id);
             CollectionAssert.AreEqual(
                 new[] { "Code.exe", "Code - Insiders.exe" },
-                document.ApplicationRules[0].ProcessNames.ToArray());
+                document.ApplicationRules[1].ProcessNames.ToArray());
 
             // Duplicated: a free identifier, directly after the original, and
             // disabled so it claims nothing before it is narrowed.
@@ -64,7 +64,7 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsNotNull(duplicate);
             Assert.AreEqual("ide-development-copy", duplicate.Id);
             Assert.IsFalse(duplicate.IsEnabled);
-            Assert.AreEqual("ide-development-copy", document.ApplicationRules[1].Id);
+            Assert.AreEqual("ide-development-copy", document.ApplicationRules[2].Id);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
 
             // Disabled, then enabled again, without losing an identity.
@@ -97,20 +97,19 @@ public sealed class ApplicationRuleEditingTests
         CollectionAssert.AreEqual(
             new[]
             {
+                "run-observe",
                 "ide-development",
                 "ide-development-copy",
-                "run-observe",
                 "agent-development",
                 "infrastructure",
                 "remote",
-                "file-explorer",
-                "notepad",
+                "default-anywhere",
             },
             state.Active.ApplicationRules.Select(static rule => rule.Id).ToArray());
         Assert.AreEqual(
             "Visual Studio Code Insiders",
-            state.Active.ApplicationRules[0].DisplayName);
-        Assert.IsFalse(state.Active.ApplicationRules[1].IsEnabled);
+            state.Active.ApplicationRules[1].DisplayName);
+        Assert.IsFalse(state.Active.ApplicationRules[2].IsEnabled);
     }
 
     [TestMethod]
@@ -379,8 +378,8 @@ public sealed class ApplicationRuleEditingTests
             await service.SaveCandidateAsync(draft.Apply(document));
 
         Assert.IsFalse(result.Accepted);
-        Assert.HasCount(8, result.State.Candidate.ApplicationRules);
-        Assert.HasCount(7, result.State.Active!.ApplicationRules);
+        Assert.HasCount(7, result.State.Candidate.ApplicationRules);
+        Assert.HasCount(6, result.State.Active!.ApplicationRules);
         Assert.IsTrue(result.State.Issues.Any(static issue =>
             issue.Code == ConfigurationValidationCode.InvalidIdentityPattern));
 
@@ -502,7 +501,7 @@ public sealed class ApplicationRuleEditingTests
 
         Assert.AreEqual("ide-development-copy", first!.Id);
         Assert.AreEqual("ide-development-copy-2", second!.Id);
-        Assert.HasCount(9, document.ApplicationRules);
+        Assert.HasCount(8, document.ApplicationRules);
     }
 
     [TestMethod]

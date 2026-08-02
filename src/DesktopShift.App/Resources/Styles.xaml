@@ -25,12 +25,10 @@
     -->
     <Thickness x:Key="DesktopShift.PageMargin">30,30,30,64</Thickness>
     <Thickness x:Key="DesktopShift.GroupPadding">12</Thickness>
-    <Thickness x:Key="DesktopShift.PillPadding">12,4,12,4</Thickness>
     <Thickness x:Key="DesktopShift.BadgePadding">8,4,8,4</Thickness>
 
     <CornerRadius x:Key="DesktopShift.CardCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="DesktopShift.ControlCornerRadius">6</CornerRadius>
-    <CornerRadius x:Key="DesktopShift.PillCornerRadius">999</CornerRadius>
 
     <x:Double x:Key="DesktopShift.IconTileSize">40</x:Double>
 
@@ -167,29 +165,21 @@
     </Style>
 
     <!--
-        Pills and badges carry a hairline outline. In the ordinary themes it is
-        barely there; in a high-contrast theme the soft accent fill collapses
-        onto the window colour, and the outline is the only thing left that says
-        where the badge ends.
+        Badges carry a hairline outline. In the ordinary themes it is barely
+        there; in a high-contrast theme the soft accent fill collapses onto the
+        window colour, and the outline is the only thing left that says where
+        the badge ends.
     -->
-    <Style x:Key="DesktopShift.PillStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource DesktopShift.AccentSoftBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DesktopShift.BorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource DesktopShift.PillCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource DesktopShift.PillPadding}" />
-        <Setter Property="VerticalAlignment" Value="Top" />
-    </Style>
-
     <Style x:Key="DesktopShift.BadgeStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource DesktopShift.AccentSoftBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource DesktopShift.BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource DesktopShift.ControlCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource DesktopShift.BadgePadding}" />
+        <Setter Property="VerticalAlignment" Value="Top" />
     </Style>
 
-    <Style x:Key="DesktopShift.PillTextStyle" TargetType="TextBlock">
+    <Style x:Key="DesktopShift.BadgeTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />

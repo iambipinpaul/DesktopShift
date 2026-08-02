@@ -5,16 +5,22 @@ namespace DesktopShift.Core.Configuration;
 
 public static class ConfigurationDefaults
 {
-    // Still version 1: packageFamilyNames, appUserModelIds, executablePaths,
-    // windowClasses and action are optional trailing members, so a document
+    // Version 3 moves Windows Settings into the immutable Windows-managed
+    // catalog and aligns the starter rule order with the managed desktops.
+    // Version 2 put Run & Observe before IDE Development and combined the
+    // untouched File Explorer and Notepad Anywhere defaults into one visible
+    // group. packageFamilyNames, appUserModelIds,
+    // executablePaths, windowClasses and action are optional trailing members,
+    // so a document
     // written before they existed deserializes with them absent and they read as
     // empty, or in action's case as moveToDesktop — which is exactly how such a
     // document behaved. The same is true of every setting added since — theme,
     // the notification switches, the assignment pause, and the hotkey bindings
     // all trail the required members of BehaviorSettings and read as their
-    // defaults when absent, so a version 1 document on disk is still a current
-    // document and nothing has to be migrated.
-    public const int CurrentSchemaVersion = 1;
+    // defaults when absent. The version-1 to version-2 and version-2 to
+    // version-3 migrations change only untouched shipped defaults; older
+    // documents otherwise keep exactly the behavior they declared.
+    public const int CurrentSchemaVersion = 3;
 
     private static readonly ImmutableArray<ApplicationRuleTrigger> AllTriggers =
     [
@@ -58,12 +64,12 @@ public static class ConfigurationDefaults
         return new ConfigurationDocument(
             CurrentSchemaVersion,
             [
+                new ManagedDesktopDefinition("run-observe", "Run & Observe", 1, true),
                 new ManagedDesktopDefinition(
                     "ide-development",
                     "IDE Development",
-                    1,
+                    2,
                     true),
-                new ManagedDesktopDefinition("run-observe", "Run & Observe", 2, true),
                 new ManagedDesktopDefinition(
                     "agent-development",
                     "Agent Development",
@@ -78,15 +84,15 @@ public static class ConfigurationDefaults
             ],
             [
                 CreateRule(
-                    "ide-development",
-                    "IDE Development",
-                    "ide-development",
-                    ["Code.exe", "devenv.exe"]),
-                CreateRule(
                     "run-observe",
                     "Run & Observe",
                     "run-observe",
                     ["msedge.exe"]),
+                CreateRule(
+                    "ide-development",
+                    "IDE Development",
+                    "ide-development",
+                    ["Code.exe", "devenv.exe"]),
                 CreateRule(
                     "agent-development",
                     "Agent Development",
@@ -141,33 +147,26 @@ public static class ConfigurationDefaults
                     // package, and an unverified identity is dead configuration.
                     ["mstsc.exe"]),
 
-                // Two exemptions ship, not a catalogue of utilities. Every
-                // shipped Anywhere rule takes an application out of the sweep
-                // for everybody, so each one has to earn its place. These two
-                // are opened *from* wherever the user already is, constantly,
-                // and expected to stay there: Explorer from a taskbar pin or a
-                // file dialog, Notepad for a scratch note.
+                // One visible default groups the Windows applications opened
+                // *from* wherever the user already is and expected to stay
+                // there: Explorer from a taskbar pin or file dialog and Notepad
+                // for a scratch note. The identities are alternatives, so one
+                // rule can represent the group without behaving like a wildcard.
                 //
-                // Calculator, Task Manager, and Settings were verified to exist
-                // and are still left out. They are opened occasionally rather
-                // than constantly, so collecting them on the first desktop is a
-                // reasonable default rather than an annoyance. Paint and Photos
-                // are out for the stronger reason that they are ordinary
-                // applications somebody may well want placed.
+                // Calculator and Task Manager were verified to exist and are
+                // still left out. Paint and Photos are out for the stronger
+                // reason that they are ordinary applications somebody may well
+                // want placed.
                 //
-                // All five are two clicks away in the rule editor for anyone who
+                // All four are two clicks away in the rule editor for anyone who
                 // disagrees, and that is the point: an exemption the user chose
                 // is better than one chosen for them.
                 CreateAnywhereRule(
-                    "file-explorer",
-                    "File Explorer",
-                    ["explorer.exe"],
+                    "default-anywhere",
+                    "Default — stays where opened",
+                    ["explorer.exe", "Notepad.exe"],
+                    packageFamilyNames: ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"],
                     executablePaths: [@"C:\Windows\explorer.exe"]),
-                CreateAnywhereRule(
-                    "notepad",
-                    "Notepad",
-                    ["Notepad.exe"],
-                    packageFamilyNames: ["Microsoft.WindowsNotepad_8wekyb3d8bbwe"]),
             ],
             new BehaviorSettings(
                 StartWithWindows: true,

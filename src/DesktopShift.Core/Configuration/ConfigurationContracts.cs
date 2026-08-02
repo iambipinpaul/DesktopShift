@@ -214,12 +214,15 @@ public sealed record ConfigurationSchema(
     ImmutableArray<IConfigurationMigration> Migrations)
 {
     /// <summary>
-    /// The shipped schema. There are no migrations: every member added since
-    /// version 1 trails the required ones and reads as its default when absent,
-    /// so a version 1 document on disk is already a current document.
+    /// The shipped schema and the ordered transformations from earlier versions.
     /// </summary>
     public static ConfigurationSchema Current { get; } =
-        new(ConfigurationDefaults.CurrentSchemaVersion, []);
+        new(
+            ConfigurationDefaults.CurrentSchemaVersion,
+            [
+                new DefaultAnywhereRuleMigration(),
+                new WindowsManagedSettingsMigration(),
+            ]);
 
     /// <summary>Migrations, normalized away from a default array.</summary>
     public ImmutableArray<IConfigurationMigration> Migrations { get; init; } =

@@ -303,17 +303,17 @@ public sealed record BehaviorSettings(
 /// could collide with a Managed Desktop the user actually named that.
 /// </para>
 /// <para>
-/// The two shapes side by side in <c>configuration.json</c>. Notepad is one of
-/// the shipped Anywhere rules; the second entry is what a rule that moves
+/// The two shapes side by side in <c>configuration.json</c>. The grouped default
+/// is the shipped Anywhere rule; the second entry is what a rule that moves
 /// windows looks like, so the difference is a single member:
 /// </para>
 /// <code>
 /// {
-///   "id": "notepad",
-///   "displayName": "Notepad",
+///   "id": "default-anywhere",
+///   "displayName": "Default — stays where opened",
 ///   "isEnabled": true,
 ///   "targetDesktopKey": "",
-///   "processNames": [ "Notepad.exe" ],
+///   "processNames": [ "explorer.exe", "Notepad.exe" ],
 ///   "packageFamilyNames": [ "Microsoft.WindowsNotepad_8wekyb3d8bbwe" ],
 ///   "action": "allowAnywhere"
 /// },
@@ -358,17 +358,17 @@ public enum ApplicationRuleAction
     /// </para>
     /// <para>
     /// It suits the applications a user opens from wherever they already are and
-    /// expects to stay there. Two ship, and between them they show both identity
-    /// shapes a user's own rule will need:
+    /// expects to stay there. One grouped default ships, and it shows both
+    /// identity shapes a user's own rule will need:
     /// </para>
     /// <list type="bullet">
     /// <item><description>
-    /// <c>file-explorer</c> — process <c>explorer.exe</c> plus the path
+    /// File Explorer — process <c>explorer.exe</c> plus the path
     /// <c>C:\Windows\explorer.exe</c>, so the shell's own windows are named
     /// twice over.
     /// </description></item>
     /// <item><description>
-    /// <c>notepad</c> — package family <c>Microsoft.WindowsNotepad_8wekyb3d8bbwe</c>
+    /// Notepad — package family <c>Microsoft.WindowsNotepad_8wekyb3d8bbwe</c>
     /// plus process <c>Notepad.exe</c>. The packaged identity claims the Store
     /// app; the process name still claims an older unpackaged install.
     /// </description></item>
@@ -377,9 +377,9 @@ public enum ApplicationRuleAction
     /// A user adding their own follows the same shape: name the application by
     /// its strongest available identity — a package family name or a full path
     /// beats a file name — and choose Anywhere. Calculator, Task Manager,
-    /// Settings, Paint, and Photos are all obvious candidates and none is
-    /// shipped, because a shipped Anywhere rule unmanages an application for
-    /// everybody while a rule the user added unmanages it only for them.
+    /// Paint, and Photos are obvious candidates and none is shipped, because a
+    /// shipped Anywhere rule unmanages an application for everybody while a
+    /// rule the user added unmanages it only for them.
     /// </para>
     /// </remarks>
     AllowAnywhere,

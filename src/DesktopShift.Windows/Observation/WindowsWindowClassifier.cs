@@ -50,18 +50,6 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
             "Shell_SecondaryTrayWnd",
         };
 
-    private static readonly HashSet<string> SystemUiProcesses =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "dwm.exe",
-            "LockApp.exe",
-            "SearchHost.exe",
-            "ShellExperienceHost.exe",
-            "sihost.exe",
-            "StartMenuExperienceHost.exe",
-            "TextInputHost.exe",
-        };
-
     private readonly IWindowsWindowNativeApi nativeApi;
     private readonly uint currentProcessId;
 
@@ -186,7 +174,7 @@ public sealed class WindowsWindowClassifier : IWindowClassifier
             return WindowSkipReason.DesktopShiftWindow;
         }
 
-        return SystemUiProcesses.Contains(identity.ProcessName)
+        return WindowsManagedWindowCatalog.IsManagedProcessName(identity.ProcessName)
             ? WindowSkipReason.SystemWindow
             : WindowSkipReason.None;
     }

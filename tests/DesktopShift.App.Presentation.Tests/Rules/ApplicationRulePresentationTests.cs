@@ -38,9 +38,13 @@ public sealed class ApplicationRulePresentationTests
                 Now,
                 icons);
 
-        Assert.HasCount(7, items);
+        Assert.HasCount(6, items);
 
-        ApplicationRulePresentation ide = items[0];
+        ApplicationRulePresentation run = items[0];
+        Assert.AreEqual("run-observe", run.RuleId);
+        Assert.AreEqual("Run & Observe", run.DisplayName);
+
+        ApplicationRulePresentation ide = items[1];
         Assert.AreEqual("ide-development", ide.RuleId);
         Assert.AreEqual("IDE Development", ide.DisplayName);
         Assert.AreEqual("Process: Code.exe, devenv.exe", ide.MatchSummary);
@@ -73,17 +77,17 @@ public sealed class ApplicationRulePresentationTests
         // Anywhere rule never moves one, so the row must not read as though it
         // were about to.
         ConfigurationDocument document = ConfigurationDefaults.Create();
-        ApplicationRule explorer =
-            ApplicationRuleCatalog.Find(document, "file-explorer")!;
+        ApplicationRule defaultAnywhere =
+            ApplicationRuleCatalog.Find(document, "default-anywhere")!;
 
         ApplicationRulePresentation item =
             ApplicationRulePresentationProjection.Project(
-                explorer,
+                defaultAnywhere,
                 document,
                 lastMatchUtc: null,
                 Now);
 
-        Assert.IsTrue(explorer.AllowsAnywhere);
+        Assert.IsTrue(defaultAnywhere.AllowsAnywhere);
         Assert.AreEqual("Anywhere — stays where it opens", item.TargetSummary);
         Assert.AreEqual("Not used", item.TriggerSummary);
         Assert.AreEqual("Never switches desktop", item.SwitchPolicySummary);
@@ -167,7 +171,7 @@ public sealed class ApplicationRulePresentationTests
             false);
 
         ApplicationRulePresentation browsers =
-            ApplicationRulePresentationProjection.Project(document, [], Now)[1];
+            ApplicationRulePresentationProjection.Project(document, [], Now)[0];
 
         Assert.IsFalse(browsers.IsEnabled);
         Assert.AreEqual("Disabled", browsers.EnabledLabel);

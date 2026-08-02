@@ -111,11 +111,11 @@
                             Grid.Column="2"
                             HorizontalAlignment="Right"
                             Spacing="5">
-                            <Border HorizontalAlignment="Right" Style="{StaticResource DesktopShift.PillStyle}">
+                            <Border HorizontalAlignment="Right" Style="{StaticResource DesktopShift.BadgeStyle}">
                                 <TextBlock
                                     x:Name="ManagedMappingOutcome"
                                     Foreground="{ThemeResource DesktopShift.SuccessBrush}"
-                                    Style="{StaticResource DesktopShift.PillTextStyle}" />
+                                    Style="{StaticResource DesktopShift.BadgeTextStyle}" />
                             </Border>
                             <TextBlock
                                 x:Name="ManagedMappingObservedAt"

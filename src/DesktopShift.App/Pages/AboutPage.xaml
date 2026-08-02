@@ -63,11 +63,11 @@
                     </StackPanel>
 
                     <Border
-                        x:Name="PlatformPill"
+                        x:Name="PlatformBadge"
                         Grid.Column="2"
                         HorizontalAlignment="Left"
-                        Style="{StaticResource DesktopShift.PillStyle}">
-                        <TextBlock Style="{StaticResource DesktopShift.PillTextStyle}" Text="Windows 11" />
+                        Style="{StaticResource DesktopShift.BadgeStyle}">
+                        <TextBlock Style="{StaticResource DesktopShift.BadgeTextStyle}" Text="Windows 11" />
                     </Border>
 
                     <TextBlock

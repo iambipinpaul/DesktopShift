@@ -23,7 +23,7 @@ public sealed partial class AboutPage : Page
     {
         bool isCompact = args.NewSize.Width < 680;
 
-        Place(PlatformPill, isCompact ? 1 : 0, isCompact ? 1 : 2);
+        Place(PlatformBadge, isCompact ? 1 : 0, isCompact ? 1 : 2);
         Grid.SetRow(ProductLinksPanel, isCompact ? 3 : 2);
         ProductLinksPanel.Orientation = isCompact
             ? Orientation.Vertical

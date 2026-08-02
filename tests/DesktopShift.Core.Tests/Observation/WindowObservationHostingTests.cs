@@ -206,7 +206,7 @@ public sealed class WindowObservationHostingTests
         IReadOnlyList<WindowObservationRule> rules =
             host.Services.GetRequiredService<IWindowRuleSource>().GetRules();
 
-        Assert.HasCount(7, rules);
+        Assert.HasCount(6, rules);
         Assert.IsTrue(rules.Any(rule => rule.Id == "ide-development"));
         Assert.IsFalse(rules.Any(rule => rule.Id == "candidate-only"));
     }

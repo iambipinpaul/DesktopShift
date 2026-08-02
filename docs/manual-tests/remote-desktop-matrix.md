@@ -85,10 +85,11 @@ another, and no row shows a window moving twice for a single event.
 | --- | --- |
 | Connect to a host that asks for credentials | The prompt is **owned** by the session frame. Activity records the **frame's** handle, `mstsc.exe`, and window class `TscShellContainerClass` — not the prompt's |
 | The prompt is hosted by `CredentialUIBroker.exe` | Same as above. Ownership decides, so the broker's own identity never reaches matching |
-| A credential window appears with **no** owner | Activity identifies the broker window as unmanaged and sweeps it to the first desktop. It is never guessed onto Remote |
+| A credential window appears with **no** owner | Activity identifies it as a Windows-managed window and leaves it where Windows opened it. It is never guessed onto Remote |
 
 Without an owner there is nothing tying the prompt to a session, so it is never
-guessed onto Remote. It follows the ordinary unmanaged-window policy instead.
+guessed onto Remote. The read-only Windows-managed list applies instead, so
+DesktopShift does not attempt a move Windows is expected to reject.
 
 ### 4. Reconnect dialog
 

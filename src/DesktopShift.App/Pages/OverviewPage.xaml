@@ -123,18 +123,18 @@
                             Style="{StaticResource DesktopShift.CaptionStyle}" />
                     </StackPanel>
                     <Border
-                        x:Name="ModeStatusPill"
+                        x:Name="ModeStatusBadge"
                         Grid.Column="2"
                         VerticalAlignment="Top"
                         AutomationProperties.Name="Compatibility mode"
-                        Style="{StaticResource DesktopShift.PillStyle}">
+                        Style="{StaticResource DesktopShift.BadgeStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="{StaticResource DesktopShift.ItemSpacing}">
                             <Ellipse
                                 Width="8"
                                 Height="8"
                                 VerticalAlignment="Center"
                                 Fill="{ThemeResource DesktopShift.SuccessBrush}" />
-                            <TextBlock x:Name="ModeStatus" Style="{StaticResource DesktopShift.PillTextStyle}" />
+                            <TextBlock x:Name="ModeStatus" Style="{StaticResource DesktopShift.BadgeTextStyle}" />
                         </StackPanel>
                     </Border>
                 </Grid>

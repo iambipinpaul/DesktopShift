@@ -169,6 +169,8 @@ public static class ActivityRecordFactory
             {
                 WindowSkipReason.AllowedAnywhere =>
                     "An Anywhere rule names this application, so the window stays where it opened.",
+                WindowSkipReason.SystemWindow =>
+                    "Windows manages this window, so it stays where Windows opened it.",
                 WindowSkipReason.ActivationNotSwept =>
                     "DesktopShift does not move a window when you switch to it.",
                 _ => $"Skipped: {Humanize(activity.SkipReason)}.",

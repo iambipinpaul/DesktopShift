@@ -47,12 +47,6 @@ public sealed record ManagedDesktopChoice(
 /// </remarks>
 public sealed class RuleEditorViewModel : INotifyPropertyChanged
 {
-    private const string SystemSettingsProcessName = "SystemSettings.exe";
-    private const string SystemSettingsPackageFamilyName =
-        "windows.immersivecontrolpanel_cw5n1h2txyewy";
-    private const string SystemSettingsAppUserModelId =
-        "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel";
-
     private static readonly ImmutableArray<DesktopSwitchPolicy> SwitchPolicies =
     [
         DesktopSwitchPolicy.Never,
@@ -199,7 +193,6 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         set
         {
             SetDraft(draft with { ProcessNames = value ?? string.Empty });
-            Raise(nameof(HasSystemSettingsPlacementNote));
         }
     }
 
@@ -209,7 +202,6 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         set
         {
             SetDraft(draft with { PackageFamilyNames = value ?? string.Empty });
-            Raise(nameof(HasSystemSettingsPlacementNote));
         }
     }
 
@@ -219,26 +211,8 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         set
         {
             SetDraft(draft with { AppUserModelIds = value ?? string.Empty });
-            Raise(nameof(HasSystemSettingsPlacementNote));
         }
     }
-
-    /// <summary>
-    /// Whether the draft identifies Windows Settings, whose reused window has
-    /// placement behaviour worth explaining before the user chooses a target.
-    /// </summary>
-    public bool HasSystemSettingsPlacementNote =>
-        ContainsIdentity(ProcessNames, SystemSettingsProcessName) ||
-        ContainsIdentity(
-            PackageFamilyNames,
-            SystemSettingsPackageFamilyName) ||
-        ContainsIdentity(AppUserModelIds, SystemSettingsAppUserModelId);
-
-    /// <summary>
-    /// Explains the two predictable placement choices for Windows Settings.
-    /// </summary>
-    public string SystemSettingsPlacementNote =>
-        "Windows Settings may reuse and relocate its existing window when launched from another desktop. Choose Anywhere to let it remain on the desktop where you open it. To enforce one Managed Desktop instead, keep Foreground activated enabled; focusing Settings may then move it and switch desktops.";
 
     public string ExecutablePaths
     {
@@ -515,10 +489,6 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
     private bool HasTrigger(ApplicationRuleTrigger trigger) =>
         draft.Triggers.Contains(trigger);
 
-    private static bool ContainsIdentity(string text, string identity) =>
-        ApplicationRuleShape.ParseEntries(text).Any(entry =>
-            string.Equals(entry, identity, StringComparison.OrdinalIgnoreCase));
-
     private void SetTrigger(ApplicationRuleTrigger trigger, bool isSelected)
     {
         if (isSelected != HasTrigger(trigger))
@@ -564,7 +534,6 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
         Raise(nameof(ProcessNames));
         Raise(nameof(PackageFamilyNames));
         Raise(nameof(AppUserModelIds));
-        Raise(nameof(HasSystemSettingsPlacementNote));
         Raise(nameof(ExecutablePaths));
         Raise(nameof(WindowClasses));
         Raise(nameof(TriggerWindowCreated));

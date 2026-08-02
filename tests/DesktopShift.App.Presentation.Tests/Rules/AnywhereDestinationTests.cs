@@ -65,50 +65,6 @@ public sealed class AnywhereDestinationTests
     }
 
     [TestMethod]
-    public void SettingsIdentity_ShowsItsPlacementChoicesInTheEditor()
-    {
-        ConfigurationDocument document = ConfigurationDefaults.Create();
-        RuleEditorViewModel viewModel = new(
-            document,
-            ApplicationRuleDraft.ForNewRule(document));
-
-        Assert.IsFalse(viewModel.HasSystemSettingsPlacementNote);
-
-        viewModel.PackageFamilyNames =
-            "windows.immersivecontrolpanel_cw5n1h2txyewy";
-
-        Assert.IsTrue(viewModel.HasSystemSettingsPlacementNote);
-        Assert.Contains(
-            "Anywhere",
-            viewModel.SystemSettingsPlacementNote,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Foreground activated",
-            viewModel.SystemSettingsPlacementNote,
-            StringComparison.Ordinal);
-    }
-
-    [TestMethod]
-    public void SettingsPlacementNote_RecognizesEachDurableIdentity()
-    {
-        ConfigurationDocument document = ConfigurationDefaults.Create();
-        ApplicationRuleDraft empty = ApplicationRuleDraft.ForNewRule(document);
-
-        RuleEditorViewModel byProcess = new(document, empty)
-        {
-            ProcessNames = "notepad.exe; SYSTEMSETTINGS.EXE",
-        };
-        RuleEditorViewModel byAppUserModelId = new(document, empty)
-        {
-            AppUserModelIds =
-                "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel",
-        };
-
-        Assert.IsTrue(byProcess.HasSystemSettingsPlacementNote);
-        Assert.IsTrue(byAppUserModelId.HasSystemSettingsPlacementNote);
-    }
-
-    [TestMethod]
     public void SelectingAnywhereAndBack_KeepsTheChosenManagedDesktop()
     {
         // Looking at the option must not cost the user the destination they had
@@ -142,11 +98,11 @@ public sealed class AnywhereDestinationTests
     public void AnExistingAnywhereRule_ReopensOnTheAnywhereEntry()
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
-        ApplicationRule explorer =
-            ApplicationRuleCatalog.Find(document, "file-explorer")!;
+        ApplicationRule defaultAnywhere =
+            ApplicationRuleCatalog.Find(document, "default-anywhere")!;
         RuleEditorViewModel viewModel = new(
             document,
-            ApplicationRuleDraft.ForExistingRule(explorer));
+            ApplicationRuleDraft.ForExistingRule(defaultAnywhere));
 
         Assert.IsTrue(viewModel.AllowsAnywhere);
         Assert.AreEqual(
@@ -295,12 +251,12 @@ public sealed class AnywhereDestinationTests
         Assert.Contains(
             "Package: Microsoft.WindowsNotepad_8wekyb3d8bbwe",
             ApplicationRulePresentationProjection.DescribeMatch(
-                ApplicationRuleCatalog.Find(document, "notepad")!),
+                ApplicationRuleCatalog.Find(document, "default-anywhere")!),
             StringComparison.Ordinal);
         Assert.Contains(
             @"Path: C:\Windows\explorer.exe",
             ApplicationRulePresentationProjection.DescribeMatch(
-                ApplicationRuleCatalog.Find(document, "file-explorer")!),
+                ApplicationRuleCatalog.Find(document, "default-anywhere")!),
             StringComparison.Ordinal);
 
         // And every Anywhere rule says so rather than showing an empty desktop.
@@ -353,6 +309,13 @@ public sealed class AnywhereDestinationTests
     public void ADraftForACapturedWindow_DoesNotCollideWithAnExistingRule()
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
+        document = ApplicationRuleCatalog.Add(
+            document,
+            ApplicationRuleCatalog.Find(document, "default-anywhere")! with
+            {
+                Id = "notepad",
+                DisplayName = "Existing Notepad rule",
+            });
         WindowSafeIdentity identity = new(
             "Notepad.exe",
             "Microsoft.WindowsNotepad_8wekyb3d8bbwe",
