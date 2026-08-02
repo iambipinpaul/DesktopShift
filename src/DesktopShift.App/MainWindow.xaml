@@ -76,42 +76,10 @@
             IsSettingsVisible="False"
             IsTitleBarAutoPaddingEnabled="False"
             OpenPaneLength="284"
+            PaneClosing="OnNavigationPaneClosing"
             PaneDisplayMode="Auto"
+            PaneOpening="OnNavigationPaneOpening"
             SelectionChanged="OnNavigationSelectionChanged">
-
-            <NavigationView.PaneHeader>
-                <StackPanel Margin="21,16,16,14" Spacing="15">
-                    <Grid ColumnSpacing="11">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Image
-                            Width="44"
-                            Height="44"
-                            AutomationProperties.AccessibilityView="Raw"
-                            Source="ms-appx:///Assets/DesktopShiftLogo.svg"
-                            Stretch="Uniform" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                            <TextBlock
-                                FontFamily="Segoe UI Variable Display"
-                                FontSize="15"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
-                                Text="DesktopShift" />
-                            <TextBlock
-                                Style="{StaticResource DesktopShift.CaptionStyle}"
-                                Text="Workspace settings" />
-                        </StackPanel>
-                    </Grid>
-                    <AutoSuggestBox
-                        x:Name="SettingsSearchBox"
-                        Height="34"
-                        AutomationProperties.Name="Find a setting"
-                        PlaceholderText="Find a setting"
-                        QueryIcon="Find" />
-                </StackPanel>
-            </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
                 <NavigationViewItem
@@ -119,7 +87,7 @@
                     AutomationProperties.Name="Home"
                     Content="Home"
                     IsSelected="True"
-                    Margin="8,0,4,0"
+                    Margin="8,4,4,0"
                     Tag="overview">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
@@ -160,5 +128,48 @@
                 AutomationProperties.Name="Page content"
                 Background="{ThemeResource DesktopShift.WindowBackgroundBrush}" />
         </NavigationView>
+
+        <!--
+            Branding shares the NavigationView toggle row as a visual overlay.
+            It intentionally participates in no layout measurement, so the
+            first navigation item keeps the same Y position as the pane opens
+            and closes.
+        -->
+        <Grid
+            x:Name="PaneBrandOverlay"
+            Grid.Row="1"
+            Width="216"
+            Height="44"
+            Margin="56,0,12,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Canvas.ZIndex="2"
+            ColumnSpacing="9"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image
+                Width="34"
+                Height="34"
+                VerticalAlignment="Center"
+                Source="ms-appx:///Assets/DesktopShiftLogo.svg"
+                Stretch="Uniform" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                <TextBlock
+                    FontFamily="Segoe UI Variable Display"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
+                    Text="DesktopShift" />
+                <TextBlock
+                    Opacity="0.78"
+                    Style="{StaticResource DesktopShift.CaptionStyle}"
+                    Text="Workspace settings" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
