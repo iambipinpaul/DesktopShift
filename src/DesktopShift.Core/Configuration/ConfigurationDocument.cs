@@ -237,6 +237,11 @@ public sealed record ApplicationRule(
 /// The accent source used by the app. Windows personalization remains the
 /// backward-compatible default; the fixed product blue is strictly opt in.
 /// </param>
+/// <param name="RecordLocalActivity">
+/// Whether routine assignment decisions are retained in the bounded Activity
+/// journal and rolling local activity logs. Off by default; crash reporting is
+/// independent and remains available.
+/// </param>
 public sealed record BehaviorSettings(
     bool StartWithWindows,
     bool StartMinimized,
@@ -253,7 +258,8 @@ public sealed record BehaviorSettings(
         DesktopSwitchShortcutProfile.CtrlAlt,
     HotkeyModifiers DesktopSwitchCustomModifiers =
         DesktopSwitchShortcuts.CtrlAltModifiers,
-    AppAccent Accent = AppAccent.System)
+    AppAccent Accent = AppAccent.System,
+    bool RecordLocalActivity = false)
 {
     /// <summary>
     /// Hotkey bindings, normalized so an omitted collection is empty rather than

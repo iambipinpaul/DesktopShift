@@ -41,6 +41,11 @@ public static class SettingsBehaviorEditor
             NotifyOnCompatibilityWarning = notifyOnCompatibilityWarning,
         };
 
+    public static BehaviorSettings WithDiagnostics(
+        BehaviorSettings current,
+        bool recordLocalActivity) =>
+        current with { RecordLocalActivity = recordLocalActivity };
+
     public static BehaviorSettings WithDesktopNaming(
         BehaviorSettings current,
         bool nameWindowsDesktops) =>

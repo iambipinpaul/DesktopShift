@@ -527,6 +527,7 @@ public sealed partial class MainWindow : Window
         FirstRunViewModel viewModel = new(
             mappings,
             state.StartWithWindows,
+            state.Candidate.Behavior.RecordLocalActivity,
             CreateCompatibilityPresentation(_compatibilityCoordinator.Current));
         viewModel.ValidationSummary = FormatValidationIssues(state.Issues);
         return viewModel;
@@ -582,6 +583,7 @@ public sealed partial class MainWindow : Window
             Behavior = original.Behavior with
             {
                 StartWithWindows = viewModel.StartWithWindows,
+                RecordLocalActivity = viewModel.RecordLocalActivity,
             },
         };
 
@@ -593,6 +595,7 @@ public sealed partial class MainWindow : Window
 
         if (result.Accepted)
         {
+            AcceptedBehaviorHandler?.Invoke(candidate.Behavior);
             // Saving the document only records the request. The registration is
             // what actually makes DesktopShift start with Windows, so it is
             // applied as soon as the choice is accepted rather than waiting for
@@ -719,6 +722,10 @@ public sealed partial class MainWindow : Window
         {
             activityPage.UpdateDiagnostics(
                 _diagnosticsCoordinator,
+                _lifetimeCancellation.Token);
+            activityPage.UpdateRecording(
+                _behaviorSettingsCommand,
+                ApplyAcceptedBehavior,
                 _lifetimeCancellation.Token);
 
             // The same services the Rules page edits through, so a swept window

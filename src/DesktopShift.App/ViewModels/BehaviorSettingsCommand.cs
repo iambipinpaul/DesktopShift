@@ -16,6 +16,8 @@ public sealed record BehaviorSettingsPresentation(
     public bool StartMinimized => Behavior.StartMinimized;
 
     public bool CloseToTray => Behavior.CloseToTray;
+
+    public bool RecordLocalActivity => Behavior.RecordLocalActivity;
 }
 
 /// <summary>

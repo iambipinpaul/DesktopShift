@@ -29,8 +29,8 @@ monitor.
    it, so "assignment still works afterwards" is something you can actually see.
 2. At least two desktops exist that no definition names. They are the control
    group: no row below may change them.
-3. The Activity page is open and filtered to nothing, so recovery events can be
-   read as they arrive.
+3. The Activity page is open, **Record local activity** is enabled, and the page
+   is filtered to nothing, so recovery events can be read as they arrive.
 4. Note whether DesktopShift is in Full Mode or Limited Mode before you start.
    Several rows read differently in each, and the difference is the point.
 

@@ -47,7 +47,8 @@ public sealed class SettingsPresentationTests
             NotifyOnAssignmentFailure: false,
             NotifyOnCompatibilityWarning: true,
             AreHotkeysEnabled: true,
-            Hotkeys: HotkeyDefaults.Bindings);
+            Hotkeys: HotkeyDefaults.Bindings,
+            RecordLocalActivity: true);
 
         BehaviorSettings startup = SettingsBehaviorEditor.WithStartup(
             original,
@@ -61,6 +62,9 @@ public sealed class SettingsPresentationTests
         CollectionAssert.AreEqual(
             original.Hotkeys.ToArray(),
             startup.Hotkeys.ToArray());
+        Assert.AreEqual(
+            original.RecordLocalActivity,
+            startup.RecordLocalActivity);
 
         BehaviorSettings assignment =
             SettingsBehaviorEditor.WithAssignment(original, false);
@@ -81,6 +85,14 @@ public sealed class SettingsPresentationTests
         CollectionAssert.AreEqual(
             original.Hotkeys.ToArray(),
             notifications.Hotkeys.ToArray());
+
+        BehaviorSettings diagnostics =
+            SettingsBehaviorEditor.WithDiagnostics(original, false);
+        Assert.IsFalse(diagnostics.RecordLocalActivity);
+        Assert.AreEqual(original.Theme, diagnostics.Theme);
+        Assert.AreEqual(
+            original.NotifyOnAssignmentFailure,
+            diagnostics.NotifyOnAssignmentFailure);
 
         BehaviorSettings appearance =
             SettingsBehaviorEditor.WithAppearance(

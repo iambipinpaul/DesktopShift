@@ -32,7 +32,8 @@ handed. Section 6a exists for exactly that gap.
    they are never touched.
 2. Note each desktop's name and position before starting. Several rows are only
    meaningful against a recorded starting state.
-3. The Activity page is open, so each decision can be read as it arrives.
+3. The Activity page is open and **Record local activity** is enabled, so each
+   decision can be read as it arrives.
 4. Diagnostics export is available, because the suppression rows are easiest to
    confirm in the exported activity.
 

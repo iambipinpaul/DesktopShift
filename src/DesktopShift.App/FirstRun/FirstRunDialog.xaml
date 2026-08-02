@@ -231,6 +231,30 @@
                         IsOn="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}" />
                 </Grid>
             </Border>
+
+            <Border Padding="16" Style="{StaticResource DesktopShift.CardStyle}">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="3">
+                        <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Record local activity" />
+                        <TextBlock
+                            MaxWidth="620"
+                            HorizontalAlignment="Left"
+                            Style="{StaticResource DesktopShift.CaptionStyle}"
+                            Text="Keep privacy-safe assignment decisions and rotating troubleshooting logs on this device. Nothing is uploaded."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        AutomationProperties.HelpText="Stores routine DesktopShift activity locally for troubleshooting. Crash reporting remains available when this is off."
+                        AutomationProperties.Name="Record local activity"
+                        IsOn="{x:Bind ViewModel.RecordLocalActivity, Mode=TwoWay}" />
+                </Grid>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </ContentDialog>

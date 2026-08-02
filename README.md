@@ -82,6 +82,12 @@ where Windows opens them. Everything else is your decision.
 When a window is swept to the first desktop, the Activity page offers a
 **Create a rule for this app** button on that row.
 
+Local activity recording starts **off**. Turn on **Record local activity** in
+First Run, Activity, or Settings when you want privacy-safe assignment history
+and rotating troubleshooting logs. Turning it off stops new records without
+deleting existing history; **Clear local activity** remains the explicit delete
+action. Nothing is uploaded, and crash reporting is independent.
+
 ### The switch setting on each rule
 
 Each rule has its own setting for this, in the rule editor.
@@ -103,7 +109,7 @@ condition. This is opt in. It is there so you can separate two profiles of the
 same app. Nothing adds them for you.
 
 Whatever your rules use, window titles, command lines, and profile paths are
-never written to the activity log and never included in a diagnostic bundle.
+never written to local activity or included in a diagnostic bundle.
 
 ## Building
 

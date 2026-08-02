@@ -7,15 +7,18 @@ namespace DesktopShift.App.ViewModels;
 public sealed class FirstRunViewModel : INotifyPropertyChanged
 {
     private bool _startWithWindows;
+    private bool _recordLocalActivity;
     private string _validationSummary = string.Empty;
 
     public FirstRunViewModel(
         IEnumerable<FirstRunMappingViewModel> mappings,
         bool startWithWindows,
+        bool recordLocalActivity,
         CompatibilityPresentation compatibility)
     {
         Mappings = new ObservableCollection<FirstRunMappingViewModel>(mappings);
         _startWithWindows = startWithWindows;
+        _recordLocalActivity = recordLocalActivity;
         Compatibility = compatibility;
     }
 
@@ -29,6 +32,12 @@ public sealed class FirstRunViewModel : INotifyPropertyChanged
     {
         get => _startWithWindows;
         set => SetField(ref _startWithWindows, value);
+    }
+
+    public bool RecordLocalActivity
+    {
+        get => _recordLocalActivity;
+        set => SetField(ref _recordLocalActivity, value);
     }
 
     public string ValidationSummary

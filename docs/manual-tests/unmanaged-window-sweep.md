@@ -39,8 +39,9 @@ This document covers what those cannot.
    Spotify, or Paint all work. Nothing below should be attempted with Edge,
    Windows Terminal, Visual Studio Code, Visual Studio, or Remote Desktop, all of
    which are named by a shipped rule.
-4. Open the Activity page in a second DesktopShift window position, or be ready
-   to switch to it, because it is where each result is read.
+4. Open the Activity page, enable **Record local activity**, and keep it in a
+   second DesktopShift window position (or be ready to switch to it), because it
+   is where each result is read.
 
 ## Sweep matrix
 

@@ -7,6 +7,7 @@ using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
+using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Hosting;
 using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
@@ -146,6 +147,9 @@ public partial class App : Application
             _host.Services
                 .GetRequiredService<IThemePreferenceService>()
                 .SetTheme(startupBehavior.Theme);
+            _host.Services
+                .GetRequiredService<IActivityRecordingController>()
+                .SetEnabled(startupBehavior.RecordLocalActivity);
             IAutomaticAssignmentPauseController startupPause =
                 _host.Services.GetRequiredService<
                     IAutomaticAssignmentPauseController>();
@@ -182,6 +186,8 @@ public partial class App : Application
         IAutomaticAssignmentPauseController pauseController =
             _host.Services.GetRequiredService<
                 IAutomaticAssignmentPauseController>();
+        IActivityRecordingController activityRecording =
+            _host.Services.GetRequiredService<IActivityRecordingController>();
 
         NotificationAreaCoordinator notificationArea = new(
             new ShellNotifyIconHost(),
@@ -197,10 +203,13 @@ public partial class App : Application
         _notificationArea = notificationArea;
         window.CloseRequestHandler = notificationArea.HandleWindowClosing;
         window.AcceptedBehaviorHandler = accepted =>
+        {
             notificationArea.UpdateNotificationPreferences(
                 new TrayNotificationPreferences(
                     accepted.NotifyOnAssignmentFailure,
                     accepted.NotifyOnCompatibilityWarning));
+            activityRecording.SetEnabled(accepted.RecordLocalActivity);
+        };
         _shutdownSequence = CreateShutdownSequence(notificationArea);
         ShellLaunchDisposition disposition = ShellLifetimePolicy.ResolveLaunch(
             behavior,

@@ -47,7 +47,8 @@ that class, and the connection dialog stays wherever it opens.
 
 1. Managed Desktops are reconciled and **Remote** is bound (Desktops page shows
    a runtime desktop for it).
-2. The Activity page is open, so each row can be read as it arrives.
+2. The Activity page is open and **Record local activity** is enabled, so each
+   row can be read as it arrives.
 3. Start from a desktop that is **not** Remote, so a move is observable.
 4. The `remote-desktop` rule is enabled with the default switch policy,
    `OnForegroundActivation`.

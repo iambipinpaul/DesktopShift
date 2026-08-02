@@ -362,22 +362,30 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton(
             static _ => RollingDiagnosticLogOptions.Default);
+        services.TryAddSingleton<ActivityRecordingController>();
+        services.TryAddSingleton<IActivityRecordingController>(
+            static serviceProvider =>
+                serviceProvider.GetRequiredService<ActivityRecordingController>());
         services.TryAddSingleton(
             static serviceProvider => new RollingDiagnosticLog(
                 serviceProvider.GetRequiredService<IDiagnosticLogStore>(),
                 serviceProvider.GetRequiredService<RollingDiagnosticLogOptions>()));
         services.TryAddSingleton<IDiagnosticLogWriter>(
             static serviceProvider =>
-                serviceProvider.GetRequiredService<RollingDiagnosticLog>());
+                new RecordingDiagnosticLogWriter(
+                    serviceProvider.GetRequiredService<RollingDiagnosticLog>(),
+                    serviceProvider.GetRequiredService<IActivityRecordingController>()));
         services.TryAddSingleton(
             static serviceProvider => new BoundedActivityJournal(
                 serviceProvider.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IActivityJournal>(
             static serviceProvider =>
-                serviceProvider.GetRequiredService<BoundedActivityJournal>());
+                new RecordingActivityJournal(
+                    serviceProvider.GetRequiredService<BoundedActivityJournal>(),
+                    serviceProvider.GetRequiredService<IActivityRecordingController>()));
         services.TryAddSingleton<IActivityJournalProjection>(
             static serviceProvider =>
-                serviceProvider.GetRequiredService<BoundedActivityJournal>());
+                serviceProvider.GetRequiredService<IActivityJournal>());
         services.TryAddSingleton<ActivityDiagnosticsRecorder>();
         services.TryAddSingleton<DiagnosticsCoordinator>();
         services.TryAddSingleton<IDiagnosticsCoordinator>(

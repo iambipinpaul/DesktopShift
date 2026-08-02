@@ -114,6 +114,7 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsTrue(defaults.Behavior.StartWithWindows);
         Assert.IsTrue(defaults.Behavior.StartMinimized);
         Assert.IsTrue(defaults.Behavior.CloseToTray);
+        Assert.IsFalse(defaults.Behavior.RecordLocalActivity);
 
         // Desktop switching still ships off. Ten global combinations must not be
         // claimed before the user asks for them.
@@ -317,6 +318,9 @@ public sealed class ConfigurationAcceptanceTests
         // not have to move.
         Assert.AreEqual(ApplicationRuleAction.MoveToDesktop, rule.Action);
         Assert.IsFalse(rule.AllowsAnywhere);
+        Assert.IsFalse(
+            state.Active.Behavior.RecordLocalActivity,
+            "A document written before the preference existed must default to off.");
         // The missing optional members still deserialize with their historical
         // defaults after the schema-1 document is advanced to the current
         // version.

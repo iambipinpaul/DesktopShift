@@ -48,8 +48,18 @@
                 <StackPanel
                     x:Name="ActivityHeaderActions"
                     Grid.Column="1"
+                    VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8">
+                    <ToggleSwitch
+                        x:Name="RecordActivityToggle"
+                        VerticalAlignment="Center"
+                        AutomationProperties.HelpText="Stores routine DesktopShift activity locally for troubleshooting. Nothing is uploaded."
+                        AutomationProperties.Name="Record local activity"
+                        IsEnabled="False"
+                        OffContent="Off"
+                        OnContent="On"
+                        Toggled="OnRecordActivityToggled" />
                     <Button
                         x:Name="ClearActivityButton"
                         AutomationProperties.Name="Clear local activity"

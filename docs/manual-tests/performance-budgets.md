@@ -26,12 +26,14 @@ This document covers what those cannot.
    ones being promised.
 2. Complete first run, so the configured Managed Desktops exist and rules are
    active.
-3. Restart the machine and sign in cleanly. A session that has been up for days
+3. Enable **Record local activity** so `activity.json` can prove that the idle
+   period produced no events. The preference is off by default.
+4. Restart the machine and sign in cleanly. A session that has been up for days
    carries other applications' memory pressure into the working-set figure.
-4. Leave the machine on mains power, and disable any battery-saver or thermal
+5. Leave the machine on mains power, and disable any battery-saver or thermal
    profile that throttles the processor. A throttled run measures the profile,
    not the application.
-5. Note the Windows build, the machine's core count, and how many Managed
+6. Note the Windows build, the machine's core count, and how many Managed
    Desktops are configured. None of the figures below is reproducible without
    them.
 

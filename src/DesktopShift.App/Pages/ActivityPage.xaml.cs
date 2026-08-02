@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DesktopShift.App.Rules;
+using DesktopShift.App.Settings;
+using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Diagnostics;
@@ -107,11 +109,16 @@ public sealed partial class ActivityPage : Page
     private IWindowAssignmentActivityProjection? assignmentProjection;
     private IDiagnosticsCoordinator? diagnostics;
     private IActivityJournalProjection? journal;
+    private BehaviorSettingsCommand? behaviorSettingsCommand;
+    private Action<BehaviorSettings>? applyAcceptedBehavior;
     private RulesPageServices? ruleAuthoring;
     private CancellationToken lifetimeToken = CancellationToken.None;
     private ImmutableArray<string> applicationOptions = [];
     private ImmutableArray<string> ruleOptions = [];
     private bool isApplyingFilterOptions;
+    private bool isApplyingRecordingPreference;
+    private BehaviorSettings currentBehavior =
+        ConfigurationDefaults.Create().Behavior;
 
     public ActivityPage()
     {
@@ -156,6 +163,121 @@ public sealed partial class ActivityPage : Page
         }
 
         RefreshSnapshot();
+    }
+
+    /// <summary>
+    /// Wires the persistent recording preference to the Activity-page shortcut.
+    /// </summary>
+    public void UpdateRecording(
+        BehaviorSettingsCommand command,
+        Action<BehaviorSettings> applyAccepted,
+        CancellationToken cancellationToken)
+    {
+        behaviorSettingsCommand = command ??
+            throw new ArgumentNullException(nameof(command));
+        applyAcceptedBehavior = applyAccepted ??
+            throw new ArgumentNullException(nameof(applyAccepted));
+        lifetimeToken = cancellationToken;
+        _ = LoadRecordingPreferenceAsync();
+    }
+
+    private async Task LoadRecordingPreferenceAsync()
+    {
+        if (behaviorSettingsCommand is null || lifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            BehaviorSettingsPresentation presentation =
+                await behaviorSettingsCommand.LoadAsync(lifetimeToken);
+            currentBehavior = presentation.Behavior;
+            ApplyRecordingPreference(currentBehavior.RecordLocalActivity);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            ReportStatus(
+                InfoBarSeverity.Error,
+                "Activity preference could not be loaded",
+                exception.Message);
+        }
+    }
+
+    private async void OnRecordActivityToggled(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (isApplyingRecordingPreference || behaviorSettingsCommand is null)
+        {
+            return;
+        }
+
+        bool requested = RecordActivityToggle.IsOn;
+        RecordActivityToggle.IsEnabled = false;
+        try
+        {
+            BehaviorSettingsPresentation presentation =
+                await behaviorSettingsCommand.ApplyAsync(
+                    SettingsBehaviorEditor.WithDiagnostics(
+                        currentBehavior,
+                        requested),
+                    lifetimeToken);
+            if (presentation.Accepted)
+            {
+                currentBehavior = presentation.ActiveBehavior;
+                ApplyRecordingPreference(currentBehavior.RecordLocalActivity);
+                applyAcceptedBehavior?.Invoke(presentation.ActiveBehavior);
+                ReportStatus(
+                    InfoBarSeverity.Success,
+                    requested ? "Activity recording enabled" : "Activity recording disabled",
+                    requested
+                        ? "New privacy-safe activity and rotating logs will be kept on this device."
+                        : "No new routine activity or rolling logs will be retained. Existing history was not deleted.");
+            }
+            else
+            {
+                currentBehavior = presentation.ActiveBehavior;
+                ApplyRecordingPreference(currentBehavior.RecordLocalActivity);
+                ReportStatus(
+                    InfoBarSeverity.Warning,
+                    "Activity preference was not saved",
+                    string.Join(
+                        Environment.NewLine,
+                        presentation.Issues.Select(
+                            static issue => $"{issue.Path}: {issue.Message}")));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            ApplyRecordingPreference(currentBehavior.RecordLocalActivity);
+            ReportStatus(
+                InfoBarSeverity.Error,
+                "Activity preference could not be saved",
+                exception.Message);
+        }
+    }
+
+    private void ApplyRecordingPreference(bool isEnabled)
+    {
+        isApplyingRecordingPreference = true;
+        try
+        {
+            RecordActivityToggle.IsOn = isEnabled;
+            RecordActivityToggle.IsEnabled = behaviorSettingsCommand is not null;
+        }
+        finally
+        {
+            isApplyingRecordingPreference = false;
+        }
+
+        UpdateState();
     }
 
     /// <summary>
@@ -677,7 +799,9 @@ public sealed partial class ActivityPage : Page
         ActivityList.Visibility = hasVisible ? Visibility.Visible : Visibility.Collapsed;
         EmptyStateMessage.Text = records.Count > 0
             ? "No events match the current filters."
-            : "Decisions, moves, switches, and assignment results will appear here with privacy-safe window identity.";
+            : currentBehavior.RecordLocalActivity
+                ? "Decisions, moves, switches, and assignment results will appear here with privacy-safe window identity."
+                : "Activity recording is off. Enable it to troubleshoot window assignments. Nothing is uploaded.";
         ActivityCount.Text = visible.Count == 1
             ? $"1 of {records.Count} events"
             : $"{visible.Count} of {records.Count} events";

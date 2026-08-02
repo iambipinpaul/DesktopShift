@@ -340,6 +340,17 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <FontIcon VerticalAlignment="Center" Glyph="&#xE9D9;" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Record local activity" />
+                                <TextBlock Style="{StaticResource DesktopShift.RowDescriptionStyle}" Text="Keep privacy-safe assignment history and rotating troubleshooting logs on this device. Nothing is uploaded." />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="RecordLocalActivityToggle" Grid.Column="2" AutomationProperties.Name="Record local activity" OffContent="" OnContent="" Toggled="OnPersistedBehaviorChanged" />
+                        </Grid>
+                    </Border>
+                    <Border BorderThickness="0,1,0,0" Style="{StaticResource DesktopShift.SettingRowStyle}">
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <FontIcon VerticalAlignment="Center" Glyph="&#xE8A5;" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Local diagnostic logs" />
                                 <TextBlock x:Name="DiagnosticLogLocation" IsTextSelectionEnabled="True" Style="{StaticResource DesktopShift.RowDescriptionStyle}" />
                             </StackPanel>

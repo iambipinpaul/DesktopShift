@@ -34,6 +34,37 @@ public sealed class DiagnosticsHostingAcceptanceTests
     private static readonly Guid OtherDesktopId = Guid.NewGuid();
 
     [TestMethod]
+    public async Task RecordingStartsOff_AndRetainsNoRoutineActivity()
+    {
+        FakePlacementService placement = new();
+        placement.SetCurrent(99, OtherDesktopId);
+        using IHost host = CreateHost(placement, recordActivity: false);
+        await host.StartAsync();
+
+        _ = await host.Services
+            .GetRequiredService<WindowObservationProcessor>()
+            .ProcessAsync(
+                new WindowEvent(
+                    0,
+                    WindowEventKind.Created,
+                    (nint)99,
+                    DateTimeOffset.UtcNow));
+
+        Assert.IsFalse(
+            host.Services
+                .GetRequiredService<IActivityRecordingController>()
+                .IsEnabled);
+        Assert.IsEmpty(
+            host.Services
+                .GetRequiredService<IActivityJournalProjection>()
+                .Snapshot);
+        Assert.IsEmpty(
+            host.Services.GetRequiredService<RollingDiagnosticLog>().Files());
+
+        await host.StopAsync();
+    }
+
+    [TestMethod]
     public async Task OneAssignment_ProducesCorrelatedDecisionMoveSwitchAndResult()
     {
         FakePlacementService placement = new();
@@ -296,11 +327,12 @@ public sealed class DiagnosticsHostingAcceptanceTests
 
     private static IHost CreateHost(
         FakePlacementService placement,
-        string? logRootDirectory = null)
+        string? logRootDirectory = null,
+        bool recordActivity = true)
     {
         ConfigurationDocument configuration = ConfigurationDefaults.Create();
 
-        return DesktopShiftHost.Create(services =>
+        IHost host = DesktopShiftHost.Create(services =>
         {
             services.AssignOpenedWindowsInline();
             services.AddSingleton<IConfigurationService>(
@@ -330,6 +362,11 @@ public sealed class DiagnosticsHostingAcceptanceTests
             services.AddDesktopShiftAssignments();
             services.AddDesktopShiftDiagnostics();
         });
+
+        host.Services
+            .GetRequiredService<IActivityRecordingController>()
+            .SetEnabled(recordActivity);
+        return host;
     }
 
     private sealed class TemporaryDirectory : IDisposable

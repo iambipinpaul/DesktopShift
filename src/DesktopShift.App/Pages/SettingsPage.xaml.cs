@@ -147,6 +147,9 @@ public sealed partial class SettingsPage : Page
             requested,
             AssignmentFailureNotificationToggle.IsOn,
             CompatibilityWarningNotificationToggle.IsOn);
+        requested = SettingsBehaviorEditor.WithDiagnostics(
+            requested,
+            RecordLocalActivityToggle.IsOn);
 
         _ = await PersistBehaviorAsync(requested);
     }
@@ -268,6 +271,8 @@ public sealed partial class SettingsPage : Page
                 currentBehavior.NotifyOnAssignmentFailure;
             CompatibilityWarningNotificationToggle.IsOn =
                 currentBehavior.NotifyOnCompatibilityWarning;
+            RecordLocalActivityToggle.IsOn =
+                currentBehavior.RecordLocalActivity;
             ThemePicker.SelectedIndex = currentBehavior.Theme switch
             {
                 AppTheme.Light => 1,
