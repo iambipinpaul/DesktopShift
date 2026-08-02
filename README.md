@@ -2,17 +2,6 @@
 
 Automatically assign application windows to managed Windows Virtual Desktops.
 
-Windows virtual desktops work well right up until you lose track of which one
-your editor ended up on. DesktopShift takes the bookkeeping away: you say once
-that VS Code belongs on **IDE Development**, and from then on its windows go
-there by themselves.
-
-It lives in the tray. This page explains what it does in plain words, so nothing
-it does comes as a surprise.
-
-![The DesktopShift Home page, showing workspace health, enabled rule and managed
-desktop counts, and quick settings for automatic assignment](docs/images/home.png)
-
 ## Install
 
 Get it from the
@@ -26,6 +15,19 @@ winget install 9MVQDQ26SCCG -s msstore
 Windows 11 22H2 or newer, on x64 or ARM64. Everything the app needs ships inside
 the package: no separate runtime to install, no DLLs to copy, no configuration
 files to edit.
+
+## What it does
+
+Windows virtual desktops work well right up until you lose track of which one
+your editor ended up on. DesktopShift takes the bookkeeping away: you say once
+that VS Code belongs on **IDE Development**, and from then on its windows go
+there by themselves.
+
+It lives in the tray. This page explains what it does in plain words, so nothing
+it does comes as a surprise.
+
+![The DesktopShift Home page, showing workspace health, enabled rule and managed
+desktop counts, and quick settings for automatic assignment](docs/images/home.png)
 
 ## Getting started
 
