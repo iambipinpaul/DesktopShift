@@ -166,6 +166,7 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService.Changed +=
             OnManagedDesktopReconciliationChanged;
         RootLayout.Loaded += OnRootLayoutLoaded;
+        RootLayout.ActualThemeChanged += OnRootLayoutActualThemeChanged;
         AppWindow.Closing += OnAppWindowClosing;
         Closed += OnClosed;
 
@@ -316,18 +317,53 @@ public sealed partial class MainWindow : Window
             _ => ElementTheme.Default,
         };
 
+        ApplyCaptionButtonColors(theme);
         ApplyAccent(_currentAccent);
+    }
+
+    private void OnRootLayoutActualThemeChanged(FrameworkElement sender, object args) =>
+        ApplyCaptionButtonColors(_themePreferenceService.CurrentTheme);
+
+    private void ApplyCaptionButtonColors(AppTheme theme)
+    {
+        if (_highContrastMonitor.IsHighContrast)
+        {
+            // Returning these nullable colors to Windows preserves the user's
+            // High Contrast caption-button palette.
+            AppWindow.TitleBar.ButtonForegroundColor = null;
+            AppWindow.TitleBar.ButtonInactiveForegroundColor = null;
+            return;
+        }
+
+        bool useDarkPalette = theme switch
+        {
+            AppTheme.Light => false,
+            AppTheme.Dark => true,
+            _ => RootLayout.ActualTheme == ElementTheme.Dark,
+        };
+
+        AppWindow.TitleBar.ButtonForegroundColor = useDarkPalette
+            ? global::Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+            : global::Windows.UI.Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A);
+        AppWindow.TitleBar.ButtonInactiveForegroundColor = useDarkPalette
+            ? global::Windows.UI.Color.FromArgb(0xFF, 0xD2, 0xD2, 0xD2)
+            : global::Windows.UI.Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A);
     }
 
     private void OnHighContrastChanged(AccessibilitySettings sender, object args)
     {
         if (DispatcherQueue.HasThreadAccess)
         {
+            ApplyCaptionButtonColors(_themePreferenceService.CurrentTheme);
             ApplyAccent(_currentAccent);
             return;
         }
 
-        _ = DispatcherQueue.TryEnqueue(() => ApplyAccent(_currentAccent));
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplyCaptionButtonColors(_themePreferenceService.CurrentTheme);
+            ApplyAccent(_currentAccent);
+        });
     }
 
     private void ApplyAccent(AppAccent accent)
@@ -855,6 +891,7 @@ public sealed partial class MainWindow : Window
         _managedDesktopReconciliationService.Changed -=
             OnManagedDesktopReconciliationChanged;
         RootLayout.Loaded -= OnRootLayoutLoaded;
+        RootLayout.ActualThemeChanged -= OnRootLayoutActualThemeChanged;
         AppWindow.Closing -= OnAppWindowClosing;
         Closed -= OnClosed;
         _lifetimeCancellation.Dispose();
