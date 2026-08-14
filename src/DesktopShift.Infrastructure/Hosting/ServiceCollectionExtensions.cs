@@ -177,6 +177,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IManagedDesktopTopologyRecoveryService>(
             static serviceProvider => new ManagedDesktopTopologyRecoveryService(
                 serviceProvider.GetRequiredService<IManagedDesktopReconciliationService>(),
+                serviceProvider.GetRequiredService<IConfigurationService>(),
                 serviceProvider.GetRequiredService<IManagedDesktopRecreationGate>(),
                 serviceProvider.GetRequiredService<TimeProvider>(),
                 serviceProvider.GetService<IWindowReassignmentService>(),

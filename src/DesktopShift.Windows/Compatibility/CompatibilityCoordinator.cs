@@ -192,6 +192,7 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
                 ("enumerateDesktops", capabilities.CanEnumerateDesktops.ToString()),
                 ("getCurrentDesktop", capabilities.CanGetCurrentDesktop.ToString()),
                 ("createDesktop", capabilities.CanCreateDesktop.ToString()),
+                ("reorderDesktop", capabilities.CanReorderDesktop.ToString()),
                 ("switchDesktop", capabilities.CanSwitchDesktop.ToString()),
                 ("topologyNotifications", capabilities.CanObserveTopologyChanges.ToString())));
     }

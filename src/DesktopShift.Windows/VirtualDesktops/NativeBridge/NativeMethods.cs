@@ -30,6 +30,7 @@ internal static partial class NativeMethods
         LayoutProbe = 14,
         DesktopRename = 15,
         ApplicationViewLookup = 16,
+        DesktopReorder = 17,
     }
 
     internal enum NativeTopologyReason : uint
@@ -110,6 +111,13 @@ internal static partial class NativeMethods
     internal static extern int DesktopShiftNative_SwitchDesktop(
         nint adapter,
         in Guid desktopId,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_MoveDesktop(
+        nint adapter,
+        in Guid desktopId,
+        uint targetPosition,
         out NativeError error);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]

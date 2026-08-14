@@ -30,6 +30,7 @@ extern "C"
         DesktopShiftNativeStageLayoutProbe = 14,
         DesktopShiftNativeStageDesktopRename = 15,
         DesktopShiftNativeStageApplicationViewLookup = 16,
+        DesktopShiftNativeStageDesktopReorder = 17,
     };
 
     enum DesktopShiftNativeTopologyReason : uint32_t
@@ -100,6 +101,12 @@ extern "C"
         const GUID* desktopId,
         DesktopShiftNativeError* error) noexcept;
 
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_MoveDesktop(
+        void* adapter,
+        const GUID* desktopId,
+        uint32_t targetPosition,
+        DesktopShiftNativeError* error) noexcept;
+
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_MoveWindowToDesktop(
         void* adapter,
         intptr_t windowHandle,
@@ -115,9 +122,8 @@ extern "C"
         void* adapter,
         DesktopShiftNativeError* error) noexcept;
 
-    // Naming is the only mutation here that targets a desktop rather than a
-    // window. There is deliberately no counterpart for removing or reordering
-    // one; see DesktopTopologyNotificationContractTests.
+    // Naming and reordering are the only mutations here that target a desktop
+    // rather than a window. Removing a desktop remains deliberately absent.
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_SetDesktopName(
         void* adapter,
         const GUID* desktopId,

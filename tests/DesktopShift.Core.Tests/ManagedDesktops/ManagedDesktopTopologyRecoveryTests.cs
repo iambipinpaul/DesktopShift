@@ -352,19 +352,65 @@ public sealed class ManagedDesktopTopologyRecoveryTests
                 remap.PreviousPosition == 0 &&
                 remap.Position == 2));
 
-        // An Application Rule targets a semantic key, so a reorder repoints
-        // nothing and saves nothing.
+        // The app's preferred order follows the managed desktops' relative
+        // order in Task View. The unmanaged Personal desktop remains outside
+        // the configured list.
+        CollectionAssert.AreEqual(
+            new[] { "web", "code" },
+            harness.Configuration.CurrentState.Active!.ManagedDesktops
+                .Select(static desktop => desktop.SemanticKey)
+                .ToArray());
+        CollectionAssert.AreEqual(
+            new[] { 1, 2 },
+            harness.Configuration.CurrentState.Active.ManagedDesktops
+                .Select(static desktop => desktop.PreferredOrder)
+                .ToArray());
+
+        // Application Rules target semantic keys, so the reorder repoints
+        // nothing even though the preferred order is saved.
         CollectionAssert.AreEqual(
             new[] { "code", "web" },
             harness.Configuration.CurrentState.Active!.ApplicationRules
                 .Select(static rule => rule.TargetDesktopKey)
                 .ToArray());
-        Assert.AreEqual(0, harness.Configuration.SaveCallCount);
+        Assert.AreEqual(1, harness.Configuration.SaveCallCount);
 
         // Nothing was created, switched, or moved for a reorder.
         Assert.AreEqual(0, harness.Provider.MutatingCallCount);
         Assert.AreEqual(0, harness.Windows.ReassignAllCallCount);
         Assert.HasCount(3, harness.Provider.Desktops);
+    }
+
+    [TestMethod]
+    public async Task FirstMovedNotification_SynchronizesPreferredOrderWithoutABaseline()
+    {
+        Guid codeId = Guid.NewGuid();
+        Guid webId = Guid.NewGuid();
+        Harness harness = Harness.Create(
+            MaintenanceTopologyProvider.Full(
+                new VirtualDesktopDescriptor(webId, "Web", 0, true),
+                new VirtualDesktopDescriptor(codeId, "Code", 1, false)),
+            [
+                Definition("code", recreateWhenMissing: true),
+                Definition("web", recreateWhenMissing: true, order: 2, name: "Web"),
+            ],
+            [
+                new ManagedDesktopBinding("code", codeId),
+                new ManagedDesktopBinding("web", webId),
+            ]);
+
+        ManagedDesktopTopologyRecoveryResult result =
+            await harness.Service.HandleTopologyChangedAsync("Moved");
+
+        Assert.IsEmpty(result.Remaps);
+        Assert.AreEqual(1, harness.Configuration.SaveCallCount);
+        CollectionAssert.AreEqual(
+            new[] { "web", "code" },
+            harness.Configuration.CurrentState.Active!.ManagedDesktops
+                .Select(static desktop => desktop.SemanticKey)
+                .ToArray());
+        Assert.AreEqual(0, harness.Provider.MutatingCallCount);
+        Assert.AreEqual(0, harness.Windows.ReassignAllCallCount);
     }
 
     [TestMethod]
@@ -589,6 +635,7 @@ public sealed class ManagedDesktopTopologyRecoveryTests
                 journal,
                 new ManagedDesktopTopologyRecoveryService(
                     reconciliation,
+                    configuration,
                     cooldown,
                     time,
                     windows,

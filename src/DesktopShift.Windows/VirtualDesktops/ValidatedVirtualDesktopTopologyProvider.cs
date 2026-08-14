@@ -22,16 +22,20 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
     /// <summary>
     /// Full Mode on a build that also proved it lays the shell manager vtable
-    /// out where naming lives.
+    /// out where naming and reordering live.
     /// </summary>
     /// <remarks>
     /// This is a strict superset, and the difference is deliberately the only
-    /// difference. Failing to prove the naming layout costs naming and nothing
-    /// else — a machine that cannot be named on still enumerates, creates,
-    /// switches and moves exactly as before, and is still Full Mode.
+    /// difference. Failing to prove the extended layout costs naming and
+    /// desktop reordering only — the provider still enumerates, creates,
+    /// switches and moves windows exactly as before, and remains in Full Mode.
     /// </remarks>
-    private static readonly VirtualDesktopCapabilities FullCapabilitiesWithNaming =
-        FullManagedDesktopCapabilities with { CanRenameDesktop = true };
+    private static readonly VirtualDesktopCapabilities FullCapabilitiesWithExtendedLayout =
+        FullManagedDesktopCapabilities with
+        {
+            CanRenameDesktop = true,
+            CanReorderDesktop = true,
+        };
 
     /// <summary>
     /// The shortest gap between two rebuild attempts.
@@ -216,19 +220,20 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             return DesktopTopologyProviderResult.Succeeded();
         }
 
-        // Naming needs manager slots past the validated prefix, so it is not
-        // inferred from Full Mode — it is asked for and answered. The bridge
+        // Naming and reordering need manager slots past the validated prefix,
+        // so they are not inferred from Full Mode — they are asked for and
+        // answered together. The bridge
         // refuses outright on a build family that is not cleared for those
         // slots, so an unrecognized build never reaches them, and the probe
         // itself only ever performs a read-only lookup.
         //
-        // A refusal here is not a fallback. It costs naming and leaves every
-        // other Full Mode capability standing.
-        bool canRename;
+        // A refusal here is not a fallback. It costs naming and desktop
+        // reordering while leaving every other Full Mode capability standing.
+        bool canUseExtendedLayout;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            canRename = bridge.ProbeDesktopLookup().IsSuccess;
+            canUseExtendedLayout = bridge.ProbeDesktopLookup().IsSuccess;
         }
         catch (OperationCanceledException)
         {
@@ -237,7 +242,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         }
         catch (Exception)
         {
-            canRename = false;
+            canUseExtendedLayout = false;
         }
 
         lock (syncRoot)
@@ -250,8 +255,8 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             activeBridge?.Dispose();
             activeBridge = bridge;
             identity = CreateFullIdentity(build.Build);
-            capabilities = canRename
-                ? FullCapabilitiesWithNaming
+            capabilities = canUseExtendedLayout
+                ? FullCapabilitiesWithExtendedLayout
                 : FullManagedDesktopCapabilities;
             lastFallback = null;
 
@@ -483,6 +488,60 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
                 DesktopTopologyProviderResult.Failed(
                     "native.rename_exception",
                     "Virtual desktop naming failed unexpectedly.",
+                    exception.HResult));
+        }
+    }
+
+    public ValueTask<DesktopTopologyProviderResult> MoveDesktopAsync(
+        Guid desktopId,
+        int targetPosition,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(targetPosition);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!Capabilities.CanReorderDesktop)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Unsupported(
+                    "native.reorder_unsupported",
+                    "This Windows build did not prove the extended shell-manager layout, so Task View reordering is unavailable."));
+        }
+
+        INativeVirtualDesktopBridge? bridge = GetActiveBridge();
+        if (bridge is null)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Unsupported(
+                    "native.reorder_unsupported",
+                    "The validated adapter is no longer active, so Task View reordering is unavailable."));
+        }
+
+        try
+        {
+            NativeBridgeResult result = bridge.MoveDesktop(desktopId, targetPosition);
+            if (result.IsSuccess)
+            {
+                return ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
+            }
+
+            DesktopTopologyProviderError error = ToProviderError(
+                result.Error,
+                "native.desktop_reorder_failed",
+                "The validated adapter could not reorder the virtual desktop.");
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    error.Code,
+                    error.Message,
+                    error.HResult,
+                    error.NativeErrorCode));
+        }
+        catch (Exception exception)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    "native.reorder_exception",
+                    "Virtual desktop reordering failed unexpectedly.",
                     exception.HResult));
         }
     }
@@ -770,8 +829,8 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     /// This proves exactly what activation proves, in the same order: a bridge
     /// that validates, and notifications that register. A rebuild that skipped
     /// either would be a route into Full Mode that never established Full Mode.
-    /// Naming is asked for separately and a refusal costs naming alone, which is
-    /// the same bargain activation makes.
+    /// The extended layout is asked for separately; a refusal costs naming and
+    /// desktop reordering only, which is the same bargain activation makes.
     /// </para>
     /// <para>
     /// Activation happens outside the lock because it is COM work against a
@@ -819,7 +878,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         }
 
         INativeVirtualDesktopBridge bridge = activation.Value!;
-        bool canRename;
+        bool canUseExtendedLayout;
         try
         {
             if (!bridge.Validate().IsSuccess ||
@@ -829,7 +888,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
                 return null;
             }
 
-            canRename = bridge.ProbeDesktopLookup().IsSuccess;
+            canUseExtendedLayout = bridge.ProbeDesktopLookup().IsSuccess;
         }
         catch (Exception)
         {
@@ -848,8 +907,8 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             activeBridge?.Dispose();
             activeBridge = bridge;
             identity = CreateFullIdentity(build);
-            capabilities = canRename
-                ? FullCapabilitiesWithNaming
+            capabilities = canUseExtendedLayout
+                ? FullCapabilitiesWithExtendedLayout
                 : FullManagedDesktopCapabilities;
 
             // The fallback record is cleared because it is no longer true. A

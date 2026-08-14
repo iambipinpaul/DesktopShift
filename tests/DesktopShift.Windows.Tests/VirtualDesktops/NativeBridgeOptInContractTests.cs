@@ -49,6 +49,12 @@ public sealed class NativeBridgeOptInContractTests
                     "DesktopShiftNative_SetDesktopName",
                     out entryPoint));
             Assert.AreNotEqual(0, entryPoint);
+            Assert.IsTrue(
+                NativeLibrary.TryGetExport(
+                    library,
+                    "DesktopShiftNative_MoveDesktop",
+                    out entryPoint));
+            Assert.AreNotEqual(0, entryPoint);
 
             IReadOnlyDictionary<string, uint> stages = Enum
                 .GetValues<NativeMethods.NativeStage>()
@@ -61,6 +67,7 @@ public sealed class NativeBridgeOptInContractTests
             Assert.AreEqual(14U, stages["LayoutProbe"]);
             Assert.AreEqual(15U, stages["DesktopRename"]);
             Assert.AreEqual(16U, stages["ApplicationViewLookup"]);
+            Assert.AreEqual(17U, stages["DesktopReorder"]);
         }
         finally
         {

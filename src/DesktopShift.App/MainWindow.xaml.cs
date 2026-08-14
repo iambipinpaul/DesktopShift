@@ -828,6 +828,7 @@ public sealed partial class MainWindow : Window
         AddCapability(capabilities.CanEnumerateDesktops, "enumerate desktops", available, unavailable);
         AddCapability(capabilities.CanGetCurrentDesktop, "get the current desktop", available, unavailable);
         AddCapability(capabilities.CanCreateDesktop, "create desktops", available, unavailable);
+        AddCapability(capabilities.CanReorderDesktop, "reorder desktops", available, unavailable);
         AddCapability(capabilities.CanSwitchDesktop, "switch desktops", available, unavailable);
         AddCapability(
             capabilities.CanObserveTopologyChanges,

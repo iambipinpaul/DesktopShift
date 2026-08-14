@@ -75,11 +75,9 @@ namespace DesktopShift::NativeBridge::ShellAbi
             IVirtualDesktop24H2* desktop) = 0;
         virtual HRESULT STDMETHODCALLTYPE CreateDesktop(IVirtualDesktop24H2** desktop) = 0;
 
-        // Everything below exists for one reason: SetDesktopName is the
-        // fourteenth slot, and a vtable cannot be entered halfway. Naming a
-        // managed destination in Task View needs slot 14, so slots 10 to 13
-        // have to be declared to place it, whether DesktopShift wants them or
-        // not.
+        // MoveDesktop and SetDesktopName live in the extended manager layout.
+        // A vtable cannot be entered halfway, so every intervening slot must be
+        // declared at its real offset even when DesktopShift never calls it.
         //
         // That is a real cost and it is stated rather than hidden. This
         // declaration now claims knowledge of four slots further into private
@@ -90,19 +88,19 @@ namespace DesktopShift::NativeBridge::ShellAbi
         // Three things hold that risk down, and all three are required:
         //
         //   1. The AdapterProfile table in DesktopShiftNativeBridge.cpp gates
-        //      naming per build. An unrecognized build never reaches any slot
-        //      declared here, so the first call is never a blind one.
-        //   2. Slots 10, 11 and 13 are declared with deliberately unusable
-        //      signatures and DoNotCall names. They occupy the right offsets
-        //      and nothing more; calling one does not compile by accident.
+        //      extended-layout operations per build. An unrecognized build
+        //      never reaches any slot declared here, so the first call is never
+        //      a blind one.
+        //   2. The destructive RemoveDesktop slot and the unused slot 13 keep
+        //      deliberately unusable signatures and DoNotCall names.
         //   3. FindDesktop at slot 12 is read-only and is called first, as a
         //      behavioural probe. If it does not return the desktop whose ID it
-        //      was handed, the layout has moved and naming stays switched off.
+        //      was handed, the layout has moved and both operations stay off.
         //
-        // Removal and reordering are still never exported. See
-        // DesktopTopologyNotificationContractTests, which asserts that.
-        virtual HRESULT STDMETHODCALLTYPE Reserved_MoveDesktop_DoNotCall(
-            void* desktop,
+        // Reordering is exported only after the build gate and read-only probe.
+        // Removal remains unavailable at every layer.
+        virtual HRESULT STDMETHODCALLTYPE MoveDesktop(
+            IVirtualDesktop24H2* desktop,
             int index) = 0;
         virtual HRESULT STDMETHODCALLTYPE Reserved_RemoveDesktop_DoNotCall(
             void* desktop,

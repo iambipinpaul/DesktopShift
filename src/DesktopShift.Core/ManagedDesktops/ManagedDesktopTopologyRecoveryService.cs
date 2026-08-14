@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Diagnostics;
 
 namespace DesktopShift.Core.ManagedDesktops;
@@ -24,16 +25,17 @@ namespace DesktopShift.Core.ManagedDesktops;
 /// under them simply has a new index.
 /// </para>
 /// <para>
-/// Neither this service nor the provider it drives can delete or rename a real
-/// Windows desktop: <see cref="Compatibility.IDesktopTopologyProvider"/> has no
-/// such operation. Windows are only ever placed by the existing reassignment
-/// pipeline, which moves a window only when a rule claims it.
+/// A genuine Task View move is also reflected back into the saved preferred
+/// order so the Desktops page and Windows keep agreeing. That synchronization
+/// changes neither rule targets nor window placement. Desktop deletion remains
+/// unavailable through <see cref="Compatibility.IDesktopTopologyProvider"/>.
 /// </para>
 /// </remarks>
 public sealed class ManagedDesktopTopologyRecoveryService :
     IManagedDesktopTopologyRecoveryService
 {
     private readonly IManagedDesktopReconciliationService reconciliationService;
+    private readonly IConfigurationService configurationService;
     private readonly IManagedDesktopRecreationGate recreationGate;
     private readonly TimeProvider timeProvider;
     private readonly IWindowReassignmentService? windowReassignmentService;
@@ -51,6 +53,7 @@ public sealed class ManagedDesktopTopologyRecoveryService :
     /// </param>
     public ManagedDesktopTopologyRecoveryService(
         IManagedDesktopReconciliationService reconciliationService,
+        IConfigurationService configurationService,
         IManagedDesktopRecreationGate recreationGate,
         TimeProvider timeProvider,
         IWindowReassignmentService? windowReassignmentService = null,
@@ -58,6 +61,8 @@ public sealed class ManagedDesktopTopologyRecoveryService :
     {
         this.reconciliationService = reconciliationService ??
             throw new ArgumentNullException(nameof(reconciliationService));
+        this.configurationService = configurationService ??
+            throw new ArgumentNullException(nameof(configurationService));
         this.recreationGate = recreationGate ??
             throw new ArgumentNullException(nameof(recreationGate));
         this.timeProvider = timeProvider ??
@@ -93,6 +98,12 @@ public sealed class ManagedDesktopTopologyRecoveryService :
         ImmutableArray<ManagedDesktopRecreationSuppression> suppressions =
             recreationGate.DrainSuppressions();
         ImmutableArray<ManagedDesktopRuntimeRemap> remaps = FindRemaps(before, after);
+        if (string.Equals(reason, "Moved", StringComparison.OrdinalIgnoreCase))
+        {
+            after = await SynchronizePreferredOrderAsync(after, cancellationToken)
+                .ConfigureAwait(false);
+            report = ManagedDesktopReconciliationReport.FromSnapshot(after);
+        }
 
         bool runWindowPass =
             report.ChangedAnything &&
@@ -124,6 +135,79 @@ public sealed class ManagedDesktopTopologyRecoveryService :
 
         Publish(result);
         return result;
+    }
+
+    private async Task<ManagedDesktopReconciliationSnapshot> SynchronizePreferredOrderAsync(
+        ManagedDesktopReconciliationSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        ConfigurationDocument? configuration = configurationService.CurrentState.Active;
+        if (configuration is null || configuration.ManagedDesktops.Length < 2)
+        {
+            return snapshot;
+        }
+
+        Dictionary<string, ManagedDesktopRuntimeMapping> mappings = snapshot.Mappings
+            .ToDictionary(
+                static mapping => mapping.SemanticKey,
+                StringComparer.OrdinalIgnoreCase);
+        if (configuration.ManagedDesktops.Any(definition =>
+                !mappings.TryGetValue(definition.SemanticKey, out ManagedDesktopRuntimeMapping? mapping) ||
+                mapping.RuntimeDesktopId is null ||
+                mapping.RuntimePosition is null))
+        {
+            // A partial mapping cannot safely decide where an unresolved
+            // definition belongs, so keep the user's configured order.
+            return snapshot;
+        }
+
+        ManagedDesktopDefinition[] reordered = configuration.ManagedDesktops
+            .OrderBy(definition => mappings[definition.SemanticKey].RuntimePosition)
+            .ThenBy(
+                static definition => definition.SemanticKey,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(
+                static (definition, index) => definition with
+                {
+                    PreferredOrder = index + 1,
+                })
+            .ToArray();
+        ManagedDesktopDefinition[] configured = configuration.ManagedDesktops
+            .OrderBy(static definition => definition.PreferredOrder)
+            .ThenBy(
+                static definition => definition.SemanticKey,
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        bool alreadySynchronized = configured.Length == reordered.Length &&
+            configured.Zip(reordered).All(pair =>
+                string.Equals(
+                    pair.First.SemanticKey,
+                    pair.Second.SemanticKey,
+                    StringComparison.OrdinalIgnoreCase) &&
+                pair.First.PreferredOrder == pair.Second.PreferredOrder);
+        if (alreadySynchronized)
+        {
+            return snapshot;
+        }
+
+        ConfigurationSaveResult save = await configurationService
+            .SaveCandidateAsync(
+                configuration with { ManagedDesktops = [.. reordered] },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!save.Accepted)
+        {
+            return snapshot;
+        }
+
+        // Publish a fresh mapping snapshot whose PreferredOrder values match
+        // the configuration just accepted, so the open Desktops page updates
+        // immediately instead of waiting for another topology event.
+        return await reconciliationService
+            .ReconcileAsync(
+                ManagedDesktopReconciliationTrigger.ConfigurationAccepted,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

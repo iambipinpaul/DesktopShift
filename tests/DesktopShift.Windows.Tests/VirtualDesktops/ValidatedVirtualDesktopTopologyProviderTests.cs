@@ -38,8 +38,53 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         Assert.IsTrue(provider.Capabilities.CanObserveTopologyChanges);
         Assert.IsTrue(provider.Capabilities.CanCreateDesktop);
         Assert.IsTrue(provider.Capabilities.CanSwitchDesktop);
+        Assert.IsTrue(provider.Capabilities.CanReorderDesktop);
         Assert.IsNull(provider.LastFallback);
         Assert.AreEqual(1, bridge.ValidationCount);
+    }
+
+    [TestMethod]
+    public async Task ValidatedExtendedLayout_ReordersTheRequestedDesktop()
+    {
+        Guid desktopId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        FakeNativeBridge bridge = new(CreateSnapshot());
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult result =
+            await provider.MoveDesktopAsync(desktopId, targetPosition: 0);
+
+        Assert.IsTrue(result.IsSuccess, result.Error?.Message);
+        Assert.AreEqual(desktopId, bridge.LastReorderedDesktopId);
+        Assert.AreEqual(0, bridge.LastReorderPosition);
+        Assert.AreEqual(1, bridge.ReorderCount);
+    }
+
+    [TestMethod]
+    public async Task FailedExtendedLayoutProbe_LeavesReorderingUnsupported()
+    {
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            ProbeResult = NativeBridgeResult.Failed(
+                new NativeBridgeError(
+                    "test.layout_shifted",
+                    "LayoutProbe",
+                    "The manager layout did not match.",
+                    unchecked((int)0x80004005))),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        DesktopTopologyProviderResult result =
+            await provider.MoveDesktopAsync(Guid.NewGuid(), targetPosition: 0);
+
+        Assert.AreEqual(DesktopTopologyResultOutcome.Unsupported, result.Outcome);
+        Assert.IsFalse(provider.Capabilities.CanReorderDesktop);
+        Assert.AreEqual(0, bridge.ReorderCount);
     }
 
     [TestMethod]
@@ -811,6 +856,9 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public NativeBridgeResult RenameResult { get; init; } =
             NativeBridgeResult.Succeeded;
 
+        public NativeBridgeResult DesktopReorderResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
         public ManualResetEventSlim? ValidationEntered { get; init; }
 
         public ManualResetEventSlim? MoveEntered { get; init; }
@@ -831,6 +879,8 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         public int MoveCount { get; private set; }
 
+        public int ReorderCount { get; private set; }
+
         public int ProbeCount { get; private set; }
 
         public int SnapshotCount { get; private set; }
@@ -849,6 +899,10 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public Guid LastRenamedDesktopId { get; private set; }
 
         public string? LastRequestedName { get; private set; }
+
+        public Guid LastReorderedDesktopId { get; private set; }
+
+        public int LastReorderPosition { get; private set; }
 
         public NativeBridgeResult Validate()
         {
@@ -892,6 +946,15 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             LastRenamedDesktopId = desktopId;
             LastRequestedName = name;
             return RenameResult;
+        }
+
+        public NativeBridgeResult MoveDesktop(Guid desktopId, int targetPosition)
+        {
+            MutationCount++;
+            ReorderCount++;
+            LastReorderedDesktopId = desktopId;
+            LastReorderPosition = targetPosition;
+            return DesktopReorderResult;
         }
 
         public NativeBridgeResult MoveWindowToDesktop(

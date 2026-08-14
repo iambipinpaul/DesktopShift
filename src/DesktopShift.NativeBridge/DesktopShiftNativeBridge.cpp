@@ -42,7 +42,7 @@ namespace
         // reverse-engineering and proved at runtime by the FindDesktop probe.
         // A family only earns this once its layout is confirmed; unconfirmed
         // families still enumerate, create, switch and move as before.
-        bool NamingValidated;
+        bool ExtendedLayoutValidated;
     };
 
     constexpr AdapterProfile Profiles[] = {
@@ -263,9 +263,9 @@ namespace
     class NativeAdapter final
     {
     public:
-        explicit NativeAdapter(bool namingValidated)
+        explicit NativeAdapter(bool extendedLayoutValidated)
             : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
-              namingValidated_(namingValidated)
+              extendedLayoutValidated_(extendedLayoutValidated)
         {
             if (workEvent_ == nullptr)
             {
@@ -595,7 +595,7 @@ namespace
                         L"The vtable layout probe is disabled until harmless adapter validation succeeds.");
                 }
 
-                if (!namingValidated_)
+                if (!extendedLayoutValidated_)
                 {
                     return SetError(
                         error,
@@ -652,8 +652,164 @@ namespace
             });
         }
 
-        /// Names an existing desktop. The only mutation in this bridge that
-        /// targets a desktop rather than a window.
+        HRESULT MoveDesktop(
+            const GUID& id,
+            uint32_t targetPosition,
+            DesktopShiftNativeError* error)
+        {
+            if (id == GUID_NULL)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageDesktopReorder,
+                    L"A non-empty target desktop identifier is required.");
+            }
+
+            return Invoke([this, id, targetPosition, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"Desktop reordering is disabled until harmless adapter validation succeeds.");
+                }
+
+                if (!extendedLayoutValidated_ || !layoutProbed_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"Desktop reordering is disabled until the extended vtable layout is proved.");
+                }
+
+                HRESULT result = ReadSnapshot(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                if (targetPosition >= snapshot_.size())
+                {
+                    return SetError(
+                        error,
+                        E_INVALIDARG,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The requested Task View position is outside the desktop inventory.");
+                }
+
+                const auto known = std::find_if(
+                    snapshot_.begin(),
+                    snapshot_.end(),
+                    [&id](const DesktopShiftNativeDesktop& desktop)
+                    {
+                        return desktop.Id == id;
+                    });
+                if (known == snapshot_.end())
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The requested desktop was not present in the validated inventory.");
+                }
+
+                if (known->Position == targetPosition)
+                {
+                    ClearError(error);
+                    return S_OK;
+                }
+
+                ComPtr<IObjectArray> desktops;
+                result = manager_->GetDesktops(desktops.ReleaseAndGetAddressOf());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The desktop inventory could not be resolved for reordering.");
+                }
+
+                UINT count = 0;
+                result = desktops->GetCount(&count);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The desktop inventory could not be counted for reordering.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> target;
+                for (UINT index = 0; index < count; ++index)
+                {
+                    ComPtr<IVirtualDesktop24H2> candidate;
+                    result = desktops->GetAt(
+                        index,
+                        __uuidof(IVirtualDesktop24H2),
+                        reinterpret_cast<void**>(candidate.ReleaseAndGetAddressOf()));
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopReorder,
+                            L"A desktop entry could not be resolved for reordering.");
+                    }
+
+                    GUID candidateId{};
+                    result = candidate->GetId(&candidateId);
+                    if (FAILED(result))
+                    {
+                        return SetError(
+                            error,
+                            result,
+                            DesktopShiftNativeStageDesktopReorder,
+                            L"A desktop entry did not return its identifier for reordering.");
+                    }
+
+                    if (candidateId == id)
+                    {
+                        target = std::move(candidate);
+                        break;
+                    }
+                }
+
+                if (target == nullptr)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The requested desktop changed before it could be reordered.");
+                }
+
+                result = manager_->MoveDesktop(
+                    target.Get(),
+                    static_cast<int>(targetPosition));
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageDesktopReorder,
+                        L"The Windows Shell rejected the virtual-desktop reorder.");
+                }
+
+                // A fresh read verifies Shell's committed ordering. Patching the
+                // cache here would only report what the caller requested.
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        /// Names an existing desktop. Reordering is the only other mutation in
+        /// this bridge that targets a desktop rather than a window.
         ///
         /// The target is resolved by walking GetDesktops rather than through
         /// FindDesktop, so naming leans on the enumeration path that every
@@ -695,7 +851,7 @@ namespace
                         L"Desktop naming is disabled until harmless adapter validation succeeds.");
                 }
 
-                if (!namingValidated_)
+                if (!extendedLayoutValidated_)
                 {
                     return SetError(
                         error,
@@ -1568,7 +1724,7 @@ namespace
         std::vector<DesktopShiftNativeDesktop> snapshot_;
         GUID currentDesktop_{};
         bool behaviorValidated_{false};
-        bool namingValidated_{false};
+        bool extendedLayoutValidated_{false};
         bool layoutProbed_{false};
     };
 
@@ -1633,7 +1789,7 @@ extern "C"
 
         try
         {
-            auto value = std::make_unique<NativeAdapter>(profile->NamingValidated);
+            auto value = std::make_unique<NativeAdapter>(profile->ExtendedLayoutValidated);
             const HRESULT result = value->Activate(error);
             if (FAILED(result))
             {
@@ -1810,6 +1966,41 @@ extern "C"
         catch (...)
         {
             return SetUnexpectedError(error, DesktopShiftNativeStageDesktopSwitch);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_MoveDesktop(
+        void* adapter,
+        const GUID* desktopId,
+        uint32_t targetPosition,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        if (desktopId == nullptr)
+        {
+            return SetError(
+                error,
+                E_POINTER,
+                DesktopShiftNativeStageDesktopReorder,
+                L"A target desktop identifier was not provided.");
+        }
+
+        try
+        {
+            const GUID requestedDesktopId = *desktopId;
+            return AsAdapter(adapter)->MoveDesktop(
+                requestedDesktopId,
+                targetPosition,
+                error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageDesktopReorder);
         }
     }
 

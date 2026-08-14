@@ -255,6 +255,28 @@ internal sealed class ShellNativeVirtualDesktopBridge :
         }
     }
 
+    public NativeBridgeResult MoveDesktop(Guid desktopId, int targetPosition)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(targetPosition);
+
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_MoveDesktop(
+                adapter,
+                in desktopId,
+                checked((uint)targetPosition),
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.reorder_failed"));
+        }
+    }
+
     public NativeBridgeResult SetDesktopName(Guid desktopId, string name)
     {
         ArgumentNullException.ThrowIfNull(name);

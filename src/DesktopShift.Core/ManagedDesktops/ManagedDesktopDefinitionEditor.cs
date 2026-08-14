@@ -172,9 +172,9 @@ public static class ManagedDesktopDefinitionEditor
     /// Moves a definition one place earlier or later in preferred order.
     /// </summary>
     /// <remarks>
-    /// This changes only the configured preference. The real Windows desktops
-    /// are not reordered: preferred order decides the order in which missing
-    /// desktops are created, not where the user's existing desktops sit.
+    /// This changes the configured preference. The maintenance service follows
+    /// an accepted edit by moving the bound Windows desktop when the validated
+    /// provider supports Task View reordering.
     /// </remarks>
     public static ManagedDesktopEditResult Move(
         ConfigurationDocument document,
@@ -211,7 +211,7 @@ public static class ManagedDesktopDefinitionEditor
         return Accept(
             document,
             Renumber(moved),
-            $"'{definition.DisplayName}' moved to preferred position {target + 1}. The Windows desktops themselves were not reordered.");
+            $"'{definition.DisplayName}' moved to preferred position {target + 1}.");
     }
 
     /// <summary>

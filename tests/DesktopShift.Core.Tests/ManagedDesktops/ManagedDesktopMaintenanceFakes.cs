@@ -41,7 +41,9 @@ internal sealed class MaintenanceTopologyProvider : IDesktopTopologyProvider
 
     public int SwitchCallCount { get; private set; }
 
-    public int MutatingCallCount => CreateCallCount + SwitchCallCount;
+    public int ReorderCallCount { get; private set; }
+
+    public int MutatingCallCount => CreateCallCount + SwitchCallCount + ReorderCallCount;
 
     public List<Guid> CreatedIds { get; } = [];
 
@@ -69,7 +71,8 @@ internal sealed class MaintenanceTopologyProvider : IDesktopTopologyProvider
                 CanGetCurrentDesktop: true,
                 CanCreateDesktop: true,
                 CanSwitchDesktop: true,
-                CanObserveTopologyChanges: true),
+                CanObserveTopologyChanges: true,
+                CanReorderDesktop: true),
             desktops);
 
     /// <summary>
@@ -218,6 +221,34 @@ internal sealed class MaintenanceTopologyProvider : IDesktopTopologyProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         SwitchCallCount++;
+        return ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
+    }
+
+    public ValueTask<DesktopTopologyProviderResult> MoveDesktopAsync(
+        Guid desktopId,
+        int targetPosition,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReorderCallCount++;
+
+        List<VirtualDesktopDescriptor> ordered =
+            [.. desktops.OrderBy(static desktop => desktop.Position)];
+        int currentPosition = ordered.FindIndex(desktop => desktop.Id == desktopId);
+        if (currentPosition < 0 || targetPosition < 0 || targetPosition >= ordered.Count)
+        {
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Failed(
+                    "test.reorder_invalid",
+                    "The requested desktop or target position does not exist."));
+        }
+
+        VirtualDesktopDescriptor moved = ordered[currentPosition];
+        ordered.RemoveAt(currentPosition);
+        ordered.Insert(targetPosition, moved);
+        desktops.Clear();
+        desktops.AddRange(ordered.Select(
+            static (desktop, position) => desktop with { Position = position }));
         return ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
     }
 

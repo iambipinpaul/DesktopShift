@@ -145,6 +145,18 @@ public interface IDesktopTopologyProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves an existing runtime desktop to a zero-based Task View position.
+    /// </summary>
+    ValueTask<DesktopTopologyProviderResult> MoveDesktopAsync(
+        Guid desktopId,
+        int targetPosition,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            DesktopTopologyProviderResult.Unsupported(
+                "desktop_topology.reorder_unsupported",
+                "This provider cannot reorder virtual desktops."));
+
+    /// <summary>
     /// Names an existing runtime desktop so Task View shows what DesktopShift
     /// calls it.
     /// </summary>
@@ -156,8 +168,8 @@ public interface IDesktopTopologyProvider
     /// overriding, never by inheriting.
     /// </para>
     /// <para>
-    /// There is deliberately no counterpart for deleting or reordering a
-    /// desktop, and there is not going to be one.
+    /// Deleting a desktop remains deliberately unavailable. Reordering is a
+    /// separate opt-in operation with its own capability gate.
     /// </para>
     /// </remarks>
     ValueTask<DesktopTopologyProviderResult> RenameDesktopAsync(

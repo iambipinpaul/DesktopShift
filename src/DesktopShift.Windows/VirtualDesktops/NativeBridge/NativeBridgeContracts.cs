@@ -48,6 +48,14 @@ internal interface INativeVirtualDesktopBridge : IDisposable
 
     NativeBridgeResult SwitchDesktop(Guid desktopId);
 
+    NativeBridgeResult MoveDesktop(Guid desktopId, int targetPosition) =>
+        NativeBridgeResult.Failed(
+            new NativeBridgeError(
+                "native.reorder_unsupported",
+                "DesktopReorder",
+                "This bridge cannot reorder virtual desktops.",
+                unchecked((int)0x80004001)));
+
     NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
 
     /// <summary>
@@ -67,8 +75,8 @@ internal interface INativeVirtualDesktopBridge : IDisposable
     /// Names an existing runtime desktop.
     /// </summary>
     /// <remarks>
-    /// There is deliberately no counterpart for removing or reordering a
-    /// desktop. Naming is the only desktop-targeted mutation the bridge offers.
+    /// Removing a desktop remains deliberately unavailable. Reordering is a
+    /// separate capability guarded by the same extended-layout probe.
     /// </remarks>
     NativeBridgeResult SetDesktopName(Guid desktopId, string name);
 

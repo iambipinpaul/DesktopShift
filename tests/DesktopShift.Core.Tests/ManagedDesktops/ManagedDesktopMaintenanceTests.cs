@@ -121,13 +121,15 @@ public sealed class ManagedDesktopMaintenanceTests
     }
 
     [TestMethod]
-    public async Task Move_RenumbersPreferredOrderWithoutReorderingWindowsDesktops()
+    public async Task Move_RenumbersPreferredOrderAndReordersWindowsDesktops()
     {
         Guid codeId = Guid.NewGuid();
         Guid webId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
         MaintenanceTopologyProvider provider = MaintenanceTopologyProvider.Full(
             new VirtualDesktopDescriptor(codeId, "Code", 0, true),
-            new VirtualDesktopDescriptor(webId, "Web", 1, false));
+            new VirtualDesktopDescriptor(webId, "Web", 1, false),
+            new VirtualDesktopDescriptor(terminalId, "Terminal", 2, false));
         MaintenanceConfigurationService configuration = new(
             CreateDocument(
                 new ManagedDesktopDefinition("code", "Code", 1, false),
@@ -137,8 +139,7 @@ public sealed class ManagedDesktopMaintenanceTests
             CreateReconciliation(configuration, provider, out MaintenanceBindingStore store);
         ManagedDesktopMaintenanceService service =
             new(configuration, reconciliation, provider, store);
-        (Guid Id, int Position)[] before =
-            [.. provider.Desktops.Select(static desktop => (desktop.Id, desktop.Position))];
+        _ = await service.ReconcileAllAsync();
 
         ManagedDesktopMaintenanceResult result = await service.MoveAsync(
             "terminal",
@@ -154,12 +155,11 @@ public sealed class ManagedDesktopMaintenanceTests
             new[] { 1, 2, 3 },
             definitions.Select(static item => item.PreferredOrder).ToArray());
 
-        // Preferred order is a configuration preference. The user's real
-        // desktops keep their own order and their own identity.
         CollectionAssert.AreEqual(
-            before,
+            new[] { codeId, terminalId, webId },
             provider.Desktops
-                .Select(static desktop => (desktop.Id, desktop.Position))
+                .OrderBy(static desktop => desktop.Position)
+                .Select(static desktop => desktop.Id)
                 .ToArray());
     }
 

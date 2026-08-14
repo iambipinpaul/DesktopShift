@@ -11,19 +11,19 @@ catch. Everything that can be automated already is:
 | Notification → one reconciliation → at most one window pass | `tests/DesktopShift.Core.Tests/ManagedDesktops/ManagedDesktopTopologyRecoveryTests.cs` |
 | Recreation policy, capabilities, Limited Mode, ambiguity | same file |
 | Bounded cooldown, and that it is driven by events and never by time | `tests/DesktopShift.Core.Tests/ManagedDesktops/ManagedDesktopRecreationCooldownTests.cs` |
-| Reorder updates runtime mapping and changes no rule target | `ManagedDesktopTopologyRecoveryTests.ReorderingDesktops_UpdatesTheRuntimeMappingAndChangesNoRule` |
+| Task View reorder updates preferred app order and changes no rule target | `ManagedDesktopTopologyRecoveryTests.ReorderingDesktops_UpdatesTheRuntimeMappingAndChangesNoRule` |
+| App reorder updates Task View order | `ManagedDesktopMaintenanceTests.Move_RenumbersPreferredOrderAndReordersWindowsDesktops` |
 | Unrelated desktops are never touched | `ManagedDesktopTopologyRecoveryTests.RecoveringOneDesktop_TouchesNoUnrelatedDesktop` |
 | Native notification ABI: exports, struct layout, callback marshalling | `tests/DesktopShift.Windows.Tests/VirtualDesktops/DesktopTopologyNotificationContractTests.cs` |
 | Naming: convergence, concede bound, readback guard, capability and setting gates | `tests/DesktopShift.Core.Tests/ManagedDesktops/ManagedDesktopNamingTests.cs` |
-| Naming and probe are exported; removal and reordering still are not | `DesktopTopologyNotificationContractTests` and `NativeBridgeOptInContractTests` |
+| Naming, reordering, and the harmless probe are exported; removal is not | `DesktopTopologyNotificationContractTests` and `NativeBridgeOptInContractTests` |
 
 This matrix covers what those cannot: a real user rearranging real desktops.
 
-Naming is the one capability here that no automated test can fully prove. The
-managed tests drive a fake, and the native tests inspect exported symbols without
-calling them — neither can establish that `SetDesktopName` really is the
-fourteenth slot on the machine in front of you, or that Windows stores what it is
-handed. Section 6a exists for exactly that gap.
+Naming and reordering are the capabilities here that no automated test can fully
+prove. The managed tests drive a fake, and the native tests inspect exported
+symbols without calling them — neither can establish that the private shell
+slots match the machine in front of you. Section 6a exists for that gap.
 
 ## Before each run
 
@@ -93,6 +93,7 @@ stop the user from asking directly.
 | Step | Expected |
 | --- | --- |
 | Drag the Managed Desktop to a new position in Task View | The Desktops page shows its new position. No window moves, and no desktop is created or deleted |
+| Move a Managed Desktop earlier or later on the Desktops page | Task View shows the same relative order. The page reports a partial result instead if the validated reorder capability is unavailable |
 | Inspect the rules targeting it | Unchanged. Rules target the semantic key, which a reorder does not affect |
 | Drag an unrelated desktop past it | Same: position updates, nothing else changes |
 
@@ -120,15 +121,14 @@ the ambiguity only bites if the binding metadata is later lost.
 
 ### 6a. Naming (needs a machine that supports it)
 
-Naming reaches a shell manager slot past the read-only prefix everything else
-uses, so it is gated twice: the build family must be marked
-`NamingValidated` in the native adapter profile table, **and** a read-only
-lookup probe must pass at activation. Confirm which applies before reading a
-failure as a bug.
+Naming and reordering reach shell manager slots past the read-only prefix, so
+they are gated twice: the build family must be marked `ExtendedLayoutValidated`
+in the native adapter profile table, **and** a read-only lookup probe must pass
+at activation. Confirm which applies before reading a failure as a bug.
 
 | Step | Expected |
 | --- | --- |
-| Open Settings → Windows compatibility | The capability list includes **Name desktops** on a supported build, and omits it otherwise. Everything else in the list is identical either way |
+| Open Settings → Windows compatibility | The capability list includes **Name desktops** and **Reorder desktops** on a supported build, and omits both otherwise. Everything else in the list is identical either way |
 | On a build where it is omitted, check the Desktops page and Activity | Bindings, creation, switching and window moves all still work. Activity records `naming.unavailable` once per pass, not once per desktop |
 | Let DesktopShift create a missing Managed Desktop | The new desktop appears in Task View already carrying its configured name rather than "Desktop 5" |
 | Give a Managed Desktop a very long display name, or one with unusual characters, and reconcile | Either Task View shows it exactly, or Activity records `naming.not_stored` and DesktopShift stops trying for that destination. It must **never** rewrite the name repeatedly |
@@ -157,11 +157,11 @@ for as long as the app runs.
 
 For each row, note the reconciliation outcome, whether a window pass ran, and the
 suppression code when one appears. Record the Windows build, and whether **Name
-desktops** appeared in the capability list, since every row in 6a depends on it.
+desktops** and **Reorder desktops** appeared in the capability list, since every
+row in 6a depends on it.
 
 The failures worth an issue immediately are **a desktop or window changing that
 no row above predicts**, **a recreation loop that does not converge**, and **a
-naming loop that does not converge**. Treat any desktop being deleted or
-reordered by DesktopShift as urgent rather than as a bug report: nothing in the
-application is supposed to be able to do either, and the native bridge exports no
-entry point for it.
+naming loop that does not converge**. Treat any desktop being deleted by
+DesktopShift as urgent: the application has no supported deletion path and the
+native bridge exports no entry point for it.

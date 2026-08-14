@@ -77,27 +77,14 @@ public sealed class DesktopTopologyNotificationContractTests
                 Assert.AreNotEqual(0, entryPoint);
             }
 
-            // Recovery re-resolves, recreates, and names; it never removes and
-            // never reorders. Naming used to be on this list, and is not any
-            // more — DesktopShiftNative_SetDesktopName exists deliberately, and
-            // NativeBridgeOptInContractTests asserts it is exported.
-            //
-            // What has not changed is the part that matters: nothing here can
-            // destroy or reorder a desktop. Those two slots are declared in
-            // ShellVirtualDesktopAbi.h only to place naming at its true offset,
-            // are named DoNotCall, take signatures that cannot be invoked
-            // meaningfully, and reach no export. The absence below is what
-            // enforces "an unrelated desktop is never deleted", so it is
-            // asserted rather than assumed.
+            // Reordering is an explicit validated mutation boundary now and is
+            // asserted by NativeBridgeOptInContractTests. Deletion remains
+            // unavailable at every layer; this absent export is the contract
+            // that keeps an unrelated desktop from ever being destroyed.
             Assert.IsFalse(
                 NativeLibrary.TryGetExport(
                     library,
                     "DesktopShiftNative_RemoveDesktop",
-                    out _));
-            Assert.IsFalse(
-                NativeLibrary.TryGetExport(
-                    library,
-                    "DesktopShiftNative_MoveDesktop",
                     out _));
 
             // The old name stays asserted absent so a future rename export

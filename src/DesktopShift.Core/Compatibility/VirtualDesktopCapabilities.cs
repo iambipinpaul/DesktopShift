@@ -3,11 +3,15 @@ using System.Collections.Immutable;
 namespace DesktopShift.Core.Compatibility;
 
 /// <param name="CanRenameDesktop">
-/// Whether this provider may name a runtime desktop, which needs shell manager
-/// slots well past the ones every other capability lives in. It trails the
-/// required members and defaults to false so that a provider which has not
-/// proved that layout is described as unable to name, rather than silently
-/// assumed able.
+/// Whether this provider may name a runtime desktop, which needs the extended
+/// shell-manager layout. It trails the required members and defaults to false
+/// so a provider which has not proved that layout is described as unable to
+/// name, rather than silently assumed able.
+/// </param>
+/// <param name="CanReorderDesktop">
+/// Whether this provider may move an existing runtime desktop to a new Task
+/// View index. Like naming, reordering requires the extended shell-manager
+/// layout to be proved before the capability is enabled.
 /// </param>
 public sealed record VirtualDesktopCapabilities(
     bool CanGetWindowDesktopId,
@@ -17,7 +21,8 @@ public sealed record VirtualDesktopCapabilities(
     bool CanCreateDesktop,
     bool CanSwitchDesktop,
     bool CanObserveTopologyChanges,
-    bool CanRenameDesktop = false)
+    bool CanRenameDesktop = false,
+    bool CanReorderDesktop = false)
 {
     public static VirtualDesktopCapabilities DocumentedLimited { get; } = new(
         CanGetWindowDesktopId: true,
@@ -27,7 +32,8 @@ public sealed record VirtualDesktopCapabilities(
         CanCreateDesktop: false,
         CanSwitchDesktop: false,
         CanObserveTopologyChanges: false,
-        CanRenameDesktop: false);
+        CanRenameDesktop: false,
+        CanReorderDesktop: false);
 
     public bool HasPrivateTopologyCapabilities =>
         CanEnumerateDesktops ||
@@ -35,7 +41,8 @@ public sealed record VirtualDesktopCapabilities(
         CanCreateDesktop ||
         CanSwitchDesktop ||
         CanObserveTopologyChanges ||
-        CanRenameDesktop;
+        CanRenameDesktop ||
+        CanReorderDesktop;
 
     public ImmutableArray<string> AvailableCapabilityNames
     {
@@ -51,6 +58,7 @@ public sealed record VirtualDesktopCapabilities(
             AddIfAvailable(names, CanSwitchDesktop, "Switch desktops");
             AddIfAvailable(names, CanObserveTopologyChanges, "Observe topology changes");
             AddIfAvailable(names, CanRenameDesktop, "Name desktops");
+            AddIfAvailable(names, CanReorderDesktop, "Reorder desktops");
 
             return names.ToImmutable();
         }

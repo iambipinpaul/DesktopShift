@@ -15,10 +15,10 @@ namespace DesktopShift.Core.ManagedDesktops;
 /// up with what the user just changed. A rejected edit writes nothing.
 /// </para>
 /// <para>
-/// The one operation that touches the live topology is
-/// <see cref="RecreateAsync"/>, and it only ever creates. There is no code path
-/// here, and no operation on <see cref="IDesktopTopologyProvider"/>, that
-/// removes a real Windows desktop.
+/// <see cref="RecreateAsync"/> creates a missing desktop. A move also asks a
+/// provider with a validated reorder capability to mirror the accepted order
+/// in Task View. There is no code path here, and no operation on
+/// <see cref="IDesktopTopologyProvider"/>, that removes a real Windows desktop.
 /// </para>
 /// </remarks>
 public sealed class ManagedDesktopMaintenanceService : IManagedDesktopMaintenanceService
@@ -86,21 +86,151 @@ public sealed class ManagedDesktopMaintenanceService : IManagedDesktopMaintenanc
             cancellationToken);
     }
 
-    public Task<ManagedDesktopMaintenanceResult> MoveAsync(
+    public async Task<ManagedDesktopMaintenanceResult> MoveAsync(
         string semanticKey,
         ManagedDesktopMoveDirection direction,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(semanticKey);
 
-        return ApplyEditAsync(
-            ManagedDesktopMaintenanceOperation.Reorder,
+        ConfigurationDocument source = ResolveDocument(configurationService.CurrentState);
+        ManagedDesktopEditResult editResult = ManagedDesktopDefinitionEditor.Move(
+            source,
             semanticKey,
-            document => ManagedDesktopDefinitionEditor.Move(
-                document,
+            direction);
+
+        if (!editResult.IsAccepted)
+        {
+            return new ManagedDesktopMaintenanceResult(
+                ManagedDesktopMaintenanceOperation.Reorder,
+                ManagedDesktopMaintenanceOutcome.Rejected,
+                editResult.Summary,
+                editResult.Messages,
+                Report: null,
+                semanticKey);
+        }
+
+        if (ReferenceEquals(editResult.Document, source))
+        {
+            return new ManagedDesktopMaintenanceResult(
+                ManagedDesktopMaintenanceOperation.Reorder,
+                ManagedDesktopMaintenanceOutcome.NoChange,
+                editResult.Summary,
+                [],
+                Report: null,
+                semanticKey);
+        }
+
+        ConfigurationSaveResult save = await configurationService
+            .SaveCandidateAsync(editResult.Document, cancellationToken)
+            .ConfigureAwait(false);
+        if (!save.Accepted)
+        {
+            return new ManagedDesktopMaintenanceResult(
+                ManagedDesktopMaintenanceOperation.Reorder,
+                ManagedDesktopMaintenanceOutcome.Rejected,
+                "The order was saved as a draft but not accepted, so neither DesktopShift nor Task View was changed.",
+                ManagedDesktopValidationProjection.FromConfiguration(save.State.Issues),
+                Report: null,
+                semanticKey);
+        }
+
+        ManagedDesktopReconciliationSnapshot snapshot = await reconciliationService
+            .ReconcileAsync(
+                ManagedDesktopReconciliationTrigger.ConfigurationAccepted,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!topologyProvider.Capabilities.CanReorderDesktop)
+        {
+            return PartiallyAppliedMove(
+                editResult,
+                snapshot,
                 semanticKey,
-                direction),
-            cancellationToken);
+                "managed_desktops.reorder_unavailable",
+                "DesktopShift saved the preferred order, but this Windows desktop provider cannot reorder Task View desktops.",
+                "Run the compatibility test on the Settings page. Live reordering requires validated Full Mode.");
+        }
+
+        ImmutableArray<ManagedDesktopDefinition> ordered =
+            editResult.Document.ManagedDesktops
+                .OrderBy(static definition => definition.PreferredOrder)
+                .ThenBy(
+                    static definition => definition.SemanticKey,
+                    StringComparer.OrdinalIgnoreCase)
+                .ToImmutableArray();
+        int movedIndex = Enumerable.Range(0, ordered.Length).Single(
+            index => KeysEqual(ordered[index].SemanticKey, semanticKey));
+        int crossedIndex = direction == ManagedDesktopMoveDirection.Earlier
+            ? movedIndex + 1
+            : movedIndex - 1;
+        ManagedDesktopRuntimeMapping? moved = FindMapping(snapshot, semanticKey);
+        ManagedDesktopRuntimeMapping? crossed = crossedIndex >= 0 && crossedIndex < ordered.Length
+            ? FindMapping(snapshot, ordered[crossedIndex].SemanticKey)
+            : null;
+
+        if (moved?.RuntimeDesktopId is not Guid movedDesktopId ||
+            crossed?.RuntimePosition is not int targetPosition)
+        {
+            return PartiallyAppliedMove(
+                editResult,
+                snapshot,
+                semanticKey,
+                "managed_desktops.reorder_not_mapped",
+                "DesktopShift saved the preferred order, but one of the two Managed Desktops is not currently mapped to Task View.",
+                "Reconcile all Managed Desktops, then try the move again.");
+        }
+
+        DesktopTopologyProviderResult move = await topologyProvider
+            .MoveDesktopAsync(movedDesktopId, targetPosition, cancellationToken)
+            .ConfigureAwait(false);
+        if (!move.IsSuccess)
+        {
+            DesktopTopologyProviderError error = move.Error ??
+                new DesktopTopologyProviderError(
+                    "managed_desktops.reorder_failed",
+                    "The Windows desktop provider did not reorder the desktop.");
+            return PartiallyAppliedMove(
+                editResult,
+                snapshot,
+                semanticKey,
+                error.Code,
+                $"DesktopShift saved the preferred order, but Task View rejected the reorder: {error.Message}",
+                "Run the compatibility test, reconcile all Managed Desktops, and try again.");
+        }
+
+        ManagedDesktopReconciliationSnapshot after = await reconciliationService
+            .ReconcileAsync(
+                ManagedDesktopReconciliationTrigger.Manual,
+                cancellationToken)
+            .ConfigureAwait(false);
+        ManagedDesktopRuntimeMapping? movedAfter = FindMapping(after, semanticKey);
+        ManagedDesktopRuntimeMapping? crossedAfter = FindMapping(
+            after,
+            ordered[crossedIndex].SemanticKey);
+        bool observed = movedAfter?.RuntimePosition is int movedPosition &&
+            crossedAfter?.RuntimePosition is int crossedPosition &&
+            (direction == ManagedDesktopMoveDirection.Earlier
+                ? movedPosition < crossedPosition
+                : movedPosition > crossedPosition);
+        if (!observed)
+        {
+            return PartiallyAppliedMove(
+                editResult,
+                after,
+                semanticKey,
+                "managed_desktops.reorder_not_observed",
+                "Windows accepted the reorder request, but the refreshed Task View inventory did not show the requested order.",
+                "Open Task View to confirm the order, then reconcile all Managed Desktops.");
+        }
+
+        return new ManagedDesktopMaintenanceResult(
+            ManagedDesktopMaintenanceOperation.Reorder,
+            ManagedDesktopMaintenanceOutcome.Applied,
+            $"{editResult.Summary} Windows Task View now uses the same order.",
+            ManagedDesktopValidationProjection.FromRuntime(after),
+            ManagedDesktopReconciliationReport.FromSnapshot(after),
+            semanticKey);
     }
 
     public Task<ManagedDesktopMaintenanceResult> SetRecreationPolicyAsync(
@@ -435,6 +565,31 @@ public sealed class ManagedDesktopMaintenanceService : IManagedDesktopMaintenanc
         string semanticKey) =>
         snapshot.Mappings.FirstOrDefault(
             mapping => KeysEqual(mapping.SemanticKey, semanticKey));
+
+    private static ManagedDesktopMaintenanceResult PartiallyAppliedMove(
+        ManagedDesktopEditResult editResult,
+        ManagedDesktopReconciliationSnapshot snapshot,
+        string semanticKey,
+        string code,
+        string message,
+        string remedy) =>
+        new(
+            ManagedDesktopMaintenanceOperation.Reorder,
+            ManagedDesktopMaintenanceOutcome.Partial,
+            $"{editResult.Summary} {message}",
+            [
+                .. ManagedDesktopValidationProjection.FromRuntime(snapshot),
+                new ManagedDesktopValidationMessage(
+                    ManagedDesktopValidationScope.Runtime,
+                    ManagedDesktopValidationSeverity.Warning,
+                    code,
+                    "Task View order was not synchronized",
+                    message,
+                    remedy,
+                    semanticKey),
+            ],
+            ManagedDesktopReconciliationReport.FromSnapshot(snapshot),
+            semanticKey);
 
     private static ManagedDesktopMaintenanceResult RejectUnknownKey(
         ManagedDesktopMaintenanceOperation operation,
