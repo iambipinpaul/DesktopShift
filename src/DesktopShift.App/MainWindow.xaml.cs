@@ -241,7 +241,7 @@ public sealed partial class MainWindow : Window
         NavigationView sender,
         NavigationViewDisplayModeChangedEventArgs args)
     {
-        UpdatePaneBrandOverlay(sender, args.DisplayMode);
+        UpdatePaneBrandOverlay(sender);
 
         if (ContentFrame is null)
         {
@@ -261,26 +261,18 @@ public sealed partial class MainWindow : Window
     private void OnNavigationPaneClosing(
         NavigationView sender,
         NavigationViewPaneClosingEventArgs args)
-    {
-        if (sender.DisplayMode != NavigationViewDisplayMode.Expanded)
-        {
-            PaneBrandOverlay.Visibility = Visibility.Collapsed;
-        }
-    }
+        => PaneBrandOverlay.Visibility = Visibility.Collapsed;
 
-    private void UpdatePaneBrandOverlay(
-        NavigationView navigation,
-        NavigationViewDisplayMode displayMode)
+    private void UpdatePaneBrandOverlay(NavigationView navigation)
     {
         if (PaneBrandOverlay is null)
         {
             return;
         }
 
-        PaneBrandOverlay.Visibility =
-            displayMode == NavigationViewDisplayMode.Expanded || navigation.IsPaneOpen
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+        PaneBrandOverlay.Visibility = navigation.IsPaneOpen
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void ApplyAcceptedBehavior(BehaviorSettings behavior)
@@ -483,7 +475,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnRootLayoutLoaded(object sender, RoutedEventArgs args)
     {
-        UpdatePaneBrandOverlay(ShellNavigation, ShellNavigation.DisplayMode);
+        UpdatePaneBrandOverlay(ShellNavigation);
 
         if (_isShellStateLoaded)
         {
