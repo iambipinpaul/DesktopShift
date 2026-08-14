@@ -425,13 +425,29 @@
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="settings:HotkeyBindingEditor">
                                 <Border Padding="12" Background="{ThemeResource DesktopShift.SurfaceSecondaryBrush}" CornerRadius="6">
-                                    <Grid ColumnSpacing="14">
+                                    <Grid x:Name="HotkeyEditorLayout" ColumnSpacing="14" RowSpacing="10">
+                                        <VisualStateManager.VisualStateGroups>
+                                            <VisualStateGroup x:Name="HotkeyEditorWidthStates">
+                                                <VisualState x:Name="CompactHotkeyEditor" />
+                                                <VisualState x:Name="WideHotkeyEditor">
+                                                    <VisualState.StateTriggers>
+                                                        <AdaptiveTrigger MinWindowWidth="1344" />
+                                                    </VisualState.StateTriggers>
+                                                    <VisualState.Setters>
+                                                        <Setter Target="HotkeyEditorControls.(Grid.Row)" Value="0" />
+                                                        <Setter Target="HotkeyEditorControls.(Grid.Column)" Value="1" />
+                                                        <Setter Target="HotkeyEditorControls.(Grid.ColumnSpan)" Value="1" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                         <StackPanel VerticalAlignment="Center" Spacing="4">
                                             <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="{x:Bind ActionLabel}" />
                                             <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind Explanation}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                        <StackPanel x:Name="HotkeyEditorControls" Grid.Row="1" Grid.ColumnSpan="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
                                             <CheckBox Content="Ctrl" IsChecked="{x:Bind Control, Mode=TwoWay}" />
                                             <CheckBox Content="Alt" IsChecked="{x:Bind Alt, Mode=TwoWay}" />
                                             <CheckBox Content="Shift" IsChecked="{x:Bind Shift, Mode=TwoWay}" />
