@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Configuration;
-using DesktopShift.Core.Hotkeys;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DesktopShift.Core.Tests.Configuration;
@@ -37,12 +36,7 @@ public sealed class ConfigurationExportTests
                         @"D:\Portable\Code.exe",
                     ],
                 }),
-            Behavior = defaults.Behavior with
-            {
-                Theme = AppTheme.Dark,
-                AreHotkeysEnabled = true,
-                Hotkeys = HotkeyDefaults.Bindings,
-            },
+            Behavior = defaults.Behavior with { Theme = AppTheme.Dark },
         };
         Assert.IsTrue(
             (await configuration.SaveCandidateAsync(active)).Accepted);
@@ -79,7 +73,6 @@ public sealed class ConfigurationExportTests
         Assert.Contains(@"D:\\Portable\\Code.exe", json, StringComparison.Ordinal);
         Assert.AreEqual(active.ManagedDesktops.Length, result.ManagedDesktopCount);
         Assert.AreEqual(active.ApplicationRules.Length, result.ApplicationRuleCount);
-        Assert.AreEqual(active.Behavior.Hotkeys.Length, result.HotkeyCount);
         Assert.AreEqual(destination.Length, result.ByteCount);
 
         // The duplicate candidate never leaks into the export.

@@ -1,6 +1,6 @@
-# Manual Settings and Hotkeys Verification
+# Manual Settings and Desktop Switching Verification
 
-A global hotkey cannot be exercised by a test. `RegisterHotKey` needs a real
+A desktop-switching hotkey cannot be exercised by a test. `RegisterHotKey` needs a real
 message loop and takes its key combination away from every other application on
 the machine for as long as it is held, so an automated test that called it would
 break the machine it ran on. A file picker, a notification-area balloon, and a
@@ -17,12 +17,10 @@ Everything else is automated:
 | Ordered schema migrations | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationMigrationPipelineTests.cs` |
 | Import recovery and the candidate/active split | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationImportTests.cs` |
 | Export portability and privacy | `tests/DesktopShift.Core.Tests/Configuration/ConfigurationExportTests.cs` |
-| Hotkey conflicts and unregistered-until-enabled | `tests/DesktopShift.Core.Tests/Hotkeys/` |
 | Win32 modifier and virtual-key translation | `tests/DesktopShift.Windows.Tests/Hotkeys/Win32HotkeyTranslationTests.cs` |
 | Desktop switching profiles, digit mapping, and validation | `tests/DesktopShift.Core.Tests/Hotkeys/DesktopSwitchShortcutTests.cs` |
 | Desktop switching registration ids and `MOD_NOREPEAT` | `tests/DesktopShift.Windows.Tests/Hotkeys/WindowsDesktopSwitchHotkeyRegistrarTests.cs` |
 | Switching to a desktop by position, and the missing-desktop path | `tests/DesktopShift.Core.Tests/Hotkeys/DesktopSwitchShortcutServiceTests.cs` |
-| A key picker keeping its key while the list is rebuilt | `tests/DesktopShift.App.Presentation.Tests/Settings/SettingsPresentationTests.cs` |
 
 This document covers what those cannot.
 
@@ -39,32 +37,15 @@ This document covers what those cannot.
 
 | Case | Action | Expected result |
 | --- | --- | --- |
-| Nine sections | Open Settings and scroll from top to bottom. | Startup, Assignment, Desktops, Compatibility, Notifications, Appearance, Diagnostics, Global shortcuts, and Desktop switching shortcut are present, in that order. |
+| Eight sections | Open Settings and scroll from top to bottom. | Startup, Assignment, Desktops, Compatibility, Notifications, Appearance, Diagnostics, and Desktop switching shortcut are present, in that order. |
 | Persisted behavior | Change start-minimized, close-to-tray, next-launch pause, local activity recording, both notification switches, and theme. Exit from the tray, then relaunch. | Every control keeps its value. The chosen theme is applied, activity recording resumes in the requested state, and automatic assignment starts in the requested pause state. |
 | Rapid edits | Quickly change theme and two toggles without waiting between clicks. Leave and return to Settings. | The last value of every edited control remains; a later completion does not revert another control. |
-| Portable export | Export configuration, then open the JSON in a text editor. | JSON is indented and readable. It contains semantic desktops, rules, behavior, and shortcuts, but no runtime desktop GUID bindings or reconciliation metadata. Paths below the profile use `%USERPROFILE%`; the account name is absent. |
-| Valid import | Export, change a harmless setting in the JSON, and import it. | The candidate is validated, becomes active, and its live theme, notification, startup, and hotkey behavior is applied. |
-| Invalid import recovery | Add two enabled shortcuts with the same chord or duplicate a rule ID, then import. | Every imported entry remains available for correction, the issue identifies its JSON path, and the previous valid configuration continues running. Export still exports the previous active snapshot. |
+| Portable export | Export configuration, then open the JSON in a text editor. | JSON is indented and readable. It contains semantic desktops, rules, behavior, and the desktop-switching profile, but no runtime desktop GUID bindings or reconciliation metadata. Paths below the profile use `%USERPROFILE%`; the account name is absent. |
+| Valid import | Export, change a harmless setting in the JSON, and import it. | The candidate is validated, becomes active, and its live theme, notification, startup, and desktop-switching behavior is applied. |
+| Invalid import recovery | Select the custom desktop-switching profile with no modifier or duplicate a rule ID, then import. | Every imported entry remains available for correction, the issue identifies its JSON path, and the previous valid configuration continues running. Export still exports the previous active snapshot. |
 | Unreadable import | Import malformed JSON and then a JSON array. | Each is rejected as an unreadable configuration; the current candidate and active snapshot are unchanged. |
 | Diagnostics | Confirm **Record local activity** starts off on a fresh configuration. Enable it, create an assignment, open the log location, export a diagnostic bundle, disable it, create another assignment, then clear local activity. | The first assignment is retained in Activity and the rotating log; the assignment made while off is not. Explorer opens the local log folder, the chosen ZIP is written, disabling did not delete prior history, and Clear removes DesktopShift-created activity/log content without uploading anything. |
 | Notification switches | Disable assignment-failure notifications and produce a controlled failed assignment; repeat while enabled. Do the same with a Limited Mode/failed compatibility result. | Disabled categories remain silent. Enabled failures/warnings notify. Successful assignments never notify. |
-
-## Global shortcut matrix
-
-Use chords that do not overlap Windows or the second application.
-
-| Case | Action | Expected result |
-| --- | --- | --- |
-| Disabled by default | Leave the master switch off, enable individual rows, and press their displayed chords in the second application. | The second application receives the keys; DesktopShift performs no command. |
-| Reassign all | Enable shortcuts and press the Reassign all chord. | One manual reassignment batch runs, including while automatic assignment is paused. Repeated keydown does not queue duplicate batches. |
-| Reassign foreground | Focus a window with a matching rule and press the foreground chord. | Only that foreground HWND is sent through the ordinary rule/assignment pipeline. |
-| Pause/resume | Press the pause chord twice. | The tray state changes to Paused, then Running. Explicit reassignment remains available while paused. |
-| Open | Hide DesktopShift to the notification area and press the open chord. | The existing DesktopShift window is restored and activated; no second window is created. |
-| Candidate conflict | Give two enabled rows the same chord and apply. | The candidate is retained, the conflicting row/path is shown, and the previous registrations remain active. |
-| Windows registration conflict | Have another application claim a chord, assign it in DesktopShift, and apply. Restart DesktopShift with that chord still claimed. | Settings immediately reports that the specific chord could not be registered, including the Windows conflict, without requiring another Apply click. Other valid chords remain available. |
-| Disable and edit | Turn the master switch off, then change chords and apply. | Every DesktopShift registration is released before validation; no edited chord is claimed while the master switch is off. |
-| Shutdown disposal | Enable shortcuts, exit DesktopShift from the tray, then claim the same chords in the second application or relaunch DesktopShift. | Every chord is free immediately after exit and registers normally on relaunch. No hidden hotkey window or registration survives shutdown. |
-| Rebuilt list survives | Scroll until the shortcut rows are on screen, then apply any settings change twice in a row. | DesktopShift stays running and each row still shows the key it was saved with. The list is rebuilt from scratch on every save, and the key pickers are reused across those rebuilds. |
 
 ## Desktop switching matrix
 

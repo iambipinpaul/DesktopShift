@@ -193,37 +193,21 @@ public sealed record ApplicationRule(
 /// <param name="NotifyOnCompatibilityWarning">
 /// Whether entering Limited Mode, or a failed compatibility test, interrupts.
 /// </param>
-/// <param name="AreHotkeysEnabled">
-/// The master switch for global shortcuts. Off by default: a global hotkey
-/// takes its combination away from every other application on the machine, so
-/// nothing is claimed until the user asks for it.
-/// </param>
-/// <param name="Hotkeys">The chord bound to each shortcut action.</param>
 /// <param name="NameWindowsDesktops">
 /// Whether DesktopShift names the Windows desktops it is bound to, so Task View
 /// shows Code and Web rather than Desktop 2 and Desktop 3.
 ///
-/// On by default, unlike <paramref name="AreHotkeysEnabled"/>. A hotkey takes a
-/// combination away from every other application on the machine, so it has to
-/// be asked for. A desktop name is confined to the desktops this user has
-/// already told DesktopShift to manage, is visible the moment it happens, and
-/// is undone by renaming in Task View — so the reasoning that keeps hotkeys off
-/// does not carry across to it.
+/// On by default because a desktop name is confined to the desktops this user
+/// has already told DesktopShift to manage, is visible the moment it happens,
+/// and is undone by renaming in Task View.
 ///
 /// Turning this off never affects bindings. Naming is how a desktop is
 /// labelled, not how it is identified.
 /// </param>
 /// <param name="AreDesktopSwitchShortcutsEnabled">
-/// Whether the ten desktop-switching combinations are claimed. Off by default,
-/// for the same reason <paramref name="AreHotkeysEnabled"/> is: these take ten
-/// combinations away from every other application on the machine, so nothing is
-/// claimed until the user asks for it.
-///
-/// Separate from <paramref name="AreHotkeysEnabled"/> rather than folded into
-/// it. The two sets fail independently — a taskbar that already owns Win+Alt+3
-/// says nothing about whether Ctrl+Alt+Shift+R is free — and one switch
-/// governing both would mean a user who wanted desktop switching had to accept
-/// the command shortcuts to get it.
+/// Whether the ten desktop-switching combinations are claimed. Off by default:
+/// these take ten combinations away from every other application on the
+/// machine, so nothing is claimed until the user asks for it.
 /// </param>
 /// <param name="DesktopSwitchProfile">
 /// Which modifiers the desktop-switching shortcuts are built from. Exactly one
@@ -250,8 +234,6 @@ public sealed record BehaviorSettings(
     bool StartAssignmentPaused = false,
     bool NotifyOnAssignmentFailure = true,
     bool NotifyOnCompatibilityWarning = true,
-    bool AreHotkeysEnabled = false,
-    ImmutableArray<HotkeyBinding> Hotkeys = default,
     bool NameWindowsDesktops = true,
     bool AreDesktopSwitchShortcutsEnabled = false,
     DesktopSwitchShortcutProfile DesktopSwitchProfile =
@@ -261,22 +243,6 @@ public sealed record BehaviorSettings(
     AppAccent Accent = AppAccent.System,
     bool RecordLocalActivity = false)
 {
-    /// <summary>
-    /// Hotkey bindings, normalized so an omitted collection is empty rather than
-    /// a default array. A default array cannot be enumerated, so an unnormalized
-    /// value would fail to serialize.
-    /// </summary>
-    public ImmutableArray<HotkeyBinding> Hotkeys { get; init; } =
-        Hotkeys.IsDefault ? [] : Hotkeys;
-
-    /// <summary>
-    /// The hotkey configuration as the coordinator consumes it, with a binding
-    /// filled in for every action so a document written before hotkeys existed
-    /// still describes four shortcuts.
-    /// </summary>
-    public HotkeySettings ToHotkeySettings() =>
-        new(AreHotkeysEnabled, HotkeyDefaults.Complete(Hotkeys));
-
     /// <summary>
     /// The desktop-switching configuration as its coordinator consumes it.
     /// </summary>

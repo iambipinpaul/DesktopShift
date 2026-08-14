@@ -4,7 +4,7 @@ using DesktopShift.Core.Configuration;
 namespace DesktopShift.Core.Hotkeys;
 
 /// <summary>
-/// The three shapes the desktop-switching shortcuts can take.
+/// The two shapes the desktop-switching shortcuts can take.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,16 +41,15 @@ public enum DesktopSwitchShortcutProfile
 /// <see cref="ActiveModifiers"/> decides what is actually claimed.
 /// </para>
 /// <para>
-/// <paramref name="IsEnabled"/> defaults to off, for the same reason
-/// <see cref="Configuration.BehaviorSettings.AreHotkeysEnabled"/> does: ten
-/// global combinations are taken from every other application on the machine,
-/// so they are claimed only when asked for.
+/// <paramref name="IsEnabled"/> defaults to off because ten global combinations
+/// are taken from every other application on the machine, so they are claimed
+/// only when asked for.
 /// </para>
 /// </remarks>
 /// <param name="IsEnabled">Whether the ten combinations are claimed at all.</param>
 /// <param name="Profile">Which profile supplies the modifiers.</param>
 /// <param name="CustomModifiers">
-/// The modifiers the Custom profile uses. Ignored by the other two.
+/// The modifiers the Custom profile uses. Ignored by the built-in profile.
 /// </param>
 public sealed record DesktopSwitchShortcutSettings(
     bool IsEnabled,
@@ -160,11 +159,8 @@ public sealed record DesktopSwitchHotkeyState(
 /// The <c>RegisterHotKey</c> surface for desktop switching, and nothing else.
 /// </summary>
 /// <remarks>
-/// Separate from <see cref="IGlobalHotkeyRegistrar"/> because the two claim
-/// different things and fail independently: the four command shortcuts are
-/// bound one action at a time, and these ten are bound as a profile. Sharing one
-/// registrar would mean a refused desktop chord and a refused command chord
-/// landing in the same list with nothing to tell them apart.
+/// Kept behind a platform seam because automated tests must never claim real
+/// system-wide key combinations.
 /// </remarks>
 public interface IDesktopSwitchHotkeyRegistrar : IDisposable
 {

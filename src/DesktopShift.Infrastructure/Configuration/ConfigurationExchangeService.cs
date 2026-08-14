@@ -95,7 +95,6 @@ internal sealed class ConfigurationExchangeService : IConfigurationExchangeServi
             portable.SchemaVersion,
             Count(portable.ManagedDesktops),
             Count(portable.ApplicationRules),
-            portable.Behavior is null ? 0 : Count(portable.Behavior.Hotkeys),
             payload.LongLength);
     }
 

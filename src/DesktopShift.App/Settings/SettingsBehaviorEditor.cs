@@ -57,19 +57,6 @@ public static class SettingsBehaviorEditor
         AppAccent accent) =>
         current with { Theme = theme, Accent = accent };
 
-    public static BehaviorSettings WithHotkeys(
-        BehaviorSettings current,
-        bool areHotkeysEnabled,
-        IEnumerable<HotkeyBinding> bindings)
-    {
-        ArgumentNullException.ThrowIfNull(bindings);
-        return current with
-        {
-            AreHotkeysEnabled = areHotkeysEnabled,
-            Hotkeys = [.. bindings],
-        };
-    }
-
     public static BehaviorSettings WithDesktopSwitchShortcuts(
         BehaviorSettings current,
         DesktopSwitchShortcutSettings shortcuts)

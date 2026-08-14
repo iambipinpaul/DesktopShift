@@ -37,7 +37,9 @@ public sealed class DesktopSwitchShortcutTests
         }
 
         // A non-digit is not a desktop, however it reached us.
-        Assert.AreEqual(0, DesktopSwitchShortcuts.DesktopOrdinalFor(HotkeyKey.F));
+        Assert.AreEqual(
+            0,
+            DesktopSwitchShortcuts.DesktopOrdinalFor((HotkeyKey)0x46));
         Assert.AreEqual(0, DesktopSwitchShortcuts.DesktopOrdinalFor(HotkeyKey.None));
     }
 

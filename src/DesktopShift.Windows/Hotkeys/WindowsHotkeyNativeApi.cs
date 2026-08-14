@@ -78,7 +78,7 @@ internal sealed class User32WindowsHotkeyNativeApi : IWindowsHotkeyNativeApi
         NativeMethods.CreateWindowEx(
             dwExStyle: 0,
             lpClassName: className,
-            lpWindowName: "DesktopShift global shortcuts",
+            lpWindowName: "DesktopShift desktop switching shortcuts",
             dwStyle: 0,
             x: 0,
             y: 0,

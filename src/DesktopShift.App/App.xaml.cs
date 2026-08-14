@@ -36,8 +36,6 @@ public partial class App : Application
     private DispatcherQueue? _dispatcherQueue;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
     private NotificationAreaCoordinator? _notificationArea;
-    private IGlobalHotkeyCoordinator? _hotkeyCoordinator;
-    private HotkeyCommandDispatcher? _hotkeyDispatcher;
     private IDesktopSwitchHotkeyCoordinator? _desktopSwitchHotkeyCoordinator;
     private IDesktopSwitchShortcutService? _desktopSwitchService;
     private Task _desktopSwitchWork = Task.CompletedTask;
@@ -59,14 +57,8 @@ public partial class App : Application
             services.AddSingleton<IStartupRegistration, StartupTaskRegistration>();
             services.AddDesktopShiftConfigurationExchange();
             services.AddSingleton<
-                IGlobalHotkeyRegistrar,
-                WindowsGlobalHotkeyRegistrar>();
-            services.AddSingleton<
                 IDesktopSwitchHotkeyRegistrar,
                 WindowsDesktopSwitchHotkeyRegistrar>();
-            services.AddSingleton<
-                IForegroundWindowProvider,
-                WindowsForegroundWindowProvider>();
             services.AddSingleton<IWindowsBuildInfoProvider, EnvironmentWindowsBuildInfoProvider>();
             services.AddSingleton<ValidatedVirtualDesktopTopologyProvider>();
             services.AddSingleton<IDesktopTopologyProvider>(
@@ -217,7 +209,7 @@ public partial class App : Application
             isAutomaticStartup);
 
         notificationArea.Start(disposition);
-        StartHotkeys(behavior);
+        StartDesktopSwitchHotkeys(behavior);
 
         if (disposition == ShellLaunchDisposition.StayInNotificationArea)
         {
@@ -246,46 +238,6 @@ public partial class App : Application
             // failed launch merely because startup context could not be read.
             return false;
         }
-    }
-
-    private void StartHotkeys(BehaviorSettings behavior)
-    {
-        IWindowReassignmentService reassignment =
-            _host.Services.GetRequiredService<IWindowReassignmentService>();
-        IForegroundWindowReassignment foreground =
-            _host.Services.GetRequiredService<IForegroundWindowReassignment>();
-        IAutomaticAssignmentPauseController pause =
-            _host.Services.GetRequiredService<
-                IAutomaticAssignmentPauseController>();
-
-        _hotkeyDispatcher = new HotkeyCommandDispatcher(
-            new HotkeyCommands(
-                async cancellationToken =>
-                {
-                    _ = await reassignment
-                        .ReassignAllAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                },
-                async cancellationToken =>
-                {
-                    _ = await foreground
-                        .ReassignForegroundWindowAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                },
-                cancellationToken =>
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    _ = pause.TogglePause();
-                    return Task.CompletedTask;
-                },
-                OpenShellFromHotkeyAsync));
-
-        _hotkeyCoordinator =
-            _host.Services.GetRequiredService<IGlobalHotkeyCoordinator>();
-        _hotkeyCoordinator.Invoked += _hotkeyDispatcher.HandleInvoked;
-        _ = _hotkeyCoordinator.Apply(behavior.ToHotkeySettings());
-
-        StartDesktopSwitchHotkeys(behavior);
     }
 
     /// <summary>
@@ -380,27 +332,6 @@ public partial class App : Application
             () => notificationArea.Notify(notification));
     }
 
-    private Task OpenShellFromHotkeyAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (_dispatcherQueue?.HasThreadAccess is true)
-        {
-            _notificationArea?.HandleActivationRequested();
-            return Task.CompletedTask;
-        }
-
-        if (_dispatcherQueue?.TryEnqueue(
-            () => _notificationArea?.HandleActivationRequested()) is true)
-        {
-            return Task.CompletedTask;
-        }
-
-        return Task.FromException(
-            new InvalidOperationException(
-                "DesktopShift could not return to its UI thread."));
-    }
-
     private MainWindow CreateMainWindow()
     {
         _window ??= _host.Services.GetRequiredService<MainWindow>();
@@ -420,26 +351,6 @@ public partial class App : Application
         // owns the WinEvent hooks and the topology provider registration.
         return new ApplicationShutdownSequence(
         [
-            new ShutdownStep(
-                "global hotkeys",
-                _ =>
-                {
-                    if (_hotkeyCoordinator is not null)
-                    {
-                        if (_hotkeyDispatcher is not null)
-                        {
-                            _hotkeyCoordinator.Invoked -=
-                                _hotkeyDispatcher.HandleInvoked;
-                        }
-
-                        _hotkeyCoordinator.Dispose();
-                    }
-
-                    return ValueTask.CompletedTask;
-                }),
-            // Its own step rather than a second statement in the one above: a
-            // failure releasing the four command shortcuts must not leave ten
-            // desktop combinations claimed by a process that is exiting.
             new ShutdownStep(
                 "desktop switching shortcuts",
                 _ =>

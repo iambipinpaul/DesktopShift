@@ -1,7 +1,6 @@
 using DesktopShift.App.Settings;
 using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Configuration;
-using DesktopShift.Core.Hotkeys;
 
 namespace DesktopShift.App.Presentation.Tests.Settings;
 
@@ -21,7 +20,6 @@ public sealed class SettingsPresentationTests
                 SettingsSection.Notifications,
                 SettingsSection.Appearance,
                 SettingsSection.Diagnostics,
-                SettingsSection.Hotkeys,
                 SettingsSection.DesktopSwitching,
             },
             SettingsSectionCatalog.Sections
@@ -46,8 +44,6 @@ public sealed class SettingsPresentationTests
             StartAssignmentPaused: true,
             NotifyOnAssignmentFailure: false,
             NotifyOnCompatibilityWarning: true,
-            AreHotkeysEnabled: true,
-            Hotkeys: HotkeyDefaults.Bindings,
             RecordLocalActivity: true);
 
         BehaviorSettings startup = SettingsBehaviorEditor.WithStartup(
@@ -59,9 +55,6 @@ public sealed class SettingsPresentationTests
         Assert.AreEqual(
             original.StartAssignmentPaused,
             startup.StartAssignmentPaused);
-        CollectionAssert.AreEqual(
-            original.Hotkeys.ToArray(),
-            startup.Hotkeys.ToArray());
         Assert.AreEqual(
             original.RecordLocalActivity,
             startup.RecordLocalActivity);
@@ -72,9 +65,6 @@ public sealed class SettingsPresentationTests
         Assert.AreEqual(
             original.NotifyOnAssignmentFailure,
             assignment.NotifyOnAssignmentFailure);
-        CollectionAssert.AreEqual(
-            original.Hotkeys.ToArray(),
-            assignment.Hotkeys.ToArray());
 
         BehaviorSettings notifications =
             SettingsBehaviorEditor.WithNotifications(original, true, false);
@@ -82,9 +72,6 @@ public sealed class SettingsPresentationTests
         Assert.AreEqual(
             original.StartAssignmentPaused,
             notifications.StartAssignmentPaused);
-        CollectionAssert.AreEqual(
-            original.Hotkeys.ToArray(),
-            notifications.Hotkeys.ToArray());
 
         BehaviorSettings diagnostics =
             SettingsBehaviorEditor.WithDiagnostics(original, false);
@@ -107,62 +94,5 @@ public sealed class SettingsPresentationTests
         Assert.AreEqual(
             original.StartAssignmentPaused,
             appearance.StartAssignmentPaused);
-        CollectionAssert.AreEqual(
-            original.Hotkeys.ToArray(),
-            appearance.Hotkeys.ToArray());
-    }
-
-    [TestMethod]
-    public void HotkeyEditor_RoundTripsEveryBindingMember()
-    {
-        HotkeyBinding source = new(
-            HotkeyAction.ReassignForegroundWindow,
-            HotkeyModifiers.Control |
-                HotkeyModifiers.Shift |
-                HotkeyModifiers.Windows,
-            HotkeyKey.F9,
-            IsEnabled: false);
-
-        HotkeyBinding roundTrip = new HotkeyBindingEditor(source).ToBinding();
-
-        Assert.AreEqual(source, roundTrip);
-    }
-
-    [TestMethod]
-    public void HotkeyEditor_TakesAKeyChosenFromThePicker()
-    {
-        HotkeyBindingEditor editor = new(
-            new HotkeyBinding(
-                HotkeyAction.TogglePause,
-                HotkeyModifiers.Control,
-                HotkeyKey.F9,
-                IsEnabled: true));
-
-        editor.SelectKey(HotkeyKey.F4);
-
-        Assert.AreEqual(HotkeyKey.F4, editor.Key);
-    }
-
-    /// <summary>
-    /// Rebuilding the shortcut list replaces each picker's item source, and a
-    /// ComboBox drops its selection to null when that happens. Treating it as a
-    /// choice would wipe the row's key on every refresh — and, when it was
-    /// written straight back through a TwoWay binding, unboxing that null into
-    /// <see cref="HotkeyKey"/> took the whole application down.
-    /// </summary>
-    [TestMethod]
-    public void HotkeyEditor_KeepsItsKeyWhenThePickerClearsItself()
-    {
-        HotkeyBindingEditor editor = new(
-            new HotkeyBinding(
-                HotkeyAction.TogglePause,
-                HotkeyModifiers.Control,
-                HotkeyKey.F9,
-                IsEnabled: true));
-
-        editor.SelectKey(null);
-        editor.SelectKey("F4");
-
-        Assert.AreEqual(HotkeyKey.F9, editor.Key);
     }
 }

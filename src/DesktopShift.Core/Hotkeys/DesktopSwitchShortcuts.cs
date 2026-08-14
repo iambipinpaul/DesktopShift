@@ -9,8 +9,8 @@ namespace DesktopShift.Core.Hotkeys;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pure on purpose, for the same reason <see cref="HotkeyValidation"/> is:
-/// <c>RegisterHotKey</c> cannot be reached from a test, so every rule that can
+/// Pure on purpose: <c>RegisterHotKey</c> cannot be reached from a test, so
+/// every rule that can
 /// be decided without Windows is decided here and the only question left for the
 /// live registrar is the one Windows alone owns — whether something already
 /// holds the combination.
@@ -87,7 +87,7 @@ public static class DesktopSwitchShortcuts
     /// <summary>The modifiers a profile claims.</summary>
     /// <param name="profile">The selected profile.</param>
     /// <param name="customModifiers">
-    /// What the Custom profile uses. Ignored by the other two.
+    /// What the Custom profile uses. Ignored by the built-in profile.
     /// </param>
     public static HotkeyModifiers ModifiersFor(
         DesktopSwitchShortcutProfile profile,

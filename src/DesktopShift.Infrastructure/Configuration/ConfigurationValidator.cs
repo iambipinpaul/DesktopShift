@@ -246,16 +246,7 @@ internal static class ConfigurationValidator
             }
         }
 
-        // Hotkey problems are ordinary validation issues, reported here rather
-        // than only by the Settings page. A conflicting chord that reached the
-        // document would otherwise become active configuration and be discovered
-        // as two shortcuts that silently do one thing.
-        issues.AddRange(
-            HotkeyValidation.Validate(
-                candidate.Behavior is null ? [] : candidate.Behavior.Hotkeys,
-                requireComplete: candidate.Behavior?.AreHotkeysEnabled == true));
-
-        // Desktop switching is validated the same way and for the same reason.
+        // Desktop switching is validated before a profile becomes active.
         // A profile carrying no modifier that reached the document would become
         // active configuration and be discovered as a number row that stopped
         // working everywhere else on the machine.

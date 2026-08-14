@@ -8,10 +8,8 @@ namespace DesktopShift.Windows.Hotkeys;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A second window rather than a tenant of the command-shortcut one. Hotkey ids
-/// are scoped to the window that owns them, so a separate window keeps the two
-/// id spaces from having to agree with each other, and lets a profile change
-/// release all ten claims without touching a command shortcut.
+/// Hotkey ids are scoped to the private window that owns them, so a profile
+/// change can release all ten claims together.
 /// </para>
 /// <para>
 /// Every combination is registered with <c>MOD_NOREPEAT</c>, which
@@ -28,10 +26,7 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrar :
     /// so Desktop 10 is <c>DesktopRegistrationIdBase + 9</c>.
     /// </summary>
     /// <remarks>
-    /// Well clear of the command shortcuts' 1 to 4. The two sets live in
-    /// separate windows and could safely reuse the same numbers, but a shared
-    /// number would make a native trace ambiguous at exactly the moment someone
-    /// is reading one to work out which shortcut misfired.
+    /// Kept above ordinary control ids so native traces are easy to recognize.
     /// </remarks>
     public const int DesktopRegistrationIdBase = 101;
 

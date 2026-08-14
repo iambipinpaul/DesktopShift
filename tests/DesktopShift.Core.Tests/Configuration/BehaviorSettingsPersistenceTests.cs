@@ -1,6 +1,5 @@
 using DesktopShift.Core.Appearance;
 using DesktopShift.Core.Configuration;
-using DesktopShift.Core.Hotkeys;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DesktopShift.Core.Tests.Configuration;
@@ -23,13 +22,22 @@ public sealed class BehaviorSettingsPersistenceTests
           "behavior": {
             "startWithWindows": false,
             "startMinimized": true,
-            "closeToTray": false
+            "closeToTray": false,
+            "areHotkeysEnabled": true,
+            "hotkeys": [
+              {
+                "action": "openDesktopShift",
+                "modifiers": "control",
+                "key": "d",
+                "isEnabled": true
+              }
+            ]
           }
         }
         """;
 
     [TestMethod]
-    public async Task EveryBehaviorSettingAndHotkeySurvivesAReload()
+    public async Task EveryBehaviorSettingSurvivesAReload()
     {
         using TestConfigurationDirectory storage = new();
         BehaviorSettings expected = new(
@@ -40,31 +48,7 @@ public sealed class BehaviorSettingsPersistenceTests
             Accent: AppAccent.AditiKraftBlue,
             StartAssignmentPaused: true,
             NotifyOnAssignmentFailure: false,
-            NotifyOnCompatibilityWarning: false,
-            AreHotkeysEnabled: true,
-            Hotkeys:
-            [
-                new(
-                    HotkeyAction.ReassignAllWindows,
-                    HotkeyModifiers.Control | HotkeyModifiers.Shift,
-                    HotkeyKey.F9,
-                    true),
-                new(
-                    HotkeyAction.ReassignForegroundWindow,
-                    HotkeyModifiers.Alt,
-                    HotkeyKey.F8,
-                    false),
-                new(
-                    HotkeyAction.TogglePause,
-                    HotkeyModifiers.Control,
-                    HotkeyKey.P,
-                    true),
-                new(
-                    HotkeyAction.OpenDesktopShift,
-                    HotkeyModifiers.Control | HotkeyModifiers.Alt,
-                    HotkeyKey.D,
-                    true),
-            ]);
+            NotifyOnCompatibilityWarning: false);
 
         await using (ServiceProvider provider =
             Issue17ConfigurationTestSupport.CreateProvider(storage))
@@ -96,14 +80,10 @@ public sealed class BehaviorSettingsPersistenceTests
         Assert.AreEqual(
             expected.NotifyOnCompatibilityWarning,
             actual.NotifyOnCompatibilityWarning);
-        Assert.AreEqual(expected.AreHotkeysEnabled, actual.AreHotkeysEnabled);
-        CollectionAssert.AreEqual(
-            expected.Hotkeys.ToArray(),
-            actual.Hotkeys.ToArray());
     }
 
     [TestMethod]
-    public async Task LegacyVersionOneBehaviorUsesBackwardCompatibleDefaults()
+    public async Task LegacyVersionOneBehaviorIgnoresRetiredGlobalShortcuts()
     {
         using TestConfigurationDirectory storage = new();
         Directory.CreateDirectory(storage.DirectoryPath);
@@ -124,57 +104,12 @@ public sealed class BehaviorSettingsPersistenceTests
         Assert.IsFalse(behavior.StartAssignmentPaused);
         Assert.IsTrue(behavior.NotifyOnAssignmentFailure);
         Assert.IsTrue(behavior.NotifyOnCompatibilityWarning);
-        Assert.IsFalse(behavior.AreHotkeysEnabled);
-        Assert.IsEmpty(behavior.Hotkeys);
-        CollectionAssert.AreEqual(
-            HotkeyDefaults.Actions.ToArray(),
-            behavior.ToHotkeySettings().Bindings
-                .Select(static binding => binding.Action)
-                .ToArray());
-    }
-
-    [TestMethod]
-    public async Task InvalidHotkeysRemainInTheCandidateWhileTheLastValidSnapshotRuns()
-    {
-        using TestConfigurationDirectory storage = new();
-        await using ServiceProvider provider =
-            Issue17ConfigurationTestSupport.CreateProvider(storage);
         IConfigurationService service =
             provider.GetRequiredService<IConfigurationService>();
-
-        ConfigurationDocument valid = ConfigurationDefaults.Create() with
-        {
-            Behavior = ConfigurationDefaults.Create().Behavior with
-            {
-                Theme = AppTheme.Dark,
-            },
-        };
-        Assert.IsTrue((await service.SaveCandidateAsync(valid)).Accepted);
-
-        HotkeyBinding first = HotkeyDefaults.Bindings[0];
-        HotkeyBinding conflict = HotkeyDefaults.Bindings[1] with
-        {
-            Modifiers = first.Modifiers,
-            Key = first.Key,
-        };
-        ConfigurationDocument invalid = valid with
-        {
-            Behavior = valid.Behavior with
-            {
-                AreHotkeysEnabled = true,
-                Hotkeys = [first, conflict, .. HotkeyDefaults.Bindings.Skip(2)],
-            },
-        };
-
-        ConfigurationSaveResult result =
-            await service.SaveCandidateAsync(invalid);
-
-        Assert.IsFalse(result.Accepted);
-        Assert.AreEqual(invalid, result.State.Candidate);
-        Assert.AreEqual(valid, result.State.Active);
-        Assert.IsTrue(
-            result.State.Issues.Any(
-                static issue =>
-                    issue.Code == ConfigurationValidationCode.HotkeyConflict));
+        Assert.IsTrue((await service.SaveCandidateAsync(state.Active)).Accepted);
+        string rewritten = await File.ReadAllTextAsync(
+            Path.Combine(storage.DirectoryPath, "configuration.json"));
+        Assert.DoesNotContain("areHotkeysEnabled", rewritten, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"hotkeys\"", rewritten, StringComparison.Ordinal);
     }
 }

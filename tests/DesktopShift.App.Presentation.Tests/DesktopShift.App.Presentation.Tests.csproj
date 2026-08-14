@@ -45,9 +45,6 @@
       Include="..\..\src\DesktopShift.App\Rules\RuleEditorViewModel.cs"
       Link="Production\RuleEditorViewModel.cs" />
     <Compile
-      Include="..\..\src\DesktopShift.App\Settings\HotkeyBindingEditor.cs"
-      Link="Production\HotkeyBindingEditor.cs" />
-    <Compile
       Include="..\..\src\DesktopShift.App\Settings\DesktopSwitchShortcutEditor.cs"
       Link="Production\DesktopSwitchShortcutEditor.cs" />
     <Compile

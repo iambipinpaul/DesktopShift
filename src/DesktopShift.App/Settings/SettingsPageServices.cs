@@ -27,13 +27,9 @@ namespace DesktopShift.App.Settings;
 /// Imports and exports portable configuration. Import goes through the same
 /// candidate/active split as every other edit.
 /// </param>
-/// <param name="Hotkeys">
-/// Owns the gap between the shortcuts the document declares and the
-/// combinations Windows is actually holding.
-/// </param>
 /// <param name="DesktopSwitchHotkeys">
-/// The same job for the ten desktop-switching combinations. Separate because the
-/// two sets are claimed and refused independently.
+/// Owns the gap between the desktop-switching profile in the document and the
+/// ten combinations Windows is actually holding.
 /// </param>
 /// <param name="Compatibility">
 /// Supplies what this Windows build allows, and runs the compatibility test on
@@ -59,7 +55,6 @@ namespace DesktopShift.App.Settings;
 public sealed record SettingsPageServices(
     BehaviorSettingsCommand BehaviorSettings,
     IConfigurationExchangeService ConfigurationExchange,
-    IGlobalHotkeyCoordinator Hotkeys,
     ICompatibilityCoordinator Compatibility,
     IDiagnosticsCoordinator Diagnostics,
     IAutomaticAssignmentPauseController AssignmentPause,

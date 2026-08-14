@@ -76,9 +76,7 @@ public enum ConfigurationEntryKind
     Behavior,
 
     /// <summary>
-    /// A global shortcut binding. Separate from <see cref="Behavior"/> because
-    /// the Settings page shows a hotkey problem against the row that carries it,
-    /// and a whole-document kind could not say which row.
+    /// A desktop-switching shortcut profile or registration.
     /// </summary>
     Hotkey,
 }
@@ -131,40 +129,6 @@ public enum ConfigurationValidationCode
     /// malformed JSON, or JSON that is not an object.
     /// </summary>
     ImportDocumentUnreadable,
-
-    /// <summary>Two enabled shortcuts claim the same key combination.</summary>
-    HotkeyConflict,
-
-    /// <summary>
-    /// A shortcut is turned on with no modifier. Windows would register a bare
-    /// key and take it away from every application on the machine.
-    /// </summary>
-    HotkeyMissingModifier,
-
-    /// <summary>A shortcut is turned on with no key chosen.</summary>
-    HotkeyUnassigned,
-
-    /// <summary>
-    /// Windows refused to hand a combination over, almost always because another
-    /// application already owns it. Reported after the fact by the registrar,
-    /// because nothing but Windows knows the answer.
-    /// </summary>
-    HotkeyRegistrationFailed,
-
-    /// <summary>The same shortcut action is bound more than once.</summary>
-    DuplicateHotkeyAction,
-
-    /// <summary>
-    /// A hand-edited shortcut contains an action, modifier bit, or key value
-    /// that this build does not understand.
-    /// </summary>
-    InvalidHotkeyValue,
-
-    /// <summary>
-    /// Global shortcuts are enabled, but one of the four supported actions has
-    /// no binding in the document.
-    /// </summary>
-    MissingHotkeyAction,
 
     /// <summary>
     /// The desktop switching shortcuts carry no modifier. Windows would register
@@ -269,13 +233,11 @@ public interface IConfigurationExchangeService
 /// <param name="SchemaVersion">The version stamped into the file.</param>
 /// <param name="ManagedDesktopCount">How many desktops travelled.</param>
 /// <param name="ApplicationRuleCount">How many rules travelled.</param>
-/// <param name="HotkeyCount">How many shortcut bindings travelled.</param>
 /// <param name="ByteCount">The size of the written document.</param>
 public sealed record ConfigurationExportResult(
     int SchemaVersion,
     int ManagedDesktopCount,
     int ApplicationRuleCount,
-    int HotkeyCount,
     long ByteCount);
 
 /// <summary>What an import produced.</summary>

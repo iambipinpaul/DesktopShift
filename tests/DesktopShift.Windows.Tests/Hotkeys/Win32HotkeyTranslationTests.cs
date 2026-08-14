@@ -14,7 +14,7 @@ public sealed class Win32HotkeyTranslationTests
             HotkeyModifiers.Alt |
             HotkeyModifiers.Shift |
             HotkeyModifiers.Windows,
-            HotkeyKey.R);
+            HotkeyKey.D3);
 
         bool translated = Win32HotkeyTranslation.TryTranslate(
             chord,
@@ -24,7 +24,7 @@ public sealed class Win32HotkeyTranslationTests
 
         Assert.IsTrue(translated, failure);
         Assert.AreEqual(0x400Fu, modifiers);
-        Assert.AreEqual(0x52u, virtualKey);
+        Assert.AreEqual(0x33u, virtualKey);
     }
 
     [TestMethod]
@@ -43,7 +43,7 @@ public sealed class Win32HotkeyTranslationTests
     [TestMethod]
     public void AnUnknownModifier_NeverReachesWindows()
     {
-        HotkeyChord chord = new((HotkeyModifiers)0x10, HotkeyKey.R);
+        HotkeyChord chord = new((HotkeyModifiers)0x10, HotkeyKey.D3);
 
         bool translated = Win32HotkeyTranslation.TryTranslate(
             chord,
@@ -60,7 +60,7 @@ public sealed class Win32HotkeyTranslationTests
     [TestMethod]
     public void AKeyWithoutAModifier_NeverReachesWindows()
     {
-        HotkeyChord chord = new(HotkeyModifiers.None, HotkeyKey.R);
+        HotkeyChord chord = new(HotkeyModifiers.None, HotkeyKey.D3);
 
         bool translated = Win32HotkeyTranslation.TryTranslate(
             chord,

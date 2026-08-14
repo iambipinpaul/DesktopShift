@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DesktopShift.App.Settings;
 
 /// <summary>
-/// The nine areas the Settings page covers.
+/// The eight areas the Settings page covers.
 /// </summary>
 public enum SettingsSection
 {
@@ -14,7 +14,6 @@ public enum SettingsSection
     Notifications,
     Appearance,
     Diagnostics,
-    Hotkeys,
     DesktopSwitching,
 }
 
@@ -36,16 +35,15 @@ public sealed record SettingsSectionDescriptor(
 /// <para>
 /// The page reads its headings from here rather than carrying them in XAML. A
 /// heading that lives only in markup cannot be tested, and "the Settings page
-/// covers these nine areas" is exactly the kind of claim that quietly stops
+/// covers these eight areas" is exactly the kind of claim that quietly stops
 /// being true when a card is moved or removed.
 /// </para>
 /// <para>
 /// The order is the order a user meets the application in: what happens at
 /// sign-in, then what it does to windows while running, then what it does to
 /// the desktops themselves, then what the machine allows, then how loudly it
-/// speaks, then how it looks, then how to diagnose it, and finally the two
-/// optional shortcut sets — the commands first, then desktop switching, because
-/// a user who wants neither can stop reading at Diagnostics.
+/// speaks, then how it looks, then how to diagnose it, and finally the optional
+/// desktop-switching shortcut profile.
 /// </para>
 /// </remarks>
 public static class SettingsSectionCatalog
@@ -88,11 +86,6 @@ public static class SettingsSectionCatalog
             "diagnostics",
             "Diagnostics",
             "Logs stay on this machine. Nothing is uploaded, and a bundle is only ever produced when you ask for one."),
-        new(
-            SettingsSection.Hotkeys,
-            "hotkeys",
-            "Global shortcuts",
-            "A global shortcut takes its key combination away from every other application. Nothing is claimed until you turn shortcuts on."),
         new(
             SettingsSection.DesktopSwitching,
             "desktop-switching",

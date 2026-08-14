@@ -99,13 +99,11 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrarTests
                 .Distinct()
                 .Count());
 
-        // Clear of the four command shortcuts, so a native trace is never
-        // ambiguous about which set a misfiring id belongs to.
         Assert.IsTrue(
             native.Registrations.All(static registration =>
                 registration.RegistrationId >=
                 WindowsDesktopSwitchHotkeyRegistrar.DesktopRegistrationIdBase),
-            "Desktop ids must not overlap the command shortcut ids.");
+            "Desktop registration ids must stay in their reserved range.");
     }
 
     [TestMethod]
@@ -293,7 +291,7 @@ public sealed class WindowsDesktopSwitchHotkeyRegistrarTests
             Assert.IsNotNull(windowProcedure);
             _ = windowProcedure(
                 42,
-                WindowsGlobalHotkeyRegistrar.HotkeyMessage,
+                HotkeyMessageWindow.HotkeyMessage,
                 registrationId,
                 0);
         }

@@ -80,7 +80,6 @@ public sealed partial class MainWindow : Window
         IStartupRegistration startupRegistration,
         IDiagnosticsCoordinator diagnosticsCoordinator,
         IConfigurationExchangeService configurationExchangeService,
-        IGlobalHotkeyCoordinator globalHotkeyCoordinator,
         IDesktopSwitchHotkeyCoordinator desktopSwitchHotkeyCoordinator,
         IAutomaticAssignmentPauseController assignmentPauseController,
         IRunningApplicationInventory runningApplicationInventory,
@@ -134,8 +133,6 @@ public sealed partial class MainWindow : Window
             _behaviorSettingsCommand,
             configurationExchangeService ??
                 throw new ArgumentNullException(nameof(configurationExchangeService)),
-            globalHotkeyCoordinator ??
-                throw new ArgumentNullException(nameof(globalHotkeyCoordinator)),
             _compatibilityCoordinator,
             _diagnosticsCoordinator,
             _assignmentPauseController,
@@ -290,8 +287,6 @@ public sealed partial class MainWindow : Window
     {
         _themePreferenceService.SetTheme(behavior.Theme);
         ApplyAccent(behavior.Accent);
-        _ = _settingsPageServices.Hotkeys.Apply(
-            behavior.ToHotkeySettings());
         _ = _settingsPageServices.DesktopSwitchHotkeys?.Apply(
             behavior.ToDesktopSwitchShortcutSettings());
         AcceptedBehaviorHandler?.Invoke(behavior);

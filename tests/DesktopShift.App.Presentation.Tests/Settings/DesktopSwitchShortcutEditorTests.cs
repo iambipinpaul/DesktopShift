@@ -96,8 +96,6 @@ public sealed class DesktopSwitchShortcutEditorTests
             StartAssignmentPaused: true,
             NotifyOnAssignmentFailure: false,
             NotifyOnCompatibilityWarning: true,
-            AreHotkeysEnabled: true,
-            Hotkeys: HotkeyDefaults.Bindings,
             NameWindowsDesktops: false);
 
         BehaviorSettings updated =
@@ -117,16 +115,12 @@ public sealed class DesktopSwitchShortcutEditorTests
             updated.DesktopSwitchCustomModifiers);
 
         Assert.AreEqual(original.Theme, updated.Theme);
-        Assert.AreEqual(original.AreHotkeysEnabled, updated.AreHotkeysEnabled);
         Assert.AreEqual(
             original.NameWindowsDesktops,
             updated.NameWindowsDesktops);
         Assert.AreEqual(
             original.StartAssignmentPaused,
             updated.StartAssignmentPaused);
-        CollectionAssert.AreEqual(
-            original.Hotkeys.ToArray(),
-            updated.Hotkeys.ToArray());
     }
 
     [TestMethod]

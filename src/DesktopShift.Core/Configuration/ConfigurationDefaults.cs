@@ -172,12 +172,6 @@ public static class ConfigurationDefaults
                 StartWithWindows: true,
                 StartMinimized: true,
                 CloseToTray: true,
-                // The shipped chords are written into the document even though
-                // hotkeys start switched off, so the file says what the four
-                // shortcuts are instead of leaving a user to discover them in
-                // the UI. Nothing is claimed system-wide until
-                // AreHotkeysEnabled is turned on.
-                Hotkeys: HotkeyDefaults.Bindings,
                 // Routine activity is useful while troubleshooting, but it is
                 // noisy during ordinary use and writes rotating files. The
                 // first-run dialog and Activity page make opting in explicit.

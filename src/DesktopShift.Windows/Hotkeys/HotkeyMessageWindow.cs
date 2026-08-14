@@ -9,10 +9,9 @@ namespace DesktopShift.Windows.Hotkeys;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Shared by every registrar rather than reimplemented per feature. The window
-/// class registration, the lazy creation, the owning-thread rule, and the
-/// release-before-destroy order are all fiddly and all identical, and two copies
-/// would drift the moment one of them was fixed.
+/// The window class registration, lazy creation, owning-thread rule, and
+/// release-before-destroy order live together here so the desktop-switching
+/// registrar stays focused on its profile and id mapping.
 /// </para>
 /// <para>
 /// The window is created lazily, so constructing this reserves no combination
@@ -21,9 +20,7 @@ namespace DesktopShift.Windows.Hotkeys;
 /// the thread that created them.
 /// </para>
 /// <para>
-/// Ids are opaque here. What a given id means — a command, a desktop position —
-/// belongs to the registrar above, which is what lets one window class serve
-/// both without either knowing about the other.
+/// Ids are opaque here. What a given id means belongs to the registrar above.
 /// </para>
 /// </remarks>
 internal sealed class HotkeyMessageWindow : IDisposable
@@ -114,7 +111,7 @@ internal sealed class HotkeyMessageWindow : IDisposable
             {
                 return new HotkeyRegistrationOutcome(
                     false,
-                    "Global shortcuts must be changed on the thread that owns their Windows message window.");
+                    "Desktop switching shortcuts must be changed on the thread that owns their Windows message window.");
             }
 
             if (!native.RegisterHotKey(

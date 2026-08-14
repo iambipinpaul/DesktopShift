@@ -11,7 +11,7 @@ namespace DesktopShift.Core.Assignments;
 /// assumption, and all three are ordinary use rather than edge cases: a held
 /// open-window assignment runs from a timer when its grace period ends, the
 /// Reassign All command walks every top-level window from the UI, and the
-/// reassign hotkey sends the foreground window through on whichever thread
+/// manual reassignment sends a foreground window through on whichever thread
 /// pressed it.
 /// </para>
 /// <para>

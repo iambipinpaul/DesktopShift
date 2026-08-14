@@ -47,13 +47,6 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IAutomaticAssignmentPauseController>(
             static serviceProvider => serviceProvider.GetRequiredService<ApplicationRuntimeState>());
         services.TryAddSingleton<
-            IGlobalHotkeyRegistrar,
-            InMemoryGlobalHotkeyRegistrar>();
-        services.TryAddSingleton<GlobalHotkeyCoordinator>();
-        services.TryAddSingleton<IGlobalHotkeyCoordinator>(
-            static serviceProvider =>
-                serviceProvider.GetRequiredService<GlobalHotkeyCoordinator>());
-        services.TryAddSingleton<
             IDesktopSwitchHotkeyRegistrar,
             InMemoryDesktopSwitchHotkeyRegistrar>();
         services.TryAddSingleton<DesktopSwitchHotkeyCoordinator>();
@@ -307,15 +300,6 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IWindowReassignmentService>(
             static serviceProvider => serviceProvider.GetRequiredService<
                 WindowReassignmentService>());
-        if (services.Any(
-            static descriptor =>
-                descriptor.ServiceType == typeof(IForegroundWindowProvider)))
-        {
-            services.TryAddSingleton<ForegroundWindowReassignment>();
-            services.TryAddSingleton<IForegroundWindowReassignment>(
-                static serviceProvider => serviceProvider.GetRequiredService<
-                    ForegroundWindowReassignment>());
-        }
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<
                 IHostedService,

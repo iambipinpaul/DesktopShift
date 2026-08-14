@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using DesktopShift.App.Settings;
@@ -26,7 +25,6 @@ public sealed partial class SettingsPage : Page
             Math.Min(1000, args.NewSize.Width - horizontalPageMargin));
     }
 
-    private readonly ObservableCollection<HotkeyBindingEditor> hotkeyBindings = [];
     private readonly SemaphoreSlim behaviorSaveGate = new(1, 1);
     private DesktopSwitchShortcutEditor? desktopSwitchEditor;
     private SettingsPageServices? services;
@@ -41,11 +39,10 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        HotkeyList.ItemsSource = hotkeyBindings;
     }
 
     /// <summary>
-    /// Connects all seven sections to their application services.
+    /// Connects all Settings sections to their application services.
     /// </summary>
     public void Update(
         SettingsPageServices pageServices,
@@ -65,7 +62,6 @@ public sealed partial class SettingsPage : Page
         DiagnosticLogLocation.Text =
             $"Log location: {pageServices.Diagnostics.LogLocation.DisplayPath}";
         ApplyLivePause(pageServices.AssignmentPause.IsPaused);
-        ShowHotkeyState(pageServices.Hotkeys.Current, showSuccess: false);
         ShowDesktopSwitchState(
             pageServices.DesktopSwitchHotkeys?.Current,
             showSuccess: false);
@@ -284,9 +280,7 @@ public sealed partial class SettingsPage : Page
                 AppAccent.AditiKraftBlue => 1,
                 _ => 0,
             };
-            HotkeysEnabledToggle.IsOn = currentBehavior.AreHotkeysEnabled;
             StartupStateValue.Text = presentation.StartupStateDescription;
-            ReplaceHotkeys(currentBehavior.ToHotkeySettings());
             ReplaceDesktopSwitchShortcuts(
                 currentBehavior.ToDesktopSwitchShortcutSettings());
         }
@@ -448,31 +442,6 @@ public sealed partial class SettingsPage : Page
             ? InfoBarSeverity.Success
             : InfoBarSeverity.Warning;
         DesktopSwitchStatus.IsOpen = true;
-    }
-
-    private void ReplaceHotkeys(HotkeySettings settings)
-    {
-        hotkeyBindings.Clear();
-        foreach (HotkeyBinding binding in settings.Bindings)
-        {
-            hotkeyBindings.Add(new HotkeyBindingEditor(binding));
-        }
-    }
-
-    /// <summary>
-    /// Carries a key choice back to the row it was made on. Rebuilding the list
-    /// recycles these pickers, so this fires for reasons that have nothing to do
-    /// with the user; <see cref="HotkeyBindingEditor.SelectKey"/> decides which
-    /// of them count.
-    /// </summary>
-    private void OnHotkeyKeySelectionChanged(
-        object sender,
-        SelectionChangedEventArgs args)
-    {
-        if (sender is ComboBox { DataContext: HotkeyBindingEditor editor } picker)
-        {
-            editor.SelectKey(picker.SelectedItem);
-        }
     }
 
     private void OnLivePauseToggled(object sender, RoutedEventArgs args)
@@ -683,7 +652,7 @@ public sealed partial class SettingsPage : Page
             Report(
                 InfoBarSeverity.Success,
                 "Configuration exported",
-                $"{result.ApplicationRuleCount} rules and {result.HotkeyCount} shortcuts were written to {file.Name}.");
+                $"{result.ApplicationRuleCount} rules were written to {file.Name}.");
         }
         catch (OperationCanceledException)
         {
@@ -779,58 +748,6 @@ public sealed partial class SettingsPage : Page
             "DesktopShift's activity journal and rolling log files were removed.");
     }
 
-    private async void OnApplyHotkeysClick(object sender, RoutedEventArgs args)
-    {
-        if (services is null)
-        {
-            ReportDisconnected();
-            return;
-        }
-
-        BehaviorSettings requested = SettingsBehaviorEditor.WithHotkeys(
-            currentBehavior,
-            HotkeysEnabledToggle.IsOn,
-            hotkeyBindings.Select(static binding => binding.ToBinding()));
-        BehaviorSettingsPresentation? presentation =
-            await PersistBehaviorAsync(requested);
-        if (presentation is null)
-        {
-            return;
-        }
-
-        if (!presentation.Accepted)
-        {
-            HotkeyStatus.Message =
-                "The shortcut candidate was retained for correction. The previous registrations are still active.";
-            HotkeyStatus.Severity = InfoBarSeverity.Warning;
-            HotkeyStatus.IsOpen = true;
-            return;
-        }
-
-        ShowHotkeyState(services.Hotkeys.Current, showSuccess: true);
-    }
-
-    private void ShowHotkeyState(
-        HotkeyState state,
-        bool showSuccess)
-    {
-        if (state.Issues.IsEmpty && !showSuccess)
-        {
-            HotkeyStatus.IsOpen = false;
-            return;
-        }
-
-        HotkeyStatus.Message = state.Issues.IsEmpty
-            ? state.IsEnabled
-                ? $"{state.RegisteredCount} global shortcuts are registered."
-                : "Global shortcuts are disabled; no combinations are registered."
-            : FormatIssues(state.Issues);
-        HotkeyStatus.Severity = state.Issues.IsEmpty
-            ? InfoBarSeverity.Success
-            : InfoBarSeverity.Warning;
-        HotkeyStatus.IsOpen = true;
-    }
-
     private async Task<StorageFile?> PickOpenFileAsync(string extension)
     {
         nint windowHandle = GetWindowHandle();
@@ -902,7 +819,6 @@ public sealed partial class SettingsPage : Page
         }
 
         services.ThemePreference.SetTheme(behavior.Theme);
-        _ = services.Hotkeys.Apply(behavior.ToHotkeySettings());
         _ = services.DesktopSwitchHotkeys?.Apply(
             behavior.ToDesktopSwitchShortcutSettings());
     }

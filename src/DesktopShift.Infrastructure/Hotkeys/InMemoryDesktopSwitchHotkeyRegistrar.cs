@@ -17,11 +17,9 @@ public sealed record DesktopSwitchHotkeyRegistrationAttempt(
 /// nothing.
 /// </summary>
 /// <remarks>
-/// The safe default, for the same reason
-/// <see cref="InMemoryGlobalHotkeyRegistrar"/> is: a profile claims ten
-/// combinations from every application on the machine and needs a real message
-/// loop to deliver any of them, so a test host must not be able to reach the
-/// platform implementation by accident.
+/// The safe default: a profile claims ten combinations from every application
+/// on the machine and needs a real message loop to deliver any of them, so a
+/// test host must not be able to reach the platform implementation by accident.
 /// </remarks>
 public sealed class InMemoryDesktopSwitchHotkeyRegistrar :
     IDesktopSwitchHotkeyRegistrar

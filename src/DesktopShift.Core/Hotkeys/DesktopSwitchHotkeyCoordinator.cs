@@ -15,10 +15,9 @@ namespace DesktopShift.Core.Hotkeys;
 /// without a single combination being taken from the machine a test runs on.
 /// </para>
 /// <para>
-/// Releasing everything first matters more here than it does for the four
-/// command shortcuts. Changing profile moves all ten chords at once, and a
-/// partial release would leave Ctrl+Alt+1 claimed by a process that now believes
-/// it owns Win+Alt+1, with no way back but a restart.
+/// Changing profile moves all ten chords at once. Releasing everything first
+/// prevents a partial change from leaving Ctrl+Alt+1 claimed by a process that
+/// now believes it owns a different profile, with no way back but a restart.
 /// </para>
 /// <para>
 /// A refused desktop does not stop the others. A user whose taskbar already owns
