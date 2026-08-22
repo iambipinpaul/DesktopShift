@@ -95,6 +95,15 @@ anywhere in the shipping pipeline. Window events come from an out-of-context
 WinEvent hook, desktop changes come from a topology notification, and shell
 disruptions come from Windows messages — all push, none polled.
 
+DesktopShift has four event-driven, one-shot timer sites. They coalesce an event
+burst, hold a newly opened window for its foreground signal, confirm that a
+briefly hidden BSP window stayed unavailable, and recover if a native
+`CurrentChanged` notification is not followed by `Switched`. The same switch
+timer also holds one short settling period after `Switched`, because per-window
+desktop state can finish later than the Shell notification. Each timer has an
+infinite period and cannot repeat. No timer starts while the related event is
+absent.
+
 Performance counters are read only when somebody asks: when a user exports a
 diagnostic bundle, or when a benchmark builds a report. An idle-cost figure
 produced by a recurring measurement would be reporting its own overhead, which is

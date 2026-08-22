@@ -123,6 +123,18 @@ internal sealed class TilingTrackedWindow
     /// below. Zero means that no foreign minimum was observed.
     /// </summary>
     public int MinimumVisibleHeightPixels { get; set; }
+
+    /// <summary>
+    /// When an existing visible tile first became temporarily unavailable.
+    /// The tile stays reserved during the bounded grace window.
+    /// </summary>
+    public DateTimeOffset? TransientUnavailableSince { get; set; }
+
+    /// <summary>Invalidates a pending transient-state recheck.</summary>
+    public int TransientUnavailableGeneration { get; set; }
+
+    /// <summary>The one-shot recheck timer, when a recheck is waiting.</summary>
+    public Timer? TransientRecheckTimer { get; set; }
 }
 
 /// <summary>
@@ -166,6 +178,28 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
     public static readonly TimeSpan FeedbackSuppressionWindow =
         TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// A short hidden or application-cloak transition keeps its existing leaf.
+    /// Destroy and minimize events remain immediate and do not use this grace.
+    /// </summary>
+    public static readonly TimeSpan TransientUnavailableGraceWindow =
+        TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Safety bound used only when CurrentChanged is not followed by Switched.
+    /// A normal Full Mode switch ends on the native Switched signal.
+    /// </summary>
+    public static readonly TimeSpan TopologySwitchFallbackWindow =
+        TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The Shell's Switched callback can arrive before every HWND reports its
+    /// final desktop membership. Keep the transaction frozen through this
+    /// bounded settling window.
+    /// </summary>
+    public static readonly TimeSpan TopologySwitchSettleWindow =
+        TimeSpan.FromMilliseconds(750);
+
     private readonly Func<TilingSettings> settingsSource;
     private readonly ITilingMonitorCatalog monitorCatalog;
     private readonly ITilingWindowReader windowReader;
@@ -186,6 +220,9 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
     private int pendingRequests;
     private int drainRunning;
     private int enumerateBeforeNextPass;
+    private bool topologySwitchInProgress;
+    private int topologySwitchGeneration;
+    private Timer? topologySwitchFallbackTimer;
 
     /// <summary>Raised after every completed reconciliation pass.</summary>
     public event EventHandler<TilingReconcileReport>? ReconcileCompleted;
@@ -263,6 +300,17 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
         if (topologyProvider is not null)
         {
             topologyProvider.TopologyChanged -= OnTopologyChanged;
+        }
+
+        lock (stateLock)
+        {
+            topologySwitchFallbackTimer?.Dispose();
+            topologySwitchFallbackTimer = null;
+            foreach (TilingTrackedWindow entry in tracked.Values)
+            {
+                entry.TransientRecheckTimer?.Dispose();
+                entry.TransientRecheckTimer = null;
+            }
         }
 
         // A coalesced drain can still be finishing during host shutdown. The
@@ -366,6 +414,13 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
     /// <inheritdoc />
     public void NotifyAssignmentCompleted(in TilingAssignmentNotification notification)
     {
+        if (notification.Disposition == TilingAssignmentDisposition.Unconfirmed)
+        {
+            // A foreground read can be temporarily inconclusive. It must not
+            // erase a leaf that earlier authoritative events already proved.
+            return;
+        }
+
         if (notification.Disposition == TilingAssignmentDisposition.NotPlaced)
         {
             Forget(notification.WindowHandle);
@@ -483,6 +538,25 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
 
     private void OnTopologyChanged(object? sender, DesktopTopologyChangedEventArgs e)
     {
+        if (string.Equals(e.Reason, "CurrentChanged", StringComparison.Ordinal))
+        {
+            BeginTopologySwitch();
+            RequestReconcile();
+            return;
+        }
+
+        if (string.Equals(e.Reason, "Switched", StringComparison.Ordinal))
+        {
+            SettleTopologySwitch();
+            RequestReconcile();
+            return;
+        }
+
+        if (e.Reason is "ProviderReconnected" or "ProviderFallbackActivated")
+        {
+            EndTopologySwitch();
+        }
+
         // Desktop switches must keep every desktop-monitor tree intact. The
         // next pass reads the new current desktop and applies only its tree.
         // A real monitor change produces new monitor keys, so stale monitor
@@ -529,6 +603,15 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
         {
             // Disabled means disabled: no placement, no reads, no echoes.
             Publish(new TilingReconcileReport(atUtc, 0, 0, 0, 0, 0, 0, 0, 0));
+            return;
+        }
+
+        if (IsTopologySwitchInProgress())
+        {
+            // CurrentChanged and Switched form one Shell transaction. Any
+            // snapshot between them can contain only part of the desktop, so
+            // neither tree ownership nor window bounds may change here.
+            Publish(TilingReconcileReport.PlacedNothing(atUtc));
             return;
         }
 
@@ -591,7 +674,7 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 {
                     Forget(handle);
                 }
-                else
+                else if (!PreserveTransientUnavailable(handle, entry, atUtc))
                 {
                     ReleaseSlot(entry);
                 }
@@ -648,7 +731,10 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 // Elevated or protected: the desktop manager refused to say,
                 // so no workspace can claim this window.
                 floated++;
-                ReleaseSlot(entry);
+                if (!PreserveTransientUnavailable(handle, entry, atUtc))
+                {
+                    ReleaseSlot(entry);
+                }
                 continue;
             }
 
@@ -686,7 +772,10 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 // separate uncloak events cannot reverse the tree order.
                 if (!state.IsShellCloaked)
                 {
-                    ReleaseSlot(entry);
+                    if (!PreserveTransientUnavailable(handle, entry, atUtc))
+                    {
+                        ReleaseSlot(entry);
+                    }
                 }
 
                 continue;
@@ -695,7 +784,10 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
             if (!state.IsVisible)
             {
                 hidden++;
-                ReleaseSlot(entry);
+                if (!PreserveTransientUnavailable(handle, entry, atUtc))
+                {
+                    ReleaseSlot(entry);
+                }
                 continue;
             }
 
@@ -715,6 +807,7 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 continue;
             }
 
+            ClearTransientUnavailable(entry);
             EnsureSlot(entry, workspaceKey, monitor, settings, focusedWindow);
             if (entry.Token is not LeafToken admitted)
             {
@@ -994,6 +1087,7 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
 
     private void ReleaseSlot(TilingTrackedWindow entry)
     {
+        ClearTransientUnavailable(entry);
         if (entry.Token is not LeafToken token)
         {
             return;
@@ -1007,6 +1101,157 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
 
         entry.Token = null;
         entry.WorkspaceKey = null;
+    }
+
+    private bool PreserveTransientUnavailable(
+        nint handle,
+        TilingTrackedWindow entry,
+        DateTimeOffset now)
+    {
+        lock (stateLock)
+        {
+            if (entry.Token is null)
+            {
+                return false;
+            }
+
+            entry.TransientUnavailableSince ??= now;
+            if (now - entry.TransientUnavailableSince.Value >=
+                TransientUnavailableGraceWindow)
+            {
+                ClearTransientUnavailable(entry);
+                return false;
+            }
+
+            if (entry.TransientRecheckTimer is null)
+            {
+                int generation = ++entry.TransientUnavailableGeneration;
+                entry.TransientRecheckTimer = new Timer(
+                    _ => OnTransientUnavailableTimer(handle, generation),
+                    null,
+                    TransientUnavailableGraceWindow,
+                    Timeout.InfiniteTimeSpan);
+            }
+        }
+
+        return true;
+    }
+
+    private static void ClearTransientUnavailable(TilingTrackedWindow entry)
+    {
+        if (entry.TransientUnavailableSince is null &&
+            entry.TransientRecheckTimer is null)
+        {
+            return;
+        }
+
+        entry.TransientRecheckTimer?.Dispose();
+        entry.TransientRecheckTimer = null;
+        entry.TransientUnavailableSince = null;
+        entry.TransientUnavailableGeneration++;
+    }
+
+    private void OnTransientUnavailableTimer(
+        nint handle,
+        int generation)
+    {
+        bool request = false;
+        lock (stateLock)
+        {
+            if (tracked.TryGetValue(handle, out TilingTrackedWindow? entry) &&
+                entry.TransientUnavailableGeneration == generation &&
+                entry.TransientUnavailableSince is not null)
+            {
+                entry.TransientRecheckTimer?.Dispose();
+                entry.TransientRecheckTimer = null;
+                request = true;
+            }
+        }
+
+        if (request)
+        {
+            RequestReconcile();
+        }
+    }
+
+    private void BeginTopologySwitch()
+    {
+        lock (stateLock)
+        {
+            topologySwitchInProgress = true;
+            int generation = ++topologySwitchGeneration;
+            ArmTopologySwitchTimer(
+                generation,
+                TopologySwitchFallbackWindow);
+        }
+    }
+
+    private void SettleTopologySwitch()
+    {
+        lock (stateLock)
+        {
+            // Switched is the Shell's completion signal, but per-window
+            // desktop membership and cloak state settle asynchronously after
+            // it. Keep placement frozen until one bounded quiet period ends.
+            topologySwitchInProgress = true;
+            int generation = ++topologySwitchGeneration;
+            ArmTopologySwitchTimer(
+                generation,
+                TopologySwitchSettleWindow);
+        }
+    }
+
+    private void ArmTopologySwitchTimer(
+        int generation,
+        TimeSpan dueTime)
+    {
+        topologySwitchFallbackTimer?.Dispose();
+        topologySwitchFallbackTimer = new Timer(
+            _ => OnTopologySwitchTimer(generation),
+            null,
+            dueTime,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void EndTopologySwitch()
+    {
+        lock (stateLock)
+        {
+            topologySwitchInProgress = false;
+            topologySwitchGeneration++;
+            topologySwitchFallbackTimer?.Dispose();
+            topologySwitchFallbackTimer = null;
+        }
+    }
+
+    private bool IsTopologySwitchInProgress()
+    {
+        lock (stateLock)
+        {
+            return topologySwitchInProgress;
+        }
+    }
+
+    private void OnTopologySwitchTimer(int generation)
+    {
+        bool request = false;
+        lock (stateLock)
+        {
+            if (topologySwitchInProgress &&
+                topologySwitchGeneration == generation)
+            {
+                topologySwitchInProgress = false;
+                topologySwitchGeneration++;
+                topologySwitchFallbackTimer?.Dispose();
+                topologySwitchFallbackTimer = null;
+                request = true;
+            }
+        }
+
+        if (request)
+        {
+            RequestReconcile();
+        }
     }
 
     private void VouchAllTopLevelWindows()

@@ -115,6 +115,36 @@ public sealed class WindowAssignmentServiceTests
         Assert.IsNull(result.PreviousDesktopId);
     }
 
+    [TestMethod]
+    public async Task ForegroundActivationWithNoDesktopId_DoesNotMoveExistingWindow()
+    {
+        StubPlacementService placement = new(
+            DesktopTopologyProviderResult<Guid>.Failed(
+                "window_placement.window_not_tracked",
+                "Windows temporarily stopped reporting the window's desktop.",
+                hResult: 0));
+        BoundedWindowAssignmentActivityStore activities = new();
+        WindowAssignmentService service = new(
+            placement,
+            new BoundReconciliationService(),
+            activities,
+            TimeProvider.System);
+
+        WindowAssignmentActivity result = await service.AssignAsync(
+            CreateRequest((nint)129) with
+            {
+                Trigger = WindowEventKind.ForegroundActivated,
+            });
+
+        Assert.AreEqual(0, placement.MoveCallCount,
+            "A focus change must not move an existing window after one inconclusive desktop read.");
+        Assert.AreEqual(WindowAssignmentOutcome.Skipped, result.Outcome);
+        Assert.AreEqual(
+            WindowAssignmentSkipReason.WindowNotTracked,
+            result.SkipReason);
+        Assert.AreEqual(WindowMoveOutcome.WindowUnavailable, result.MoveOutcome);
+    }
+
     /// <summary>
     /// Attempting the move on an unplaced window does not invent a success. A
     /// window Windows still will not place is reported with the refusal Windows

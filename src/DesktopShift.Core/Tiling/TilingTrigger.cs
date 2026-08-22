@@ -18,6 +18,12 @@ public enum TilingAssignmentDisposition
     AlreadyInPlace,
 
     /// <summary>
+    /// The latest event could not confirm a placement. Existing BSP ownership
+    /// is preserved, but an unknown window is not admitted.
+    /// </summary>
+    Unconfirmed,
+
+    /// <summary>
     /// The move failed or did not happen. The window stays out of the tree
     /// until another event vouches for it.
     /// </summary>

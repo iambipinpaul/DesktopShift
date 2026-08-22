@@ -195,6 +195,31 @@ public sealed class WindowAssignmentService(
             hasCurrentDesktop ? currentDesktop.Value : null;
         WindowMoveOutcome moveOutcome = WindowMoveOutcome.AlreadyCorrect;
 
+        if (isUnplacedWindow &&
+            request.Trigger == WindowEventKind.ForegroundActivated)
+        {
+            // A foreground event normally belongs to an existing visible
+            // window. One temporary "not tracked" answer during activation is
+            // not proof that the window needs to move. Moving it to the same
+            // desktop makes the Shell cloak it and causes visible BSP flicker.
+            return await RecordAsync(
+                CreateActivity(
+                    request,
+                    correlationId,
+                    startedAtUtc,
+                    startedTimestamp,
+                    WindowAssignmentOutcome.Skipped,
+                    WindowAssignmentSkipReason.WindowNotTracked,
+                    targetDesktopId,
+                    previousDesktopId: null,
+                    ToAssignmentError(
+                        currentDesktop.Error,
+                        "window_placement.window_not_tracked",
+                        "Windows temporarily stopped reporting the window's virtual desktop."),
+                    WindowMoveOutcome.WindowUnavailable),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         // An unplaced window is moved rather than abandoned. Moving a window
         // that already sits on the target desktop is a no-op, so being wrong
         // costs nothing, and if Windows still has not placed the window it

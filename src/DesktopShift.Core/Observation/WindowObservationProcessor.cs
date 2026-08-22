@@ -954,7 +954,7 @@ public sealed class WindowObservationProcessor : IDisposable
             tilingTrigger?.NotifyAssignmentCompleted(new TilingAssignmentNotification(
                 windowHandle,
                 rule.TargetDesktopKey,
-                DispositionFrom(assignment)));
+                DispositionFrom(assignment, windowEvent.Kind)));
         }
 
         WindowObservationActivity activity = new(
@@ -982,15 +982,19 @@ public sealed class WindowObservationProcessor : IDisposable
     }
 
     private static TilingAssignmentDisposition DispositionFrom(
-        WindowAssignmentActivity assignment) =>
-        assignment.Outcome switch
+        WindowAssignmentActivity assignment,
+        WindowEventKind sourceEvent) =>
+        assignment switch
         {
-            WindowAssignmentOutcome.Succeeded =>
-                assignment.SkipReason ==
-                    WindowAssignmentSkipReason.AlreadyOnTargetDesktop ||
-                assignment.MoveOutcome == WindowMoveOutcome.AlreadyCorrect
-                    ? TilingAssignmentDisposition.AlreadyInPlace
-                    : TilingAssignmentDisposition.PlacedOnTargetDesktop,
+            // No move was needed. This is normally reported as Skipped, but it
+            // is still positive proof that the window owns its existing tile.
+            { SkipReason: WindowAssignmentSkipReason.AlreadyOnTargetDesktop } or
+            { MoveOutcome: WindowMoveOutcome.AlreadyCorrect } =>
+                TilingAssignmentDisposition.AlreadyInPlace,
+            { Outcome: WindowAssignmentOutcome.Succeeded } =>
+                TilingAssignmentDisposition.PlacedOnTargetDesktop,
+            _ when sourceEvent == WindowEventKind.ForegroundActivated =>
+                TilingAssignmentDisposition.Unconfirmed,
             _ => TilingAssignmentDisposition.NotPlaced,
         };
 

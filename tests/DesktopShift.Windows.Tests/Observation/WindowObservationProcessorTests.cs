@@ -390,9 +390,9 @@ public sealed class WindowObservationProcessorTests
             new RecordingActivitySink(),
             alreadyTrigger,
             StubAssignment(Activity(
-                WindowAssignmentOutcome.Succeeded,
+                WindowAssignmentOutcome.Skipped,
                 WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
-                WindowMoveOutcome.NotAttempted)));
+                WindowMoveOutcome.AlreadyCorrect)));
         await alreadyProcessor.ProcessAsync(
             new WindowEvent(
                 2,
@@ -420,7 +420,7 @@ public sealed class WindowObservationProcessorTests
                 (nint)103,
                 DateTimeOffset.UnixEpoch));
         Assert.AreEqual(
-            TilingAssignmentDisposition.NotPlaced,
+            TilingAssignmentDisposition.Unconfirmed,
             failedTrigger.Assignments.Single().Disposition);
     }
 

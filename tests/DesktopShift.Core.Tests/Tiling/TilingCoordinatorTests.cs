@@ -168,6 +168,7 @@ public sealed class TilingCoordinatorTests
         harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
         harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
         Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        int stableBatchCount = harness.Executor.ApplyCalls.Count;
 
         harness.Coordinator.NotifyWindowMinimized(WindowB);
         Assert.IsTrue(await harness.WaitForReportsAsync(2));
@@ -215,6 +216,32 @@ public sealed class TilingCoordinatorTests
         Assert.AreEqual(
             new TileRect(-14, -14, 1028, 828),
             requests[0].WindowRectPixels);
+    }
+
+    [TestMethod]
+    public async Task UnconfirmedForegroundAssignmentPreservesExistingLeaf()
+    {
+        Harness harness = new();
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        int stableBatchCount = harness.Executor.ApplyCalls.Count;
+
+        harness.Coordinator.NotifyAssignmentCompleted(
+            new TilingAssignmentNotification(
+                WindowB,
+                "run-observe",
+                TilingAssignmentDisposition.Unconfirmed));
+
+        await Task.Delay(50);
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count);
+        Assert.AreEqual(1, harness.Reports.Count,
+            "An inconclusive foreground assignment must not start a layout pass.");
+        harness.Coordinator.Dispose();
     }
 
     [TestMethod]
@@ -276,6 +303,7 @@ public sealed class TilingCoordinatorTests
         harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
         harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
         Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        int stableBatchCount = harness.Executor.ApplyCalls.Count;
 
         // Some single-instance apps briefly refuse their rectangle while
         // minimizing. The same HWND later emits a restore event.
@@ -284,18 +312,22 @@ public sealed class TilingCoordinatorTests
             new TilingWindowReading(TilingReadStatus.Unavailable, null));
         harness.Coordinator.NotifyWindowStateChanged(WindowB);
         Assert.IsTrue(await harness.WaitForReportsAsync(2));
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count,
+            "A temporary read failure must not expand the surviving window.");
 
         harness.Reader.Respond(WindowB, FrameState(
             new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
         harness.Coordinator.NotifyWindowStateChanged(WindowB);
         Assert.IsTrue(await harness.WaitForReportsAsync(3));
 
-        IReadOnlyList<TilingPlacementRequest> restored =
-            harness.Executor.ApplyCalls.Last();
-        Assert.HasCount(2, restored);
-        CollectionAssert.AreEquivalent(
-            new[] { WindowA, WindowB },
-            restored.Select(static request => request.WindowHandle).ToArray());
+        Assert.IsFalse(
+            harness.Executor.ApplyCalls
+                .Skip(stableBatchCount)
+                .SelectMany(static batch => batch)
+                .Any(request =>
+                    request.WindowHandle == WindowA &&
+                    request.WindowRectPixels.Width > 600));
+        harness.Coordinator.Dispose();
     }
 
     [TestMethod]
@@ -378,6 +410,44 @@ public sealed class TilingCoordinatorTests
         Assert.IsTrue(await harness.WaitForReportsAsync(2));
 
         Assert.HasCount(2, harness.Executor.ApplyCalls[1]);
+    }
+
+    [TestMethod]
+    public async Task BriefApplicationCloakPreservesExistingLayout()
+    {
+        Harness harness = new();
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        int stableBatchCount = harness.Executor.ApplyCalls.Count;
+
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop,
+            cloaked: true));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count,
+            "A brief cloak must not make the other window expand to full width.");
+
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(3));
+
+        Assert.IsFalse(
+            harness.Executor.ApplyCalls
+                .Skip(stableBatchCount)
+                .SelectMany(static batch => batch)
+                .Any(request =>
+                    request.WindowHandle == WindowA &&
+                    request.WindowRectPixels.Width > 600),
+            "The surviving window must never receive a full-width placement.");
+        harness.Coordinator.Dispose();
     }
 
     [TestMethod]
@@ -592,6 +662,56 @@ public sealed class TilingCoordinatorTests
 
         // The pass ran, but the preserved tree was already at its target.
         Assert.HasCount(1, harness.Executor.ApplyCalls);
+    }
+
+    [TestMethod]
+    public async Task CurrentChangedFreezesPlacementUntilSwitched()
+    {
+        Harness harness = new();
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        int stableBatchCount = harness.Executor.ApplyCalls.Count;
+
+        harness.Topology.RaiseTopologyChanged("CurrentChanged");
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, OtherDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count,
+            "No partial layout may be committed while Windows is switching desktops.");
+
+        harness.Topology.RaiseTopologyChanged("Switched");
+        Assert.IsTrue(await harness.WaitForReportsAsync(3));
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count,
+            "Switched can arrive before per-window desktop state is final.");
+
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(4));
+        Assert.AreEqual(stableBatchCount, harness.Executor.ApplyCalls.Count,
+            "Placement must stay frozen while the switched desktop settles.");
+
+        Assert.IsTrue(await harness.WaitForReportsAsync(
+            5,
+            TimeSpan.FromSeconds(3)),
+            "The bounded settling timer must start one final layout pass.");
+
+        Assert.IsFalse(
+            harness.Executor.ApplyCalls
+                .Skip(stableBatchCount)
+                .SelectMany(static batch => batch)
+                .Any(request =>
+                    request.WindowHandle == WindowA &&
+                    request.WindowRectPixels.Width > 600),
+            "The completed switch may repair the layout, but never through a full-width intermediate state.");
+        harness.Coordinator.Dispose();
     }
 
     [TestMethod]

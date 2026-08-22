@@ -148,10 +148,11 @@ public sealed class NoRecurringPollingScanTests
         }
 
         Assert.AreEqual(
-            2,
+            4,
             constructions,
-            "The coalescing window and the open-window follow grace period are " +
-            "the only timers DesktopShift owns. A different count means one was " +
+            "DesktopShift owns four one-shot timer sites: event coalescing, " +
+            "open-window follow grace, transient BSP state confirmation, and " +
+            "the missing-Switched safety bound. A different count means one was " +
             "added or removed, and either way this test and " +
             "docs/performance/budgets.md need re-reading.");
         Assert.AreEqual(
