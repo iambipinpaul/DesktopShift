@@ -32,6 +32,39 @@ public sealed class WindowFloatClassifierTests
     }
 
     [TestMethod]
+    public void BuiltInTaskManagerWindowFloats()
+    {
+        Assert.AreEqual(
+            TilingDisposition.Float,
+            WindowFloatClassifier.Classify(
+                MakeIdentity(processName: "Taskmgr.exe"),
+                [],
+                []));
+    }
+
+    [TestMethod]
+    public void BuiltInSnippingRecorderOverlayIsIgnoredButEditorTiles()
+    {
+        Assert.AreEqual(
+            TilingDisposition.Ignore,
+            WindowFloatClassifier.Classify(
+                MakeIdentity(
+                    processName: "SnippingTool.exe",
+                    windowClass: "XamlWindow"),
+                [],
+                []));
+
+        Assert.AreEqual(
+            TilingDisposition.Tile,
+            WindowFloatClassifier.Classify(
+                MakeIdentity(
+                    processName: "SnippingTool.exe",
+                    windowClass: "Microsoft.UI.Content.DesktopChildSiteBridge"),
+                [],
+                []));
+    }
+
+    [TestMethod]
     public void FloatRuleMatchesByProcessNameWithoutCaseSensitivity()
     {
         Assert.AreEqual(

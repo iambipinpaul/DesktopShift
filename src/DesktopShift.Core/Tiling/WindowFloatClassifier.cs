@@ -23,6 +23,39 @@ public enum TilingDisposition
 }
 
 /// <summary>
+/// Windows with a fixed layout policy that is independent of user rules.
+/// </summary>
+public static class BuiltInTilingRules
+{
+    /// <summary>
+    /// Task Manager normally runs above DesktopShift's integrity level, so
+    /// Windows refuses placement. Keeping it floating avoids a dead BSP leaf.
+    /// </summary>
+    public static ImmutableArray<TilingIdentityRule> FloatRules { get; } =
+    [
+        new(
+            Id: "built-in-float-task-manager",
+            DisplayName: "Task Manager",
+            IsEnabled: true,
+            ProcessNames: ["Taskmgr.exe"]),
+    ];
+
+    /// <summary>
+    /// Snipping Tool's recording surfaces are temporary overlays. The editor
+    /// uses another class and remains governed by the user's rules.
+    /// </summary>
+    public static ImmutableArray<TilingIdentityRule> IgnoreRules { get; } =
+    [
+        new(
+            Id: "built-in-ignore-snipping-overlays",
+            DisplayName: "Snipping Tool recording overlays",
+            IsEnabled: true,
+            ProcessNames: ["SnippingTool.exe"],
+            WindowClasses: ["XamlWindow", "SnipOverlayRootWindow"]),
+    ];
+}
+
+/// <summary>
 /// Decides whether a window tiles, floats, or is ignored entirely.
 /// </summary>
 /// <remarks>
@@ -67,12 +100,14 @@ public static class WindowFloatClassifier
         }
 
         // Ignore first, deliberately: see the precedence remark above.
-        if (MatchesAny(ignoreRules, identity))
+        if (MatchesAny(BuiltInTilingRules.IgnoreRules, identity) ||
+            MatchesAny(ignoreRules, identity))
         {
             return TilingDisposition.Ignore;
         }
 
-        if (MatchesAny(floatRules, identity))
+        if (MatchesAny(BuiltInTilingRules.FloatRules, identity) ||
+            MatchesAny(floatRules, identity))
         {
             return TilingDisposition.Float;
         }

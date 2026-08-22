@@ -114,6 +114,22 @@ public sealed class WindowsPlacementBatchExecutorTests
     }
 
     [TestMethod]
+    public void Apply_AccessDeniedRejectionCarriesItsNativeError()
+    {
+        nint inaccessibleWindow = 0x2002;
+        FakeDeferApi deferApi = new();
+        deferApi.FailDeferFor(inaccessibleWindow, nativeErrorCode: 5);
+        WindowsPlacementBatchExecutor executor = new(deferApi);
+
+        TilingBatchResult result = executor.Apply(MakePlacements(2));
+
+        Assert.HasCount(1, result.PlacementRejections);
+        TilingPlacementRejection rejection = result.PlacementRejections[0];
+        Assert.AreEqual(inaccessibleWindow, rejection.WindowHandle);
+        Assert.AreEqual(5, rejection.NativeErrorCode);
+    }
+
+    [TestMethod]
     public void Apply_ForwardsEachUpdatedBatchHandleToTheNextNativeCall()
     {
         FakeDeferApi deferApi = new() { ReplaceHandleAfterEachDefer = true };
@@ -146,7 +162,7 @@ public sealed class WindowsPlacementBatchExecutorTests
     private sealed class FakeDeferApi
         : WindowsPlacementBatchExecutor.ITilingDeferApi
     {
-        private readonly HashSet<nint> rejectedWindows = [];
+        private readonly Dictionary<nint, int> rejectedWindows = [];
 
         public List<nint> BegunBatches { get; } = [];
 
@@ -162,8 +178,10 @@ public sealed class WindowsPlacementBatchExecutorTests
 
         public List<nint> ReceivedDeferHandles { get; } = [];
 
-        public void FailDeferFor(nint windowHandle) =>
-            rejectedWindows.Add(windowHandle);
+        public void FailDeferFor(
+            nint windowHandle,
+            int nativeErrorCode = 0) =>
+            rejectedWindows[windowHandle] = nativeErrorCode;
 
         public nint Begin(int capacity)
         {
@@ -181,8 +199,11 @@ public sealed class WindowsPlacementBatchExecutorTests
         {
             LastFlags = 0x0214;
             ReceivedDeferHandles.Add(batchHandle);
-            if (rejectedWindows.Contains(request.WindowHandle))
+            if (rejectedWindows.TryGetValue(
+                request.WindowHandle,
+                out int errorCode))
             {
+                LastErrorCode = errorCode;
                 return 0;
             }
 
@@ -190,6 +211,8 @@ public sealed class WindowsPlacementBatchExecutorTests
                 ? -100 - ReceivedDeferHandles.Count
                 : batchHandle;
         }
+
+        public int LastErrorCode { get; private set; }
 
         public bool End(nint batchHandle)
         {

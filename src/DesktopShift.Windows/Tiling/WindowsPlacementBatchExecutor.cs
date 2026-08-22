@@ -51,6 +51,7 @@ public sealed class WindowsPlacementBatchExecutor : ITilingPlacementExecutor
 
         List<nint> committed = [];
         List<nint> skipped = [];
+        List<TilingPlacementRejection> rejections = [];
         List<TilingPlacementRequest> pending = [.. placements];
 
         while (pending.Count > 0)
@@ -100,6 +101,9 @@ public sealed class WindowsPlacementBatchExecutor : ITilingPlacementExecutor
             // Abandon, skip, report, rebuild, commit again — the only path
             // Microsoft leaves open after a mid-batch DeferWindowPos failure.
             skipped.Add(rejected.WindowHandle);
+            rejections.Add(new TilingPlacementRejection(
+                rejected.WindowHandle,
+                deferApi.LastErrorCode));
             pending.Remove(rejected);
         }
 
@@ -109,7 +113,8 @@ public sealed class WindowsPlacementBatchExecutor : ITilingPlacementExecutor
                 : TilingBatchOutcome.DeferFailed,
             committed,
             skipped,
-            []);
+            [],
+            rejections);
     }
 
     private static TilingBatchResult Failed(
@@ -128,6 +133,8 @@ public sealed class WindowsPlacementBatchExecutor : ITilingPlacementExecutor
         nint Begin(int capacity);
 
         nint Defer(nint batchHandle, TilingPlacementRequest request);
+
+        int LastErrorCode { get; }
 
         bool End(nint batchHandle);
     }
@@ -159,6 +166,8 @@ public sealed class WindowsPlacementBatchExecutor : ITilingPlacementExecutor
                 request.WindowRectPixels.Height,
                 PlacementFlags);
         }
+
+        public int LastErrorCode => Marshal.GetLastPInvokeError();
 
         public bool End(nint batchHandle)
         {

@@ -1,6 +1,7 @@
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 using Microsoft.Extensions.Hosting;
 
 namespace DesktopShift.Infrastructure.Diagnostics;
@@ -24,7 +25,8 @@ namespace DesktopShift.Infrastructure.Diagnostics;
 internal sealed class DiagnosticActivityHostedService(
     IWindowObservationActivityProjection observationProjection,
     IWindowAssignmentActivityProjection assignmentProjection,
-    ActivityDiagnosticsRecorder recorder) : IHostedService, IDisposable
+    ActivityDiagnosticsRecorder recorder,
+    TilingCoordinator? tilingCoordinator = null) : IHostedService, IDisposable
 {
     private bool subscribed;
     private bool disposed;
@@ -45,6 +47,10 @@ internal sealed class DiagnosticActivityHostedService(
         subscribed = true;
         observationProjection.ActivityRecorded += OnObservationRecorded;
         assignmentProjection.ActivityRecorded += OnAssignmentRecorded;
+        if (tilingCoordinator is not null)
+        {
+            tilingCoordinator.PlacementDenied += OnTilingPlacementDenied;
+        }
         return Task.CompletedTask;
     }
 
@@ -75,6 +81,10 @@ internal sealed class DiagnosticActivityHostedService(
         subscribed = false;
         observationProjection.ActivityRecorded -= OnObservationRecorded;
         assignmentProjection.ActivityRecorded -= OnAssignmentRecorded;
+        if (tilingCoordinator is not null)
+        {
+            tilingCoordinator.PlacementDenied -= OnTilingPlacementDenied;
+        }
     }
 
     private void OnObservationRecorded(
@@ -86,6 +96,20 @@ internal sealed class DiagnosticActivityHostedService(
         object? sender,
         WindowAssignmentActivityRecordedEventArgs args) =>
         Record(args.Activity);
+
+    private void OnTilingPlacementDenied(
+        object? sender,
+        TilingPlacementDeniedEventArgs args)
+    {
+        try
+        {
+            recorder.Record(args);
+        }
+        catch (Exception)
+        {
+            // Recording diagnostics cannot invalidate a layout pass.
+        }
+    }
 
     private void Record(WindowObservationActivity activity)
     {

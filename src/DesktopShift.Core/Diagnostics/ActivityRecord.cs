@@ -5,6 +5,7 @@ using DesktopShift.Core.Assignments;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Recovery;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Diagnostics;
 
@@ -55,6 +56,12 @@ public enum ActivityEventSource
     /// and failed.
     /// </remarks>
     Recovery,
+
+    /// <summary>
+    /// A window-layout decision, such as leaving an inaccessible elevated
+    /// window floating after Windows rejects its placement.
+    /// </summary>
+    Tiling,
 }
 
 /// <summary>
@@ -138,6 +145,34 @@ public sealed record ActivityRecord(
 /// </summary>
 public static class ActivityRecordFactory
 {
+    /// <summary>
+    /// Projects one access-denied layout placement into an Activity record.
+    /// </summary>
+    public static ActivityRecord FromTilingPlacementDenied(
+        TilingPlacementDeniedEventArgs denied,
+        Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(denied);
+
+        return new ActivityRecord(
+            Guid.NewGuid(),
+            sessionId,
+            denied.OccurredAt,
+            ActivityEventSource.Tiling,
+            WindowEventKind.StateChanged,
+            ActivityResult.Skipped,
+            "tiling.placement.access_denied",
+            "Windows blocked tiling because this application runs as administrator. The window was left floating.",
+            denied.Identity?.ProcessName,
+            denied.Identity,
+            RuleId: null,
+            TargetDesktopKey: null,
+            Error: new ActivityErrorDetail(
+                "tiling.placement.access_denied",
+                "Windows denied access to the window placement request.",
+                NativeErrorCode: denied.NativeErrorCode));
+    }
+
     /// <summary>
     /// Projects one observation decision.
     /// </summary>

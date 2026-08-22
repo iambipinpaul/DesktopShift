@@ -214,25 +214,59 @@ public enum TilingBatchOutcome
     EndFailed,
 }
 
+/// <summary>
+/// One window that Windows rejected before a placement batch could commit.
+/// </summary>
+/// <param name="WindowHandle">The rejected top-level window.</param>
+/// <param name="NativeErrorCode">
+/// The Win32 error from DeferWindowPos, or zero when Windows supplied none.
+/// </param>
+public sealed record TilingPlacementRejection(
+    nint WindowHandle,
+    int NativeErrorCode);
+
 /// <summary>Structured, title-free result of one Apply call.</summary>
-/// <param name="Outcome">How the batching ended.</param>
-/// <param name="CommittedWindows">
-/// Every window whose position reached a successfully committed batch.
-/// </param>
-/// <param name="SkippedWindows">
-/// Windows dropped because DeferWindowPos rejected them individually. Each one
-/// was named by a failed call before its batch was abandoned.
-/// </param>
-/// <param name="FailedWindows">
-/// For EndFailed only: every window in the batch Windows could not commit. The
-/// operating system identifies no individual culprit.
-/// </param>
-public sealed record TilingBatchResult(
-    TilingBatchOutcome Outcome,
-    IReadOnlyList<nint> CommittedWindows,
-    IReadOnlyList<nint> SkippedWindows,
-    IReadOnlyList<nint> FailedWindows)
+public sealed record TilingBatchResult
 {
+    /// <summary>Creates the result of one placement batch.</summary>
+    /// <param name="outcome">How the batching ended.</param>
+    /// <param name="committedWindows">
+    /// Every window whose position reached a successfully committed batch.
+    /// </param>
+    /// <param name="skippedWindows">
+    /// Windows dropped because DeferWindowPos rejected them individually.
+    /// </param>
+    /// <param name="failedWindows">
+    /// For EndFailed only: every window in the batch Windows could not commit.
+    /// </param>
+    /// <param name="placementRejections">
+    /// Native error details for individually rejected windows.
+    /// </param>
+    public TilingBatchResult(
+        TilingBatchOutcome outcome,
+        IReadOnlyList<nint> committedWindows,
+        IReadOnlyList<nint> skippedWindows,
+        IReadOnlyList<nint> failedWindows,
+        IReadOnlyList<TilingPlacementRejection>? placementRejections = null)
+    {
+        Outcome = outcome;
+        CommittedWindows = committedWindows;
+        SkippedWindows = skippedWindows;
+        FailedWindows = failedWindows;
+        PlacementRejections = placementRejections ?? [];
+    }
+
+    public TilingBatchOutcome Outcome { get; init; }
+
+    public IReadOnlyList<nint> CommittedWindows { get; init; }
+
+    public IReadOnlyList<nint> SkippedWindows { get; init; }
+
+    public IReadOnlyList<nint> FailedWindows { get; init; }
+
+    /// <summary>Native errors for individually rejected windows.</summary>
+    public IReadOnlyList<TilingPlacementRejection> PlacementRejections { get; init; }
+
     /// <summary>A fully committed batch with nothing skipped.</summary>
     public static TilingBatchResult CommittedAll(IReadOnlyList<nint> windows) =>
         new(TilingBatchOutcome.Committed, windows, [], []);

@@ -3,7 +3,9 @@
     x:Class="DesktopShift.App.Pages.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:rules="using:DesktopShift.App.Rules"
     xmlns:settings="using:DesktopShift.App.Settings"
+    xmlns:viewModels="using:DesktopShift.App.ViewModels"
     AutomationProperties.Name="System settings page"
     Background="Transparent"
     SizeChanged="OnPageSizeChanged">
@@ -247,7 +249,82 @@
                                 <NumberBox x:Name="TilingMinimumWidthNumber" Grid.Row="1" Grid.Column="0" AutomationProperties.Name="Minimum tile width" Header="Minimum tile width" Maximum="4096" Minimum="64" SmallChange="16" SpinButtonPlacementMode="Inline" />
                                 <NumberBox x:Name="TilingMinimumHeightNumber" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Minimum tile height" Header="Minimum tile height" Maximum="4096" Minimum="64" SmallChange="16" SpinButtonPlacementMode="Inline" />
                             </Grid>
-                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Values use 96-DPI units. Existing float and ignore rules are kept unchanged." TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Values use 96-DPI units." TextWrapping="Wrap" />
+                            <Border Margin="0,4,0,0" Padding="0,12,0,0" BorderBrush="{ThemeResource DesktopShift.BorderBrush}" BorderThickness="0,1,0,0">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Window exceptions" />
+                                        <TextBlock Style="{StaticResource DesktopShift.RowDescriptionStyle}" Text="Float keeps an app observed but does not resize it. Ignore leaves the app completely alone." TextWrapping="Wrap" />
+                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Windows can block placement of elevated apps. DesktopShift then leaves that app floating for the current session." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ListView
+                                        x:Name="TilingExceptionList"
+                                        AutomationProperties.Name="Window exceptions"
+                                        IsItemClickEnabled="False"
+                                        SelectionMode="None">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="0" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:TilingExceptionPresentation">
+                                                <Grid Padding="10,8" ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Spacing="2">
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="{x:Bind DisplayName}" />
+                                                            <TextBlock Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind PolicySummary}" />
+                                                        </StackPanel>
+                                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{x:Bind IdentitySummary}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <Button
+                                                        Grid.Column="1"
+                                                        AutomationProperties.Name="Remove window exception"
+                                                        Click="OnRemoveTilingExceptionClick"
+                                                        Content="Remove"
+                                                        Tag="{x:Bind Id}"
+                                                        Visibility="{x:Bind rules:RuleIconSource.WhenTrue(CanRemove), Mode=OneTime}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                    <TextBlock x:Name="TilingExceptionsEmptyText" Style="{StaticResource DesktopShift.CaptionStyle}" Text="No user or built-in exceptions are configured." Visibility="Collapsed" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox
+                                            x:Name="TilingApplicationPicker"
+                                            AutomationProperties.Name="Running application"
+                                            HorizontalAlignment="Stretch"
+                                            PlaceholderText="Select an open application">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel MaxWidth="520" Spacing="1">
+                                                        <TextBlock Text="{Binding DisplayName}" />
+                                                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <ComboBox x:Name="TilingExceptionDispositionPicker" Grid.Column="1" AutomationProperties.Name="Window exception action" SelectedIndex="0">
+                                            <ComboBoxItem Content="Float" />
+                                            <ComboBoxItem Content="Ignore" />
+                                        </ComboBox>
+                                        <Button Grid.Column="2" AutomationProperties.Name="Refresh running applications" Click="OnRefreshTilingApplicationsClick" Content="Refresh" />
+                                        <Button Grid.Column="3" AutomationProperties.Name="Add window exception" Click="OnAddTilingExceptionClick" Content="Add" />
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="User exception changes are saved when you select Save and apply." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                             <Button x:Name="ApplyTilingButton" HorizontalAlignment="Left" AutomationProperties.Name="Save and apply window tiling" Click="OnApplyTilingClick" Content="Save and apply" />
                         </StackPanel>
                     </Border>

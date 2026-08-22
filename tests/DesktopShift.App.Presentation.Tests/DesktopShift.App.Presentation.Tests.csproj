@@ -39,6 +39,9 @@
     <Compile
       Include="..\..\src\DesktopShift.App\ViewModels\TilingSettingsCommand.cs"
       Link="Production\TilingSettingsCommand.cs" />
+    <Compile
+      Include="..\..\src\DesktopShift.App\ViewModels\TilingExceptionEditor.cs"
+      Link="Production\TilingExceptionEditor.cs" />
     <!--
       The rule editor's bindable surface holds no XAML types, so it is proved
       here rather than only in a running window. It is where the Anywhere

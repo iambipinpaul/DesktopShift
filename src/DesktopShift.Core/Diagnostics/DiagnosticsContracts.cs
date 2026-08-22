@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Diagnostics;
 
@@ -94,6 +95,15 @@ public sealed class ActivityDiagnosticsRecorder
     {
         ArgumentNullException.ThrowIfNull(activity);
         Record(ActivityRecordFactory.FromAssignment(activity, journal.SessionId));
+    }
+
+    public void Record(TilingPlacementDeniedEventArgs denied)
+    {
+        ArgumentNullException.ThrowIfNull(denied);
+        Record(
+            [ActivityRecordFactory.FromTilingPlacementDenied(
+                denied,
+                journal.SessionId)]);
     }
 
     private void Record(ImmutableArray<ActivityRecord> records)

@@ -2,12 +2,39 @@ using System.Collections.Immutable;
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Tests.Diagnostics;
 
 [TestClass]
 public sealed class ActivityRecordFactoryTests
 {
+    [TestMethod]
+    public void AccessDeniedTilingPlacementExplainsAutomaticFloat()
+    {
+        var denied = new TilingPlacementDeniedEventArgs(
+            new DateTimeOffset(2026, 8, 22, 18, 0, 0, TimeSpan.Zero),
+            0x1234,
+            new WindowSafeIdentity(
+                "AdminTool.exe",
+                PackageFamilyName: null,
+                AppUserModelId: null,
+                WindowClass: "AdminWindow"),
+            nativeErrorCode: 5);
+
+        ActivityRecord record = ActivityRecordFactory.FromTilingPlacementDenied(
+            denied,
+            DiagnosticTestData.Session);
+
+        Assert.AreEqual(ActivityEventSource.Tiling, record.Source);
+        Assert.AreEqual(ActivityResult.Skipped, record.Result);
+        Assert.AreEqual("tiling.placement.access_denied", record.ResultCode);
+        Assert.AreEqual("AdminTool.exe", record.Application);
+        Assert.Contains("runs as administrator", record.Summary);
+        Assert.Contains("left floating", record.Summary);
+        Assert.AreEqual(5, record.Error?.NativeErrorCode);
+    }
+
     [TestMethod]
     public void MatchedObservation_BecomesASucceededDecision()
     {

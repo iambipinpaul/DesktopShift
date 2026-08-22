@@ -145,6 +145,7 @@ public sealed record ActivityRecordDisplay(
             ActivityEventSource.Move => "Window move",
             ActivityEventSource.Switch => "Desktop switch",
             ActivityEventSource.Assignment => "Assignment result",
+            ActivityEventSource.Tiling => "Window tiling",
             ActivityEventSource.Recovery
                 when !string.IsNullOrWhiteSpace(recoverySignal) =>
                     $"Shell recovery ({recoverySignal.Trim()})",

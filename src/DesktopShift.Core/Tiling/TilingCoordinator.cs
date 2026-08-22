@@ -87,6 +87,32 @@ public sealed record TilingReconcileReport(
 }
 
 /// <summary>
+/// Reports one window that Windows refused to place across an integrity seam.
+/// </summary>
+public sealed class TilingPlacementDeniedEventArgs : EventArgs
+{
+    public TilingPlacementDeniedEventArgs(
+        DateTimeOffset occurredAt,
+        nint windowHandle,
+        WindowSafeIdentity? identity,
+        int nativeErrorCode)
+    {
+        OccurredAt = occurredAt;
+        WindowHandle = windowHandle;
+        Identity = identity;
+        NativeErrorCode = nativeErrorCode;
+    }
+
+    public DateTimeOffset OccurredAt { get; }
+
+    public nint WindowHandle { get; }
+
+    public WindowSafeIdentity? Identity { get; }
+
+    public int NativeErrorCode { get; }
+}
+
+/// <summary>
 /// One window the layout tracks: its slot, its workspace, and what its last
 /// read said about frame margins.
 /// </summary>
@@ -103,6 +129,9 @@ internal sealed class TilingTrackedWindow
 
     /// <summary>The classification result once resolved.</summary>
     public TilingDisposition Disposition { get; set; }
+
+    /// <summary>Privacy-safe identity retained for placement diagnostics.</summary>
+    public WindowSafeIdentity? Identity { get; set; }
 
     /// <summary>
     /// The outer rectangle this coordinator last committed for the window,
@@ -170,6 +199,8 @@ internal sealed class TilingTrackedWindow
 /// </remarks>
 public sealed class TilingCoordinator : ITilingTrigger, IDisposable
 {
+    private const int NativeErrorAccessDenied = 5;
+
     /// <summary>
     /// How long a window stays immune to move-size triggers after DesktopShift
     /// moved it itself. Long enough for the placement echo to land, short
@@ -226,6 +257,9 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
 
     /// <summary>Raised after every completed reconciliation pass.</summary>
     public event EventHandler<TilingReconcileReport>? ReconcileCompleted;
+
+    /// <summary>Raised once when access denial makes a window session-floating.</summary>
+    public event EventHandler<TilingPlacementDeniedEventArgs>? PlacementDenied;
 
     /// <summary>The most recent reconciliation report, if any.</summary>
     public TilingReconcileReport? LastReport { get; private set; }
@@ -699,6 +733,7 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 WindowIdentity? identity =
                     await identitySource.ResolveAsync(handle, cancellationToken)
                         .ConfigureAwait(false);
+                entry.Identity = identity?.ToSafeIdentity();
                 entry.Disposition = WindowFloatClassifier.Classify(
                     identity,
                     settings.FloatRules,
@@ -927,6 +962,8 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
             batch,
             requests,
             out bool foreignMinimumChanged);
+        bool accessDeniedWindowFloated =
+            FloatAccessDeniedWindows(batch.PlacementRejections);
 
         foreach (nint handle in batch.CommittedWindows)
         {
@@ -957,12 +994,74 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
             batch.FailedWindows.ToImmutableArray(),
             adjusted));
 
-        if (foreignMinimumChanged)
+        if (foreignMinimumChanged || accessDeniedWindowFloated)
         {
-            // One bounded repair pass uses the new proven minimum. A later
-            // pass is requested only if Windows proves an even larger size;
-            // unchanged read-back never polls or loops.
+            // One bounded repair pass either uses the new proven minimum or
+            // closes over the leaf Windows refused to place. The rejected
+            // window is already session-floated, so it cannot start a loop.
             RequestReconcile();
+        }
+    }
+
+    private bool FloatAccessDeniedWindows(
+        IReadOnlyList<TilingPlacementRejection> rejections)
+    {
+        bool changed = false;
+        List<TilingPlacementDeniedEventArgs> denied = [];
+        DateTimeOffset occurredAt = clock();
+        lock (stateLock)
+        {
+            foreach (TilingPlacementRejection rejection in rejections)
+            {
+                if (rejection.NativeErrorCode != NativeErrorAccessDenied ||
+                    !tracked.TryGetValue(
+                        rejection.WindowHandle,
+                        out TilingTrackedWindow? entry) ||
+                    entry.Disposition == TilingDisposition.Float)
+                {
+                    continue;
+                }
+
+                entry.Disposition = TilingDisposition.Float;
+                entry.DispositionResolved = true;
+                ReleaseSlot(entry);
+                denied.Add(new TilingPlacementDeniedEventArgs(
+                    occurredAt,
+                    rejection.WindowHandle,
+                    entry.Identity,
+                    rejection.NativeErrorCode));
+                changed = true;
+            }
+        }
+
+        foreach (TilingPlacementDeniedEventArgs args in denied)
+        {
+            PublishPlacementDenied(args);
+        }
+
+        return changed;
+    }
+
+    private void PublishPlacementDenied(TilingPlacementDeniedEventArgs args)
+    {
+        EventHandler<TilingPlacementDeniedEventArgs>? handlers = PlacementDenied;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler<TilingPlacementDeniedEventArgs> handler in
+            handlers.GetInvocationList()
+                .Cast<EventHandler<TilingPlacementDeniedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch
+            {
+                // Diagnostics cannot invalidate a completed placement pass.
+            }
         }
     }
 

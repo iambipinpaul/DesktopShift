@@ -24,6 +24,9 @@ namespace DesktopShift.App.Settings;
 /// that was asked for.
 /// </param>
 /// <param name="TilingSettings">Reads and persists native BSP settings.</param>
+/// <param name="RunningApplications">
+/// Lists the open applications that can be added to Window Exceptions.
+/// </param>
 /// <param name="ConfigurationExchange">
 /// Imports and exports portable configuration. Import goes through the same
 /// candidate/active split as every other edit.
@@ -59,6 +62,7 @@ namespace DesktopShift.App.Settings;
 public sealed record SettingsPageServices(
     BehaviorSettingsCommand BehaviorSettings,
     TilingSettingsCommand TilingSettings,
+    IRunningApplicationInventory RunningApplications,
     IConfigurationExchangeService ConfigurationExchange,
     ICompatibilityCoordinator Compatibility,
     IDiagnosticsCoordinator Diagnostics,

@@ -139,6 +139,7 @@ public sealed partial class MainWindow : Window
         _settingsPageServices = new SettingsPageServices(
             _behaviorSettingsCommand,
             _tilingSettingsCommand,
+            runningApplicationInventory,
             configurationExchangeService ??
                 throw new ArgumentNullException(nameof(configurationExchangeService)),
             _compatibilityCoordinator,

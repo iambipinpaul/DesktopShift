@@ -1,11 +1,34 @@
 using DesktopShift.Core.Diagnostics;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Tests.Diagnostics;
 
 [TestClass]
 public sealed class ActivityRecordingTests
 {
+    [TestMethod]
+    public void DiagnosticsRecorder_WritesTilingDenialToJournalAndLog()
+    {
+        BoundedActivityJournal journal = new(TimeProvider.System);
+        CapturingLogWriter log = new();
+        ActivityDiagnosticsRecorder recorder = new(journal, log);
+
+        recorder.Record(new TilingPlacementDeniedEventArgs(
+            DateTimeOffset.UtcNow,
+            0x1234,
+            new WindowSafeIdentity(
+                "AdminTool.exe",
+                PackageFamilyName: null,
+                AppUserModelId: null,
+                WindowClass: "AdminWindow"),
+            nativeErrorCode: 5));
+
+        Assert.HasCount(1, journal.Snapshot);
+        Assert.AreEqual(ActivityEventSource.Tiling, journal.Snapshot[0].Source);
+        Assert.AreEqual(1, log.WriteCount);
+    }
+
     [TestMethod]
     public void Controller_StartsOff_AndGatesEveryJournalWriteShape()
     {

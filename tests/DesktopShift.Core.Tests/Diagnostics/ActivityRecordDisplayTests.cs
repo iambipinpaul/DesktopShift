@@ -1,11 +1,31 @@
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Diagnostics;
+using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Tests.Diagnostics;
 
 [TestClass]
 public sealed class ActivityRecordDisplayTests
 {
+    [TestMethod]
+    public void TilingAccessDenial_HasAPlainSourceAndExplanation()
+    {
+        TilingPlacementDeniedEventArgs denied = new(
+            DateTimeOffset.UnixEpoch,
+            (nint)42,
+            new WindowSafeIdentity("AdminTool.exe", null, null, "AdminClass"),
+            5);
+
+        ActivityRecordDisplay display = ActivityRecordDisplay.Create(
+            ActivityRecordFactory.FromTilingPlacementDenied(denied, Guid.Empty));
+
+        Assert.AreEqual("Window tiling", display.Source);
+        Assert.AreEqual("Skipped", display.ResultLabel);
+        Assert.Contains("runs as administrator", display.Summary);
+        Assert.Contains("left floating", display.Summary);
+    }
+
     [TestMethod]
     public void Decision_ShowsEveryColumnTheActivityListPromises()
     {

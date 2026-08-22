@@ -34,6 +34,7 @@ public sealed partial class SettingsPage : Page
     private TilingSettingsCommand? tilingSettingsCommand;
     private BehaviorSettings currentBehavior = ConfigurationDefaults.Create().Behavior;
     private TilingSettings currentTiling = TilingSettings.Disabled;
+    private IReadOnlyList<RunningApplicationCandidate> runningApplications = [];
     private CancellationToken windowCancellationToken;
     private long behaviorEditVersion;
     private bool isApplyingPresentation;
@@ -70,6 +71,7 @@ public sealed partial class SettingsPage : Page
             showSuccess: false);
         _ = LoadBehaviorAsync();
         _ = LoadTilingAsync();
+        _ = LoadTilingApplicationsAsync();
     }
 
     /// <summary>
@@ -157,6 +159,7 @@ public sealed partial class SettingsPage : Page
             TilingInnerGapNumber.Value = currentTiling.InnerGap;
             TilingMinimumWidthNumber.Value = currentTiling.MinimumTileWidth;
             TilingMinimumHeightNumber.Value = currentTiling.MinimumTileHeight;
+            ApplyTilingExceptions();
             SetTilingControlsEnabled(currentTiling.IsEnabled);
         }
         finally
@@ -170,6 +173,103 @@ public sealed partial class SettingsPage : Page
             TilingStatus.Severity = InfoBarSeverity.Warning;
             TilingStatus.IsOpen = true;
         }
+    }
+
+    private async Task LoadTilingApplicationsAsync()
+    {
+        if (services is null || windowCancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            RunningApplicationSnapshot snapshot = await services
+                .RunningApplications
+                .ReadAsync(windowCancellationToken);
+            runningApplications = snapshot.Applications;
+            TilingApplicationPicker.ItemsSource = runningApplications;
+            if (runningApplications.Count > 0)
+            {
+                TilingApplicationPicker.SelectedIndex = 0;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            TilingStatus.Message = exception.Message;
+            TilingStatus.Severity = InfoBarSeverity.Warning;
+            TilingStatus.IsOpen = true;
+        }
+    }
+
+    private void ApplyTilingExceptions()
+    {
+        IReadOnlyList<TilingExceptionPresentation> items =
+            TilingExceptionEditor.Present(currentTiling);
+        TilingExceptionList.ItemsSource = null;
+        TilingExceptionList.ItemsSource = items;
+        TilingExceptionsEmptyText.Visibility = items.Count == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private async void OnRefreshTilingApplicationsClick(
+        object sender,
+        RoutedEventArgs args) =>
+        await LoadTilingApplicationsAsync();
+
+    private void OnAddTilingExceptionClick(object sender, RoutedEventArgs args)
+    {
+        if (TilingApplicationPicker.SelectedItem is not
+            RunningApplicationCandidate candidate)
+        {
+            TilingStatus.Message = "Select an open application first.";
+            TilingStatus.Severity = InfoBarSeverity.Warning;
+            TilingStatus.IsOpen = true;
+            return;
+        }
+
+        TilingExceptionDisposition disposition =
+            TilingExceptionDispositionPicker.SelectedIndex == 1
+                ? TilingExceptionDisposition.Ignore
+                : TilingExceptionDisposition.Float;
+        TilingSettings changed = TilingExceptionEditor.Add(
+            currentTiling,
+            candidate,
+            disposition);
+        if (changed == currentTiling)
+        {
+            TilingStatus.Message =
+                $"{candidate.DisplayName} already has this exception.";
+            TilingStatus.Severity = InfoBarSeverity.Informational;
+            TilingStatus.IsOpen = true;
+            return;
+        }
+
+        currentTiling = changed;
+        ApplyTilingExceptions();
+        TilingStatus.Message =
+            $"{candidate.DisplayName} was added. Select Save and apply to keep this change.";
+        TilingStatus.Severity = InfoBarSeverity.Informational;
+        TilingStatus.IsOpen = true;
+    }
+
+    private void OnRemoveTilingExceptionClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string id })
+        {
+            return;
+        }
+
+        currentTiling = TilingExceptionEditor.Remove(currentTiling, id);
+        ApplyTilingExceptions();
+        TilingStatus.Message =
+            "The exception was removed. Select Save and apply to keep this change.";
+        TilingStatus.Severity = InfoBarSeverity.Informational;
+        TilingStatus.IsOpen = true;
     }
 
     private void OnTilingEnabledToggled(object sender, RoutedEventArgs args)

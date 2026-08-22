@@ -791,6 +791,56 @@ public sealed class TilingCoordinatorTests
     }
 
     [TestMethod]
+    public async Task AccessDeniedPlacementFloatsWindowAndReflowsSurvivorOnce()
+    {
+        Harness harness = new();
+        List<TilingPlacementDeniedEventArgs> denied = [];
+        harness.Coordinator.PlacementDenied += (_, args) => denied.Add(args);
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Executor.CustomResult = requests =>
+        {
+            if (requests.Any(request => request.WindowHandle == WindowB))
+            {
+                return new TilingBatchResult(
+                    TilingBatchOutcome.DeferFailed,
+                    requests
+                        .Where(request => request.WindowHandle != WindowB)
+                        .Select(request => request.WindowHandle)
+                        .ToArray(),
+                    [WindowB],
+                    [],
+                    [new TilingPlacementRejection(WindowB, 5)]);
+            }
+
+            return TilingBatchResult.CommittedAll(
+                requests.Select(request => request.WindowHandle).ToArray());
+        };
+
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+        Assert.HasCount(2, harness.Executor.ApplyCalls);
+        IReadOnlyList<TilingPlacementRequest> repair =
+            harness.Executor.ApplyCalls[1];
+        Assert.HasCount(1, repair);
+        Assert.AreEqual(WindowA, repair[0].WindowHandle);
+        Assert.IsGreaterThan(900, repair[0].WindowRectPixels.Width);
+        Assert.HasCount(1, denied);
+        Assert.AreEqual(WindowB, denied[0].WindowHandle);
+        Assert.AreEqual(5, denied[0].NativeErrorCode);
+        Assert.AreEqual("App", denied[0].Identity?.ProcessName);
+
+        await Task.Delay(100);
+        Assert.HasCount(2, harness.Reports,
+            "The inaccessible window must not start a retry loop.");
+        harness.Coordinator.Dispose();
+    }
+
+    [TestMethod]
     public async Task ReadBackAdjustmentIsReportedOnceWithoutPolling()
     {
         Harness harness = new();
