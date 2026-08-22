@@ -1,4 +1,5 @@
 using DesktopShift.App.ViewModels;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.ManagedDesktops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -33,14 +34,20 @@ public sealed record ManagedDesktopCatalogItem(
     bool CanMoveEarlier,
     bool CanMoveLater,
     bool CanRecreate,
-    string RecreateToolTip)
+    string RecreateToolTip,
+    bool IsTilingEnabled,
+    bool CanConfigureTiling,
+    string TilingAutomationName)
 {
     public Visibility EditVisibility =>
         CanEdit ? Visibility.Visible : Visibility.Collapsed;
 
-    public static ManagedDesktopCatalogItem FromEntry(ManagedDesktopCatalogEntry entry)
+    public static ManagedDesktopCatalogItem FromEntry(
+        ManagedDesktopCatalogEntry entry,
+        TilingSettings tiling)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(tiling);
 
         (string status, string glyph) = entry.Mapping is null
             ? ("Not reconciled", "\uE895")
@@ -84,7 +91,10 @@ public sealed record ManagedDesktopCatalogItem(
             entry.CanRecreate,
             entry.CanRecreate
                 ? $"Create a Windows desktop for {entry.DisplayName}"
-                : entry.RecreateUnavailableReason);
+                : entry.RecreateUnavailableReason,
+            tiling.IsEnabledForManagedDesktop(entry.SemanticKey),
+            CanConfigureTiling: true,
+            $"Enable BSP tiling on {entry.DisplayName}");
     }
 
     /// <summary>
@@ -95,9 +105,11 @@ public sealed record ManagedDesktopCatalogItem(
     /// service, so the desktops are still listed and simply cannot be edited.
     /// </remarks>
     public static ManagedDesktopCatalogItem FromMapping(
-        ManagedDesktopMappingItemPresentation mapping)
+        ManagedDesktopMappingItemPresentation mapping,
+        TilingSettings tiling)
     {
         ArgumentNullException.ThrowIfNull(mapping);
+        ArgumentNullException.ThrowIfNull(tiling);
 
         return new ManagedDesktopCatalogItem(
             mapping.SemanticKey,
@@ -118,7 +130,10 @@ public sealed record ManagedDesktopCatalogItem(
             CanMoveEarlier: false,
             CanMoveLater: false,
             CanRecreate: false,
-            RecreateToolTip: string.Empty);
+            RecreateToolTip: string.Empty,
+            tiling.IsEnabledForManagedDesktop(mapping.SemanticKey),
+            CanConfigureTiling: false,
+            $"Enable BSP tiling on {mapping.DisplayName}");
     }
 }
 

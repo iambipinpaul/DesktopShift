@@ -1,6 +1,7 @@
 using DesktopShift.App.Desktops;
 using DesktopShift.App.ViewModels;
 using DesktopShift.Core.Compatibility;
+using DesktopShift.Core.Configuration;
 using DesktopShift.Core.ManagedDesktops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -43,7 +44,9 @@ public sealed partial class DesktopsPage : Page
             return;
         }
 
-        PositionCardActions(actions, args.NewSize.Width < 620);
+        // The tiling switch adds another visible action. Move the action group
+        // below the details before it can make the mapping summary too narrow.
+        PositionCardActions(actions, args.NewSize.Width < 860);
     }
 
     private void OnInventoryRowSizeChanged(object sender, SizeChangedEventArgs args)
@@ -82,6 +85,9 @@ public sealed partial class DesktopsPage : Page
     private IDesktopTopologyProvider? _provider;
     private DesktopTopologyProviderState? _providerState;
     private IManagedDesktopMaintenanceService? _maintenance;
+    private TilingSettingsCommand? _tilingSettingsCommand;
+    private Func<CancellationToken, Task>? _reconcileTilingAsync;
+    private TilingSettings _tilingSettings = TilingSettings.Disabled;
     private CancellationToken _windowCancellationToken;
     private CancellationTokenSource? _refreshCancellation;
     private ManagedDesktopMappingPresentationSnapshot? _mappingSnapshot;
@@ -150,6 +156,25 @@ public sealed partial class DesktopsPage : Page
         }
     }
 
+    /// <summary>
+    /// Supplies the configuration command used by each desktop tiling switch.
+    /// </summary>
+    public void UpdateTiling(
+        TilingSettingsCommand tilingSettingsCommand,
+        Func<CancellationToken, Task>? reconcileTilingAsync,
+        CancellationToken windowCancellationToken)
+    {
+        _tilingSettingsCommand = tilingSettingsCommand ??
+            throw new ArgumentNullException(nameof(tilingSettingsCommand));
+        _reconcileTilingAsync = reconcileTilingAsync;
+        _windowCancellationToken = windowCancellationToken;
+
+        if (IsLoaded)
+        {
+            _ = LoadTilingSettingsAsync();
+        }
+    }
+
     public void UpdateMappings(ManagedDesktopMappingPresentationSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -181,6 +206,10 @@ public sealed partial class DesktopsPage : Page
         SubscribeToProvider();
         StartRefresh();
         RenderManagedDesktops();
+        if (_tilingSettingsCommand is not null)
+        {
+            _ = LoadTilingSettingsAsync();
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
@@ -437,7 +466,8 @@ public sealed partial class DesktopsPage : Page
 
     private void ApplyCatalog(ManagedDesktopCatalog catalog)
     {
-        _items = [.. catalog.Entries.Select(ManagedDesktopCatalogItem.FromEntry)];
+        _items = [.. catalog.Entries.Select(
+            entry => ManagedDesktopCatalogItem.FromEntry(entry, _tilingSettings))];
 
         ManagedMappingSummary.Text = catalog.Summary;
         ManagedMappingProvider.Text = catalog.ProviderSummary;
@@ -465,7 +495,9 @@ public sealed partial class DesktopsPage : Page
         _items = [.. snapshot.Mappings
             .OrderBy(mapping => mapping.PreferredOrder)
             .ThenBy(mapping => mapping.SemanticKey, StringComparer.OrdinalIgnoreCase)
-            .Select(ManagedDesktopCatalogItem.FromMapping)];
+            .Select(mapping => ManagedDesktopCatalogItem.FromMapping(
+                mapping,
+                _tilingSettings))];
 
         ManagedMappingSummary.Text = snapshot.Summary;
         ManagedMappingProvider.Text = snapshot.ProviderSummary;
@@ -575,6 +607,112 @@ public sealed partial class DesktopsPage : Page
                 item.SemanticKey,
                 !item.RecreateWhenMissing,
                 token));
+    }
+
+    private async void OnDesktopTilingToggled(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (sender is not ToggleSwitch toggle ||
+            ResolveItem(sender) is not ManagedDesktopCatalogItem item ||
+            _tilingSettingsCommand is null)
+        {
+            return;
+        }
+
+        // XAML can raise Toggled while it applies the item value. That is not
+        // a user edit and must not write the configuration again.
+        if (toggle.IsOn == item.IsTilingEnabled)
+        {
+            return;
+        }
+
+        _isOperationRunning = true;
+        ApplyBusyState();
+        try
+        {
+            TilingSettings requested = TilingSettingsCommand
+                .SetManagedDesktopEnabled(
+                    _tilingSettings,
+                    item.SemanticKey,
+                    toggle.IsOn);
+            TilingSettingsPresentation presentation =
+                await _tilingSettingsCommand.ApplyAsync(
+                    requested,
+                    _windowCancellationToken);
+            _tilingSettings = presentation.ActiveSettings;
+
+            if (!presentation.Accepted)
+            {
+                OperationResult.Severity = InfoBarSeverity.Error;
+                OperationResult.Title = "The tiling setting was not saved";
+                OperationResult.Message = presentation.Issues.Count == 0
+                    ? "The configuration was rejected."
+                    : presentation.Issues[0].Message;
+                OperationResult.IsOpen = true;
+                return;
+            }
+
+            if (_reconcileTilingAsync is not null)
+            {
+                await _reconcileTilingAsync(_windowCancellationToken);
+            }
+
+            OperationResult.Severity = InfoBarSeverity.Success;
+            OperationResult.Title = toggle.IsOn
+                ? $"Tiling is on for {item.DisplayName}"
+                : $"Tiling is off for {item.DisplayName}";
+            OperationResult.Message =
+                "The setting is saved and applied to open windows.";
+            OperationResult.IsOpen = true;
+        }
+        catch (OperationCanceledException)
+            when (_windowCancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            OperationResult.Severity = InfoBarSeverity.Error;
+            OperationResult.Title = "The tiling setting was not saved";
+            OperationResult.Message = exception.Message;
+            OperationResult.IsOpen = true;
+        }
+        finally
+        {
+            _isOperationRunning = false;
+            RenderManagedDesktops();
+            ApplyBusyState();
+        }
+    }
+
+    private async Task LoadTilingSettingsAsync()
+    {
+        if (_tilingSettingsCommand is null ||
+            _windowCancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            TilingSettingsPresentation presentation =
+                await _tilingSettingsCommand.LoadAsync(
+                    _windowCancellationToken);
+            _tilingSettings = presentation.ActiveSettings;
+            RenderManagedDesktops();
+        }
+        catch (OperationCanceledException)
+            when (_windowCancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            OperationResult.Severity = InfoBarSeverity.Warning;
+            OperationResult.Title = "Tiling settings are unavailable";
+            OperationResult.Message = exception.Message;
+            OperationResult.IsOpen = true;
+        }
     }
 
     private async void OnRecreateClick(object sender, RoutedEventArgs args)

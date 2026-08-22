@@ -25,7 +25,7 @@
                 <TextBlock Style="{StaticResource DesktopShift.PageTitleStyle}" Text="System settings" />
                 <TextBlock
                     Style="{StaticResource DesktopShift.PageSubtitleStyle}"
-                    Text="Configure startup, assignment behavior, compatibility, and appearance." />
+                    Text="Configure startup, assignment, window tiling, compatibility, and appearance." />
             </StackPanel>
 
             <InfoBar
@@ -217,6 +217,43 @@
                     </Border>
                 </StackPanel>
             </Border>
+
+            <TextBlock
+                x:Name="TilingSectionTitle"
+                Margin="0,24,0,10"
+                Style="{StaticResource DesktopShift.SectionLabelStyle}"
+                Text="Window tiling" />
+            <Border Style="{StaticResource DesktopShift.GroupCardStyle}">
+                <StackPanel>
+                    <Border Style="{StaticResource DesktopShift.SettingRowStyle}">
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <FontIcon VerticalAlignment="Center" Glyph="&#xE8A9;" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource DesktopShift.RowTitleStyle}" Text="Enable native BSP tiling" />
+                                <TextBlock Style="{StaticResource DesktopShift.RowDescriptionStyle}" Text="Arrange normal windows independently on each virtual desktop and monitor." />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="TilingEnabledToggle" Grid.Column="2" AutomationProperties.Name="Enable native BSP window tiling" OffContent="" OnContent="" Toggled="OnTilingEnabledToggled" />
+                        </Grid>
+                    </Border>
+                    <Border Padding="15,12" BorderBrush="{ThemeResource DesktopShift.BorderBrush}" BorderThickness="0,1,0,0">
+                        <StackPanel Spacing="12">
+                            <TextBlock Style="{StaticResource DesktopShift.RowDescriptionStyle}" Text="Layout: BSP. New windows split the focused tile when possible, or the largest tile otherwise." TextWrapping="Wrap" />
+                            <Grid ColumnSpacing="16" RowSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                <NumberBox x:Name="TilingOuterGapNumber" Grid.Row="0" Grid.Column="0" AutomationProperties.Name="Outer gap" Header="Outer gap" Maximum="256" Minimum="0" SmallChange="1" SpinButtonPlacementMode="Inline" />
+                                <NumberBox x:Name="TilingInnerGapNumber" Grid.Row="0" Grid.Column="1" AutomationProperties.Name="Inner gap" Header="Inner gap" Maximum="256" Minimum="0" SmallChange="1" SpinButtonPlacementMode="Inline" />
+                                <NumberBox x:Name="TilingMinimumWidthNumber" Grid.Row="1" Grid.Column="0" AutomationProperties.Name="Minimum tile width" Header="Minimum tile width" Maximum="4096" Minimum="64" SmallChange="16" SpinButtonPlacementMode="Inline" />
+                                <NumberBox x:Name="TilingMinimumHeightNumber" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Minimum tile height" Header="Minimum tile height" Maximum="4096" Minimum="64" SmallChange="16" SpinButtonPlacementMode="Inline" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Values use 96-DPI units. Existing float and ignore rules are kept unchanged." TextWrapping="Wrap" />
+                            <Button x:Name="ApplyTilingButton" HorizontalAlignment="Left" AutomationProperties.Name="Save and apply window tiling" Click="OnApplyTilingClick" Content="Save and apply" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+            <InfoBar x:Name="TilingStatus" Margin="0,10,0,0" AutomationProperties.LiveSetting="Polite" IsClosable="False" IsOpen="False" Title="Window tiling" />
 
             <TextBlock
                 x:Name="DesktopsSectionTitle"

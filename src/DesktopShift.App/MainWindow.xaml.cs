@@ -20,6 +20,7 @@ using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Navigation;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -54,10 +55,12 @@ public sealed partial class MainWindow : Window
     private readonly IWindowReassignmentService _windowReassignmentService;
     private readonly IAutomaticAssignmentPauseController _assignmentPauseController;
     private readonly BehaviorSettingsCommand _behaviorSettingsCommand;
+    private readonly TilingSettingsCommand _tilingSettingsCommand;
     private readonly IStartupRegistration _startupRegistration;
     private readonly IDiagnosticsCoordinator _diagnosticsCoordinator;
     private readonly RulesPageServices _rulesPageServices;
     private readonly SettingsPageServices _settingsPageServices;
+    private readonly TilingCoordinator _tilingCoordinator;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly AccessibilitySettings _accessibilitySettings;
     private readonly HighContrastChangeMonitor _highContrastMonitor;
@@ -84,7 +87,8 @@ public sealed partial class MainWindow : Window
         IAutomaticAssignmentPauseController assignmentPauseController,
         IRunningApplicationInventory runningApplicationInventory,
         IApplicationIconReader applicationIconReader,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        TilingCoordinator tilingCoordinator)
     {
         _themePreferenceService = themePreferenceService ?? throw new ArgumentNullException(nameof(themePreferenceService));
         _firstRunService = firstRunService ?? throw new ArgumentNullException(nameof(firstRunService));
@@ -120,6 +124,7 @@ public sealed partial class MainWindow : Window
         _behaviorSettingsCommand = new BehaviorSettingsCommand(
             _configurationService,
             _startupRegistration);
+        _tilingSettingsCommand = new TilingSettingsCommand(_configurationService);
         _rulesPageServices = new RulesPageServices(
             _configurationService,
             _activityProjection,
@@ -129,8 +134,11 @@ public sealed partial class MainWindow : Window
                 throw new ArgumentNullException(nameof(applicationIconReader)),
             _windowReassignmentService,
             timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
+        _tilingCoordinator = tilingCoordinator ??
+            throw new ArgumentNullException(nameof(tilingCoordinator));
         _settingsPageServices = new SettingsPageServices(
             _behaviorSettingsCommand,
+            _tilingSettingsCommand,
             configurationExchangeService ??
                 throw new ArgumentNullException(nameof(configurationExchangeService)),
             _compatibilityCoordinator,
@@ -141,7 +149,8 @@ public sealed partial class MainWindow : Window
             timeProvider,
             ApplyAcceptedBehavior,
             desktopSwitchHotkeyCoordinator ??
-                throw new ArgumentNullException(nameof(desktopSwitchHotkeyCoordinator)));
+                throw new ArgumentNullException(nameof(desktopSwitchHotkeyCoordinator)),
+            _tilingCoordinator.ReconcileAllWindowsAsync);
 
         InitializeComponent();
         _accessibilitySettings = new AccessibilitySettings();
@@ -490,6 +499,11 @@ public sealed partial class MainWindow : Window
             _firstRunState = await _firstRunService.GetStateAsync(_lifetimeCancellation.Token);
             _ = await _compatibilityCoordinator.RunCompatibilityTestAsync(
                 _lifetimeCancellation.Token);
+            // The hosted startup pass runs before this WinUI window exists.
+            // Re-enumerate after Loaded so DesktopShift joins the same BSP tree
+            // as the other visible windows on this virtual desktop.
+            await _tilingCoordinator.ReconcileAllWindowsAsync(
+                _lifetimeCancellation.Token);
             RefreshCurrentPage();
 
             if (!_firstRunState.IsCompleted)
@@ -738,6 +752,10 @@ public sealed partial class MainWindow : Window
                 _lifetimeCancellation.Token);
             desktopsPage.UpdateMaintenance(
                 _managedDesktopMaintenanceService,
+                _lifetimeCancellation.Token);
+            desktopsPage.UpdateTiling(
+                _tilingSettingsCommand,
+                _settingsPageServices.ReconcileTiling,
                 _lifetimeCancellation.Token);
             desktopsPage.UpdateMappings(managedDesktopMappings);
         }

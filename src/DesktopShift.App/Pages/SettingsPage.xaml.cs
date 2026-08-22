@@ -31,7 +31,9 @@ public sealed partial class SettingsPage : Page
     private Func<CancellationToken, Task<CompatibilityPresentation>>?
         runCompatibilityTestAsync;
     private BehaviorSettingsCommand? behaviorSettingsCommand;
+    private TilingSettingsCommand? tilingSettingsCommand;
     private BehaviorSettings currentBehavior = ConfigurationDefaults.Create().Behavior;
+    private TilingSettings currentTiling = TilingSettings.Disabled;
     private CancellationToken windowCancellationToken;
     private long behaviorEditVersion;
     private bool isApplyingPresentation;
@@ -54,6 +56,7 @@ public sealed partial class SettingsPage : Page
         services = pageServices ??
             throw new ArgumentNullException(nameof(pageServices));
         behaviorSettingsCommand = pageServices.BehaviorSettings;
+        tilingSettingsCommand = pageServices.TilingSettings;
         runCompatibilityTestAsync = compatibilityTest ??
             throw new ArgumentNullException(nameof(compatibilityTest));
         windowCancellationToken = cancellationToken;
@@ -66,6 +69,7 @@ public sealed partial class SettingsPage : Page
             pageServices.DesktopSwitchHotkeys?.Current,
             showSuccess: false);
         _ = LoadBehaviorAsync();
+        _ = LoadTilingAsync();
     }
 
     /// <summary>
@@ -117,6 +121,148 @@ public sealed partial class SettingsPage : Page
         {
             Report(InfoBarSeverity.Error, "Settings could not be loaded", exception.Message);
         }
+    }
+
+    private async Task LoadTilingAsync()
+    {
+        if (tilingSettingsCommand is null ||
+            windowCancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            TilingSettingsPresentation presentation =
+                await tilingSettingsCommand.LoadAsync(windowCancellationToken);
+            ApplyTiling(presentation);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            Report(InfoBarSeverity.Error, "Tiling settings could not be loaded", exception.Message);
+        }
+    }
+
+    private void ApplyTiling(TilingSettingsPresentation presentation)
+    {
+        currentTiling = presentation.Settings;
+        isApplyingPresentation = true;
+        try
+        {
+            TilingEnabledToggle.IsOn = currentTiling.IsEnabled;
+            TilingOuterGapNumber.Value = currentTiling.OuterGap;
+            TilingInnerGapNumber.Value = currentTiling.InnerGap;
+            TilingMinimumWidthNumber.Value = currentTiling.MinimumTileWidth;
+            TilingMinimumHeightNumber.Value = currentTiling.MinimumTileHeight;
+            SetTilingControlsEnabled(currentTiling.IsEnabled);
+        }
+        finally
+        {
+            isApplyingPresentation = false;
+        }
+
+        if (!presentation.Accepted)
+        {
+            TilingStatus.Message = FormatIssues(presentation.Issues);
+            TilingStatus.Severity = InfoBarSeverity.Warning;
+            TilingStatus.IsOpen = true;
+        }
+    }
+
+    private void OnTilingEnabledToggled(object sender, RoutedEventArgs args)
+    {
+        if (!isApplyingPresentation)
+        {
+            SetTilingControlsEnabled(TilingEnabledToggle.IsOn);
+        }
+    }
+
+    private void SetTilingControlsEnabled(bool isEnabled)
+    {
+        TilingOuterGapNumber.IsEnabled = isEnabled;
+        TilingInnerGapNumber.IsEnabled = isEnabled;
+        TilingMinimumWidthNumber.IsEnabled = isEnabled;
+        TilingMinimumHeightNumber.IsEnabled = isEnabled;
+    }
+
+    private async void OnApplyTilingClick(object sender, RoutedEventArgs args)
+    {
+        if (tilingSettingsCommand is null)
+        {
+            ReportDisconnected();
+            return;
+        }
+
+        ApplyTilingButton.IsEnabled = false;
+        try
+        {
+            TilingSettings requested = currentTiling with
+            {
+                IsEnabled = TilingEnabledToggle.IsOn,
+                OuterGap = ReadWholeNumber(TilingOuterGapNumber, "Outer gap"),
+                InnerGap = ReadWholeNumber(TilingInnerGapNumber, "Inner gap"),
+                MinimumTileWidth = ReadWholeNumber(
+                    TilingMinimumWidthNumber,
+                    "Minimum tile width"),
+                MinimumTileHeight = ReadWholeNumber(
+                    TilingMinimumHeightNumber,
+                    "Minimum tile height"),
+            };
+            TilingSettingsPresentation presentation =
+                await tilingSettingsCommand.ApplyAsync(
+                    requested,
+                    windowCancellationToken);
+            ApplyTiling(presentation);
+            if (!presentation.Accepted)
+            {
+                return;
+            }
+
+            if (services?.ReconcileTiling is not null)
+            {
+                await services.ReconcileTiling(windowCancellationToken);
+            }
+
+            TilingStatus.Message = requested.IsEnabled
+                ? "The settings were saved and applied to open windows."
+                : "Native window tiling is disabled.";
+            TilingStatus.Severity = InfoBarSeverity.Success;
+            TilingStatus.IsOpen = true;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            TilingStatus.Message = exception.Message;
+            TilingStatus.Severity = InfoBarSeverity.Error;
+            TilingStatus.IsOpen = true;
+        }
+        finally
+        {
+            ApplyTilingButton.IsEnabled = true;
+        }
+    }
+
+    private static int ReadWholeNumber(NumberBox numberBox, string fieldName)
+    {
+        if (double.IsNaN(numberBox.Value) ||
+            numberBox.Value < int.MinValue ||
+            numberBox.Value > int.MaxValue)
+        {
+            throw new InvalidOperationException($"{fieldName} must be a whole number.");
+        }
+
+        double rounded = Math.Round(numberBox.Value);
+        if (Math.Abs(numberBox.Value - rounded) > double.Epsilon)
+        {
+            throw new InvalidOperationException($"{fieldName} must be a whole number.");
+        }
+
+        return checked((int)rounded);
     }
 
     private async void OnPersistedBehaviorChanged(

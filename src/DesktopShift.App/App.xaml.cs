@@ -13,6 +13,7 @@ using DesktopShift.Core.Hotkeys;
 using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Recovery;
+using DesktopShift.Core.Tiling;
 using DesktopShift.Infrastructure.Configuration;
 using DesktopShift.Infrastructure.Hosting;
 using DesktopShift.Windows.Activation;
@@ -21,6 +22,7 @@ using DesktopShift.Windows.Compatibility;
 using DesktopShift.Windows.Hotkeys;
 using DesktopShift.Windows.Observation;
 using DesktopShift.Windows.Recovery;
+using DesktopShift.Windows.Tiling;
 using DesktopShift.Windows.VirtualDesktops;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -74,6 +76,10 @@ public partial class App : Application
                 WindowsTopLevelWindowEnumerator>();
             services.AddSingleton<IWindowClassifier, WindowsWindowClassifier>();
             services.AddSingleton<IWindowIdentityResolver, WindowsProcessIdentityResolver>();
+            services.AddSingleton<ITilingMonitorCatalog, WindowsTilingMonitorCatalog>();
+            services.AddSingleton<ITilingWindowReader, WindowsTilingWindowReader>();
+            services.AddSingleton<ITilingPlacementExecutor, WindowsPlacementBatchExecutor>();
+            services.AddSingleton<ITilingFocusReader, WindowsTilingFocusReader>();
             services.AddSingleton<IApplicationIconReader, WindowsApplicationIconReader>();
             services.AddSingleton<
                 IRunningApplicationInventory,
@@ -102,6 +108,7 @@ public partial class App : Application
                 IManagedDesktopMaintenanceService,
                 ManagedDesktopMaintenanceService>();
             services.AddDesktopShiftAssignments();
+            services.AddDesktopShiftTiling();
             services.AddDesktopShiftDiagnostics(useFileSystemLogStore: true);
             services.AddSingleton<MainWindow>();
         });

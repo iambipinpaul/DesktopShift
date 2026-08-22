@@ -15,6 +15,7 @@ public sealed class SettingsPresentationTests
             {
                 SettingsSection.Startup,
                 SettingsSection.Assignment,
+                SettingsSection.Tiling,
                 SettingsSection.Desktops,
                 SettingsSection.Compatibility,
                 SettingsSection.Notifications,

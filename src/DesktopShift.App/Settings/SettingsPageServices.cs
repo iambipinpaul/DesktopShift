@@ -23,6 +23,7 @@ namespace DesktopShift.App.Settings;
 /// reports the startup registration Windows actually holds rather than the one
 /// that was asked for.
 /// </param>
+/// <param name="TilingSettings">Reads and persists native BSP settings.</param>
 /// <param name="ConfigurationExchange">
 /// Imports and exports portable configuration. Import goes through the same
 /// candidate/active split as every other edit.
@@ -52,8 +53,12 @@ namespace DesktopShift.App.Settings;
 /// Applies settings that have live runtime effects after the configuration
 /// service accepts them. Start-assignment-paused remains a next-launch choice.
 /// </param>
+/// <param name="ReconcileTiling">
+/// Applies accepted tiling settings to windows that are already open.
+/// </param>
 public sealed record SettingsPageServices(
     BehaviorSettingsCommand BehaviorSettings,
+    TilingSettingsCommand TilingSettings,
     IConfigurationExchangeService ConfigurationExchange,
     ICompatibilityCoordinator Compatibility,
     IDiagnosticsCoordinator Diagnostics,
@@ -62,4 +67,5 @@ public sealed record SettingsPageServices(
     IThemePreferenceService ThemePreference,
     TimeProvider TimeProvider,
     Action<BehaviorSettings>? ApplyAcceptedBehavior = null,
-    IDesktopSwitchHotkeyCoordinator? DesktopSwitchHotkeys = null);
+    IDesktopSwitchHotkeyCoordinator? DesktopSwitchHotkeys = null,
+    Func<CancellationToken, Task>? ReconcileTiling = null);

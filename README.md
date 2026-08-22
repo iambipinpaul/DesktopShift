@@ -139,6 +139,13 @@ Each rule has its own setting for this, in the rule editor.
 | **Switches on foreground activation** | Your screen follows whenever you make the window active. |
 | **Switches on a new window's first activation** | Your screen follows only the first time, when the window is new. |
 
+## Native window tiling
+
+DesktopShift can also tile windows with a native BSP layout. It does not need
+an external tiling window manager or tiling hotkeys. The feature is off by
+default. See [Native BSP window tiling](docs/native-bsp-tiling.md) for the
+configuration and known Windows restrictions.
+
 ## Activity and diagnostics
 
 Local activity recording starts **off**. Turn on **Record local activity** in

@@ -199,6 +199,14 @@
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal"
                                         Spacing="8">
+                                        <ToggleSwitch
+                                            AutomationProperties.Name="{x:Bind TilingAutomationName}"
+                                            IsEnabled="{x:Bind CanConfigureTiling}"
+                                            IsOn="{x:Bind IsTilingEnabled}"
+                                            OffContent="Tiling off"
+                                            OnContent="Tiling on"
+                                            Tag="{x:Bind SemanticKey}"
+                                            Toggled="OnDesktopTilingToggled" />
                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
                                             <FontIcon
                                                 FontSize="12"

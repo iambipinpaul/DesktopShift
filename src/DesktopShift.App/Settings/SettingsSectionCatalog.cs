@@ -3,12 +3,13 @@ using System.Collections.Immutable;
 namespace DesktopShift.App.Settings;
 
 /// <summary>
-/// The eight areas the Settings page covers.
+/// The nine areas the Settings page covers.
 /// </summary>
 public enum SettingsSection
 {
     Startup,
     Assignment,
+    Tiling,
     Desktops,
     Compatibility,
     Notifications,
@@ -61,6 +62,11 @@ public static class SettingsSectionCatalog
             "assignment",
             "Assignment",
             "Automatic assignment reacts to window events. Pausing stops that; it never stops an assignment you ask for."),
+        new(
+            SettingsSection.Tiling,
+            "tiling",
+            "Window tiling",
+            "Arrange normal windows in a native BSP layout on each virtual desktop and monitor."),
         new(
             SettingsSection.Desktops,
             "desktops",
