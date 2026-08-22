@@ -594,11 +594,14 @@ public sealed class WindowObservationProcessor : IDisposable
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
-        if (windowEvent.Kind is
+        if (windowEvent.Kind == WindowEventKind.Minimized)
+        {
+            tilingTrigger?.NotifyWindowMinimized(windowEvent.WindowHandle);
+        }
+        else if (windowEvent.Kind is
             WindowEventKind.Cloaked or
             WindowEventKind.Uncloaked or
             WindowEventKind.Hidden or
-            WindowEventKind.Minimized or
             WindowEventKind.Restored or
             WindowEventKind.StateChanged)
         {
@@ -623,6 +626,17 @@ public sealed class WindowObservationProcessor : IDisposable
             classifier.Qualify(windowEvent.WindowHandle);
         if (qualification.Window is null)
         {
+            if (qualification.SkipReason == WindowSkipReason.DesktopShiftWindow &&
+                windowEvent.Kind is
+                    WindowEventKind.Created or
+                    WindowEventKind.Shown or
+                    WindowEventKind.ForegroundActivated)
+            {
+                // Assignment rules must not move DesktopShift itself, but its
+                // visible settings window still belongs in the BSP layout.
+                tilingTrigger?.NotifyWindowStateChanged(windowEvent.WindowHandle);
+            }
+
             // The window is not placeable — usually because it is not visible
             // yet — but it just took the foreground, and that is the one signal
             // saying the user asked for it. Remembered rather than dropped, so

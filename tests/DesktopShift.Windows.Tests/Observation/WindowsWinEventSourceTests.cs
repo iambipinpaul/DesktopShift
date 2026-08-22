@@ -37,6 +37,8 @@ public sealed class WindowsWinEventSourceTests
             nativeApi.Registrations.All(
                 static item => item.Minimum == item.Maximum));
         Assert.AreEqual(11, nativeApi.Registrations.Count);
+        Assert.IsTrue(nativeApi.Registrations.All(
+            static registration => registration.Flags == 0u));
         Assert.IsTrue(source.IsRunning);
 
         foreach (HookRegistration registration in nativeApi.Registrations)
@@ -160,7 +162,8 @@ public sealed class WindowsWinEventSourceTests
                     handle,
                     eventMin,
                     eventMax,
-                    callback));
+                    callback,
+                    flags));
             return handle;
         }
 
@@ -175,7 +178,8 @@ public sealed class WindowsWinEventSourceTests
         nint Handle,
         uint Minimum,
         uint Maximum,
-        WinEventCallback Callback);
+        WinEventCallback Callback,
+        uint Flags);
 
     private sealed class ThrowingWindowEventQueue : IWindowEventQueue
     {

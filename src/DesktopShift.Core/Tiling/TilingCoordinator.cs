@@ -293,6 +293,25 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
     }
 
     /// <inheritdoc />
+    public void NotifyWindowMinimized(nint windowHandle)
+    {
+        // EVENT_SYSTEM_MINIMIZESTART is authoritative even when IsIconic and
+        // the window rectangle have not settled yet. Forgetting the window
+        // releases its leaf now. EVENT_SYSTEM_MINIMIZEEND re-vouches the same
+        // HWND through NotifyWindowStateChanged when it is restored.
+        Forget(windowHandle);
+        if (windowEnumerator is not null)
+        {
+            // A visible survivor can have been forgotten after an earlier
+            // assignment returned NotPlaced. Enumerate once in the queued
+            // event-driven pass so that survivor can close over this leaf.
+            Volatile.Write(ref enumerateBeforeNextPass, 1);
+        }
+
+        RequestReconcile();
+    }
+
+    /// <inheritdoc />
     public void NotifyWindowStateChanged(nint windowHandle)
     {
         bool newlyVouched;

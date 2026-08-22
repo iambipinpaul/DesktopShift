@@ -321,8 +321,35 @@ public sealed class WindowObservationProcessorTests
         }
 
         CollectionAssert.AreEqual(
-            new nint[] { 101, 102, 103, 104, 105, 106 },
+            new nint[] { 101, 103, 104, 105, 106 },
             trigger.StateChanged.ToArray());
+        CollectionAssert.AreEqual(
+            new nint[] { 102 },
+            trigger.Minimized.ToArray());
+    }
+
+    [TestMethod]
+    public async Task DesktopShiftAppearanceVouchesForTilingWithoutAssignment()
+    {
+        RecordingTilingTrigger trigger = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new DesktopShiftClassifier(),
+            new CountingResolver(),
+            new RecordingActivitySink(),
+            trigger);
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Shown,
+                (nint)101,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(WindowSkipReason.DesktopShiftWindow, activity.SkipReason);
+        CollectionAssert.AreEqual(
+            new nint[] { 101 },
+            trigger.StateChanged.ToArray());
+        Assert.IsEmpty(trigger.Assignments);
     }
 
     [TestMethod]
@@ -441,6 +468,17 @@ public sealed class WindowObservationProcessorTests
             WindowSkipReason.None;
     }
 
+    private sealed class DesktopShiftClassifier : IWindowClassifier
+    {
+        public WindowQualification Qualify(nint windowHandle) =>
+            WindowQualification.Skipped(WindowSkipReason.DesktopShiftWindow);
+
+        public WindowSkipReason ClassifyIdentity(
+            QualifiedWindow window,
+            WindowIdentity identity) =>
+            WindowSkipReason.DesktopShiftWindow;
+    }
+
     private class SuccessfulResolver : IWindowIdentityResolver
     {
         public virtual ValueTask<WindowIdentityResolution> ResolveAsync(
@@ -503,6 +541,8 @@ public sealed class WindowObservationProcessorTests
 
     private sealed class RecordingTilingTrigger : ITilingTrigger
     {
+        public List<nint> Minimized { get; } = [];
+
         public List<nint> MoveSizeEnded { get; } = [];
 
         public List<nint> Destroyed { get; } = [];
@@ -510,6 +550,9 @@ public sealed class WindowObservationProcessorTests
         public List<nint> StateChanged { get; } = [];
 
         public List<TilingAssignmentNotification> Assignments { get; } = [];
+
+        public void NotifyWindowMinimized(nint windowHandle) =>
+            Minimized.Add(windowHandle);
 
         public void NotifyMoveSizeEnded(nint windowHandle) =>
             MoveSizeEnded.Add(windowHandle);

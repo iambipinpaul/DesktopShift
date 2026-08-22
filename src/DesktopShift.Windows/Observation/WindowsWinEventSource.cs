@@ -22,7 +22,6 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
     private const int ObjectIdWindow = 0;
     private const int ChildIdSelf = 0;
     private const uint OutOfContext = 0x0000;
-    private const uint SkipOwnProcess = 0x0002;
 
     private static readonly (uint EventId, WindowEventKind Kind)[] Registrations =
     [
@@ -102,7 +101,7 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
                         eventId,
                         eventId,
                         callback,
-                        OutOfContext | SkipOwnProcess);
+                        OutOfContext);
                     if (hook == 0)
                     {
                         throw new Win32Exception(

@@ -42,6 +42,12 @@ public readonly record struct TilingAssignmentNotification(
 public interface ITilingTrigger
 {
     /// <summary>
+    /// A minimize operation started. The window's tile is released from the
+    /// event itself because the native state can lag behind the event.
+    /// </summary>
+    void NotifyWindowMinimized(nint windowHandle);
+
+    /// <summary>
     /// Visibility or window state changed. The event vouches for its HWND, then
     /// the window is re-read so a hidden leaf is removed or an eligible window
     /// is admitted again.

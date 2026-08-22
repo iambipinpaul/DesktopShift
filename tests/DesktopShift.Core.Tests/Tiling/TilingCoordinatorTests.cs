@@ -158,6 +158,66 @@ public sealed class TilingCoordinatorTests
     }
 
     [TestMethod]
+    public async Task MinimizeEventReleasesItsLeafBeforeTheWindowStateSettles()
+    {
+        Harness harness = new();
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+
+        harness.Coordinator.NotifyWindowMinimized(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+
+        IReadOnlyList<TilingPlacementRequest> requests =
+            harness.Executor.ApplyCalls.Last();
+        Assert.HasCount(1, requests);
+        Assert.AreEqual(WindowA, requests[0].WindowHandle);
+        Assert.AreEqual(
+            new TileRect(-14, -14, 1028, 828),
+            requests[0].WindowRectPixels);
+    }
+
+    [TestMethod]
+    public async Task MinimizeEventRevouchesASurvivorAfterFailedAssignment()
+    {
+        Harness harness = new();
+        harness.Enumerator.Windows.AddRange([WindowA, WindowB]);
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+
+        // An earlier assignment failure removed A from tracking even though
+        // the window stayed visible. B is then minimized.
+        harness.Coordinator.NotifyAssignmentCompleted(new TilingAssignmentNotification(
+            WindowA,
+            "anywhere",
+            TilingAssignmentDisposition.NotPlaced));
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(500, 0, 500, 400), 14, MonitorOne, CurrentDesktop,
+            minimized: true));
+
+        harness.Coordinator.NotifyWindowMinimized(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(3));
+
+        IReadOnlyList<TilingPlacementRequest> requests =
+            harness.Executor.ApplyCalls.Last();
+        Assert.HasCount(1, requests);
+        Assert.AreEqual(WindowA, requests[0].WindowHandle);
+        Assert.AreEqual(
+            new TileRect(-14, -14, 1028, 828),
+            requests[0].WindowRectPixels);
+    }
+
+    [TestMethod]
     public async Task DisabledManagedDesktopKeepsWindowsOutOfBspLayout()
     {
         Harness harness = new();
