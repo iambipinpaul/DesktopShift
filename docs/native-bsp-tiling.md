@@ -49,8 +49,10 @@ all managed desktops.
 - A new window is tiled after application assignment finishes.
 - A new leaf splits the focused tile when possible. Otherwise, it splits the
   largest tile.
-- Minimized, hidden, cloaked, maximized, and fullscreen windows do not reserve
-  visible layout space.
+- Minimized, hidden, application-cloaked, maximized, and fullscreen windows do
+  not reserve visible layout space.
+- A window that the Windows shell cloaks during a virtual desktop switch keeps
+  its BSP slot. This keeps the layout order stable when the window returns.
 - A skipped window joins the layout again when it returns to normal mode.
 - DesktopShift does not restore a maximized window and does not change focus or
   Z order.

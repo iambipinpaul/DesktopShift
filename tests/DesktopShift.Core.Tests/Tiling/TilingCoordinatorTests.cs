@@ -381,6 +381,51 @@ public sealed class TilingCoordinatorTests
     }
 
     [TestMethod]
+    public async Task VirtualDesktopShellCloakPreservesTreeOrderWithoutPlacement()
+    {
+        Harness harness = new();
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(200, 200, 500, 300), 14, MonitorOne, CurrentDesktop));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(300, 300, 500, 300), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowA, CurrentDesktop));
+        harness.Coordinator.NotifyAssignmentCompleted(Vouch(WindowB, CurrentDesktop));
+        Assert.IsTrue(await harness.WaitForReportsAsync(1));
+        Assert.HasCount(1, harness.Executor.ApplyCalls);
+
+        // Match the first committed layout before Windows starts the desktop
+        // switch. DWM shell-cloaks each window in a separate event.
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 496, 800), 14, MonitorOne, CurrentDesktop,
+            cloaked: true, shellCloaked: true));
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(504, 0, 496, 800), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowA);
+        Assert.IsTrue(await harness.WaitForReportsAsync(2));
+
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(504, 0, 496, 800), 14, MonitorOne, CurrentDesktop,
+            cloaked: true, shellCloaked: true));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(3));
+
+        // The shell also reveals the windows one by one. Their old BSP leaves
+        // must still exist regardless of the event order.
+        harness.Reader.Respond(WindowA, FrameState(
+            new TileRect(0, 0, 496, 800), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowA);
+        Assert.IsTrue(await harness.WaitForReportsAsync(4));
+
+        harness.Reader.Respond(WindowB, FrameState(
+            new TileRect(504, 0, 496, 800), 14, MonitorOne, CurrentDesktop));
+        harness.Coordinator.NotifyWindowStateChanged(WindowB);
+        Assert.IsTrue(await harness.WaitForReportsAsync(5));
+
+        Assert.HasCount(1, harness.Executor.ApplyCalls,
+            "A virtual desktop switch must not resize or reverse the windows.");
+    }
+
+    [TestMethod]
     public async Task WindowOnAnotherDesktopIsNotPlacedThisPass()
     {
         Harness harness = new();
@@ -900,7 +945,8 @@ public sealed class TilingCoordinatorTests
         Guid? desktop,
         bool minimized = false,
         bool maximized = false,
-        bool cloaked = false) =>
+        bool cloaked = false,
+        bool shellCloaked = false) =>
         new(
             WindowRectPixels: new TileRect(
                 frame.X - margin,
@@ -913,7 +959,10 @@ public sealed class TilingCoordinatorTests
             IsMaximized: maximized,
             IsCloaked: cloaked,
             MonitorHandle: monitor,
-            DesktopId: desktop);
+            DesktopId: desktop,
+            CloakReasons: shellCloaked
+                ? TilingCloakReason.Shell
+                : TilingCloakReason.None);
 
     private sealed class Harness
     {

@@ -669,7 +669,30 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                 continue;
             }
 
-            if (state.IsMinimized || state.IsCloaked || !state.IsVisible)
+            if (state.IsMinimized)
+            {
+                hidden++;
+                ReleaseSlot(entry);
+                continue;
+            }
+
+            if (state.IsCloaked)
+            {
+                hidden++;
+
+                // Windows shell-cloaks every window while it switches virtual
+                // desktops. The topology provider can still report the old
+                // desktop during that short transition. Keep the BSP leaf so
+                // separate uncloak events cannot reverse the tree order.
+                if (!state.IsShellCloaked)
+                {
+                    ReleaseSlot(entry);
+                }
+
+                continue;
+            }
+
+            if (!state.IsVisible)
             {
                 hidden++;
                 ReleaseSlot(entry);
@@ -721,9 +744,11 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
         foreach ((TilingWorkspaceKey key, List<PassEntry> entries) in placeableByWorkspace)
         {
             TilingWorkspaceState workspace = catalog.GetOrCreate(key);
-            HashSet<LeafToken> ownedTokens = entries
-                .Where(static entry => entry.Tracked.Token is not null)
-                .Select(static entry => entry.Tracked.Token!.Value)
+            HashSet<LeafToken> ownedTokens = snapshot
+                .Where(candidate =>
+                    candidate.Entry.WorkspaceKey == key &&
+                    candidate.Entry.Token is not null)
+                .Select(static candidate => candidate.Entry.Token!.Value)
                 .ToHashSet();
             workspace.PruneTo(ownedTokens);
             double scaleFactor = entries[0].Monitor.DpiX / 96.0;
@@ -776,8 +801,8 @@ public sealed class TilingCoordinator : ITilingTrigger, IDisposable
                     candidate => candidate.Tracked.Token == placement.Token);
                 if (match is null)
                 {
-                    // A reserved slot belonging to a minimized, maximized,
-                    // full-screen, or off-desktop window: planned but silent.
+                    // A shell-cloaked window keeps its slot during a virtual
+                    // desktop switch. Its leaf is planned but stays silent.
                     continue;
                 }
 

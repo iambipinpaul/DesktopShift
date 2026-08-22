@@ -88,6 +88,25 @@ public sealed class WindowsTilingWindowReaderTests
         TilingWindowState state = reader.Read(0x6001).State!;
 
         Assert.IsTrue(state.IsCloaked);
+        Assert.IsFalse(state.IsShellCloaked);
+    }
+
+    [TestMethod]
+    public void Read_MapsTheDwmShellCloakReason()
+    {
+        FakeStateApi stateApi = new()
+        {
+            WindowRect = new NativeRect(0, 0, 100, 100),
+            CloakedValue = 2,
+        };
+        using WindowsTilingWindowReader reader =
+            new(stateApi, new FakeDesktopManager(null));
+
+        TilingWindowState state = reader.Read(0x6001).State!;
+
+        Assert.IsTrue(state.IsCloaked);
+        Assert.IsTrue(state.IsShellCloaked);
+        Assert.AreEqual(TilingCloakReason.Shell, state.CloakReasons);
     }
 
     [TestMethod]

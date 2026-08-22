@@ -66,6 +66,10 @@ public sealed class WindowsTilingWindowReader : ITilingWindowReader, IDisposable
             : FromNative(windowRect);
 
         DocumentedDesktopIdResult desktopId = desktopManager.GetWindowDesktopId(windowHandle);
+        bool cloakRead = stateApi.TryIsCloaked(windowHandle, out int cloakedValue);
+        TilingCloakReason cloakReasons = cloakRead
+            ? (TilingCloakReason)cloakedValue
+            : TilingCloakReason.None;
 
         return new TilingWindowReading(
             TilingReadStatus.Succeeded,
@@ -75,9 +79,10 @@ public sealed class WindowsTilingWindowReader : ITilingWindowReader, IDisposable
                 visible,
                 stateApi.IsIconic(windowHandle),
                 stateApi.IsZoomed(windowHandle),
-                stateApi.TryIsCloaked(windowHandle, out int cloaked) && cloaked != 0,
+                cloakRead && cloakedValue != 0,
                 stateApi.MonitorFromWindow(windowHandle),
-                desktopId.IsSuccess ? desktopId.DesktopId : null));
+                desktopId.IsSuccess ? desktopId.DesktopId : null,
+                cloakReasons));
     }
 
     public void Dispose() => desktopManager.Dispose();

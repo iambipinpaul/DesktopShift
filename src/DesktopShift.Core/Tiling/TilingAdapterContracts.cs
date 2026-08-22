@@ -27,6 +27,23 @@ public enum TilingReadStatus
     Unavailable,
 }
 
+/// <summary>Why DWM has cloaked a window.</summary>
+[Flags]
+public enum TilingCloakReason
+{
+    /// <summary>The window is not cloaked, or DWM did not report a reason.</summary>
+    None = 0,
+
+    /// <summary>The application cloaked its own window.</summary>
+    Application = 1,
+
+    /// <summary>The Windows shell cloaked the window.</summary>
+    Shell = 2,
+
+    /// <summary>The window inherited its cloak from an owner.</summary>
+    Inherited = 4,
+}
+
 /// <summary>One window's placement-relevant state, read once, on demand.</summary>
 /// <param name="WindowRectPixels">
 /// The outer rectangle including invisible resize borders, screen coordinates.
@@ -51,6 +68,10 @@ public enum TilingReadStatus
 /// The virtual desktop GUID, or null when the documented manager refused to
 /// say — which elevated windows do.
 /// </param>
+/// <param name="CloakReasons">
+/// The DWM cloak reason flags. Shell cloaking is temporary during a virtual
+/// desktop switch, so the coordinator can keep that window's BSP slot.
+/// </param>
 public sealed record TilingWindowState(
     TileRect WindowRectPixels,
     TileRect VisibleFramePixels,
@@ -59,8 +80,13 @@ public sealed record TilingWindowState(
     bool IsMaximized,
     bool IsCloaked,
     nint MonitorHandle,
-    Guid? DesktopId)
+    Guid? DesktopId,
+    TilingCloakReason CloakReasons = TilingCloakReason.None)
 {
+    /// <summary>Whether the Windows shell supplied the cloak.</summary>
+    public bool IsShellCloaked =>
+        (CloakReasons & TilingCloakReason.Shell) != 0;
+
     /// <summary>
     /// How much invisible border each edge adds outside the visible frame.
     /// A tile is expressed in visible-frame terms, so placing means growing
