@@ -79,19 +79,20 @@ public sealed class NoRecurringPollingScanTests
     ];
 
     /// <summary>
-    /// The two files allowed to enumerate top-level windows, and what asks them
-    /// to.
+    /// The three files allowed to enumerate top-level windows, and what asks
+    /// them to.
     /// </summary>
     /// <remarks>
     /// Enumeration is the most expensive read in the application, so where it can
-    /// happen from is pinned by name. Both of these are driven by intent — a
+    /// happen from is pinned by name. All of these are driven by intent — a
     /// startup pass, the user pressing Reassign All, or the user opening the rule
-    /// editor's application picker — and neither is reachable from a timer.
+    /// editor's application picker — and none is reachable from a timer.
     /// </remarks>
     private static readonly string[] FilesAllowedToEnumerateWindows =
     [
         "WindowReassignmentService.cs",
         "RunningApplicationInventory.cs",
+        "TilingCoordinator.cs",
     ];
 
     [TestMethod]

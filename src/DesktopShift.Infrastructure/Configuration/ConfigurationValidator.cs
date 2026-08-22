@@ -254,7 +254,320 @@ internal static class ConfigurationValidator
             DesktopSwitchShortcuts.Validate(
                 candidate.Behavior?.ToDesktopSwitchShortcutSettings()));
 
+        AddTilingIssues(issues, candidate.Tiling);
+
         return issues.ToImmutable();
+    }
+
+    /// <summary>
+    /// Validates the automatic window layout section.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rule checks reuse the Application Rule machinery — the same shape
+    /// tests, the same missing-identity test — because a tiling rule matches
+    /// with exactly the same signals an Application Rule matches with. Two
+    /// implementations of one matcher's input validation would eventually
+    /// disagree about what a valid process name is.
+    /// </para>
+    /// <para>
+    /// <see cref="TilingSettings.ApplyToAllVirtualDesktops"/> set to
+    /// <see langword="false"/> is reported rather than silently read as its
+    /// default. This build shares layout parameters across desktops. A managed
+    /// desktop can opt out through its stable semantic key, but it cannot carry
+    /// a different gap or layout policy.
+    /// </para>
+    /// </remarks>
+    private static void AddTilingIssues(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        TilingSettings? tiling)
+    {
+        if (tiling is null)
+        {
+            issues.Add(RequiredValue(
+                "$.tiling",
+                ConfigurationEntryKind.Tiling,
+                entryId: null));
+            return;
+        }
+
+        AddTilingGapIssue(issues, tiling.OuterGap, "$.tiling.outerGap");
+        AddTilingGapIssue(issues, tiling.InnerGap, "$.tiling.innerGap");
+
+        if (!Enum.IsDefined(tiling.Layout))
+        {
+            issues.Add(new ConfigurationValidationIssue(
+                ConfigurationValidationCode.InvalidTilingValue,
+                $"The tiling layout '{tiling.Layout}' is not supported.",
+                "$.tiling.layout",
+                ConfigurationEntryKind.Tiling,
+                EntryId: null));
+        }
+
+        if (!Enum.IsDefined(tiling.InsertMode))
+        {
+            issues.Add(new ConfigurationValidationIssue(
+                ConfigurationValidationCode.InvalidTilingValue,
+                $"The tiling insert mode '{tiling.InsertMode}' is not supported.",
+                "$.tiling.insertMode",
+                ConfigurationEntryKind.Tiling,
+                EntryId: null));
+        }
+
+        AddTileDimensionIssue(
+            issues,
+            tiling.MinimumTileWidth,
+            "$.tiling.minimumTileWidth");
+        AddTileDimensionIssue(
+            issues,
+            tiling.MinimumTileHeight,
+            "$.tiling.minimumTileHeight");
+
+        if (!tiling.ApplyToAllVirtualDesktops)
+        {
+            issues.Add(new ConfigurationValidationIssue(
+                ConfigurationValidationCode.InvalidTilingValue,
+                "applyToAllVirtualDesktops set to false is not supported. Layout parameters are shared; use disabledManagedDesktopKeys to turn tiling off for selected managed desktops.",
+                "$.tiling.applyToAllVirtualDesktops",
+                ConfigurationEntryKind.Tiling,
+                EntryId: null));
+        }
+
+        HashSet<string> disabledDesktopKeys =
+            new(StringComparer.OrdinalIgnoreCase);
+        for (int index = 0;
+             index < tiling.DisabledManagedDesktopKeys.Length;
+             index++)
+        {
+            string key = tiling.DisabledManagedDesktopKeys[index];
+            string path = $"$.tiling.disabledManagedDesktopKeys[{index}]";
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.InvalidTilingValue,
+                    "A disabled managed desktop key must not be blank.",
+                    path,
+                    ConfigurationEntryKind.Tiling,
+                    EntryId: null));
+                continue;
+            }
+
+            if (!disabledDesktopKeys.Add(key))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.InvalidTilingValue,
+                    $"The managed desktop key '{key}' is listed more than once.",
+                    path,
+                    ConfigurationEntryKind.Tiling,
+                    EntryId: key));
+            }
+        }
+
+        HashSet<string> ruleIds = new(StringComparer.OrdinalIgnoreCase);
+        AddTilingRuleIssues(
+            issues,
+            tiling.FloatRules,
+            "$.tiling.floatRules",
+            "Float",
+            ruleIds);
+        AddTilingRuleIssues(
+            issues,
+            tiling.IgnoreRules,
+            "$.tiling.ignoreRules",
+            "Ignore",
+            ruleIds);
+    }
+
+    private static void AddTilingGapIssue(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        int value,
+        string path)
+    {
+        if (value is >= TilingSettings.MinimumGap and <= TilingSettings.MaximumGap)
+        {
+            return;
+        }
+
+        issues.Add(new ConfigurationValidationIssue(
+            ConfigurationValidationCode.InvalidTilingValue,
+            $"The tiling gap at '{path}' must be between {TilingSettings.MinimumGap} and {TilingSettings.MaximumGap} DPI-scaled units, but is {value}.",
+            path,
+            ConfigurationEntryKind.Tiling,
+            EntryId: null));
+    }
+
+    private static void AddTileDimensionIssue(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        int value,
+        string path)
+    {
+        if (value is >= TilingSettings.AbsoluteMinimumTileDimension &&
+            value <= TilingSettings.MaximumTileDimension)
+        {
+            return;
+        }
+
+        issues.Add(new ConfigurationValidationIssue(
+            ConfigurationValidationCode.InvalidTilingValue,
+            $"The minimum tile dimension at '{path}' must be between {TilingSettings.AbsoluteMinimumTileDimension} and {TilingSettings.MaximumTileDimension} DPI-scaled units, but is {value}.",
+            path,
+            ConfigurationEntryKind.Tiling,
+            EntryId: null));
+    }
+
+    private static void AddTilingRuleIssues(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        ImmutableArray<TilingIdentityRule> rules,
+        string basePath,
+        string kindName,
+        HashSet<string> ruleIds)
+    {
+        if (rules.IsDefault)
+        {
+            return;
+        }
+
+        for (int index = 0; index < rules.Length; index++)
+        {
+            TilingIdentityRule rule = rules[index];
+            string path = $"{basePath}[{index}]";
+
+            if (string.IsNullOrWhiteSpace(rule.Id))
+            {
+                issues.Add(RequiredValue(
+                    $"{path}.id",
+                    ConfigurationEntryKind.TilingRule,
+                    rule.Id));
+            }
+            else if (!ruleIds.Add(rule.Id))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.DuplicateRuleId,
+                    $"{kindName} rule ID '{rule.Id}' is duplicated.",
+                    $"{path}.id",
+                    ConfigurationEntryKind.TilingRule,
+                    rule.Id));
+            }
+
+            if (string.IsNullOrWhiteSpace(rule.DisplayName))
+            {
+                issues.Add(RequiredValue(
+                    $"{path}.displayName",
+                    ConfigurationEntryKind.TilingRule,
+                    rule.Id));
+            }
+
+            if (!HasIdentity(rule.ProcessNames) &&
+                !HasIdentity(rule.PackageFamilyNames) &&
+                !HasIdentity(rule.AppUserModelIds) &&
+                !HasIdentity(rule.ExecutablePaths))
+            {
+                issues.Add(new ConfigurationValidationIssue(
+                    ConfigurationValidationCode.MissingApplicationIdentity,
+                    $"{kindName} rule '{rule.Id}' must contain at least one process name, package family name, AppUserModelId, or executable path.",
+                    path,
+                    ConfigurationEntryKind.TilingRule,
+                    rule.Id));
+            }
+
+            AddBlankTilingIdentityIssue(
+                issues,
+                rule.ProcessNames,
+                $"{path}.processNames",
+                kindName,
+                rule.Id);
+            AddBlankTilingIdentityIssue(
+                issues,
+                rule.PackageFamilyNames,
+                $"{path}.packageFamilyNames",
+                kindName,
+                rule.Id);
+            AddBlankTilingIdentityIssue(
+                issues,
+                rule.AppUserModelIds,
+                $"{path}.appUserModelIds",
+                kindName,
+                rule.Id);
+            AddBlankTilingIdentityIssue(
+                issues,
+                rule.ExecutablePaths,
+                $"{path}.executablePaths",
+                kindName,
+                rule.Id);
+            AddBlankTilingIdentityIssue(
+                issues,
+                rule.WindowClasses,
+                $"{path}.windowClasses",
+                kindName,
+                rule.Id);
+
+            AddShapeIssues(
+                issues,
+                rule.ProcessNames,
+                ApplicationRuleShape.IsValidProcessName,
+                $"{path}.processNames",
+                "an executable file name",
+                rule.Id,
+                kindName,
+                ConfigurationEntryKind.TilingRule);
+            AddShapeIssues(
+                issues,
+                rule.PackageFamilyNames,
+                ApplicationRuleShape.IsValidPackageFamilyName,
+                $"{path}.packageFamilyNames",
+                "a package family name in the form Name_PublisherId",
+                rule.Id,
+                kindName,
+                ConfigurationEntryKind.TilingRule);
+            AddShapeIssues(
+                issues,
+                rule.AppUserModelIds,
+                ApplicationRuleShape.IsValidAppUserModelId,
+                $"{path}.appUserModelIds",
+                "an AppUserModelId",
+                rule.Id,
+                kindName,
+                ConfigurationEntryKind.TilingRule);
+            AddShapeIssues(
+                issues,
+                rule.ExecutablePaths,
+                ApplicationRuleShape.IsValidExecutablePath,
+                $"{path}.executablePaths",
+                "a full executable path",
+                rule.Id,
+                kindName,
+                ConfigurationEntryKind.TilingRule);
+            AddShapeIssues(
+                issues,
+                rule.WindowClasses,
+                ApplicationRuleShape.IsValidWindowClass,
+                $"{path}.windowClasses",
+                "a window class",
+                rule.Id,
+                kindName,
+                ConfigurationEntryKind.TilingRule);
+        }
+    }
+
+    private static void AddBlankTilingIdentityIssue(
+        ImmutableArray<ConfigurationValidationIssue>.Builder issues,
+        ImmutableArray<string> identities,
+        string path,
+        string kindName,
+        string ruleId)
+    {
+        if (identities.IsDefaultOrEmpty ||
+            !identities.Any(string.IsNullOrWhiteSpace))
+        {
+            return;
+        }
+
+        issues.Add(new ConfigurationValidationIssue(
+            ConfigurationValidationCode.MissingApplicationIdentity,
+            $"{kindName} rule '{ruleId}' contains an empty identity at '{path}'.",
+            path,
+            ConfigurationEntryKind.TilingRule,
+            ruleId));
     }
 
     private static bool HasIdentity(ImmutableArray<string> identities)
@@ -290,7 +603,9 @@ internal static class ConfigurationValidator
         Func<string?, bool> isValid,
         string path,
         string expectation,
-        string ruleId)
+        string ruleId,
+        string kindName = "Application Rule",
+        ConfigurationEntryKind entryKind = ConfigurationEntryKind.ApplicationRule)
     {
         if (identities.IsDefaultOrEmpty)
         {
@@ -306,9 +621,9 @@ internal static class ConfigurationValidator
             {
                 issues.Add(new ConfigurationValidationIssue(
                     ConfigurationValidationCode.InvalidIdentityPattern,
-                    $"Application Rule '{ruleId}' declares '{identity}' at '{path}', which is not {expectation}.",
+                    $"{kindName} rule '{ruleId}' declares '{identity}' at '{path}', which is not {expectation}.",
                     path,
-                    ConfigurationEntryKind.ApplicationRule,
+                    entryKind,
                     ruleId));
             }
         }

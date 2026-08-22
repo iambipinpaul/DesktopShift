@@ -1,5 +1,6 @@
 using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Performance;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Core.Observation;
 
@@ -501,6 +502,7 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly IForegroundSwitchSuppression? switchSuppression;
     private readonly IEarlyForegroundActivationMemory? earlyForeground;
     private readonly IPerformanceRecorder? performanceRecorder;
+    private readonly ITilingTrigger? tilingTrigger;
     private readonly TimeProvider timeProvider;
 
     public WindowObservationProcessor(
@@ -516,7 +518,8 @@ public sealed class WindowObservationProcessor : IDisposable
         OpenWindowFollowGrace? followGrace = null,
         IPerformanceRecorder? performanceRecorder = null,
         TimeProvider? timeProvider = null,
-        IEarlyForegroundActivationMemory? earlyForeground = null)
+        IEarlyForegroundActivationMemory? earlyForeground = null,
+        ITilingTrigger? tilingTrigger = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(identityResolver);
@@ -535,6 +538,7 @@ public sealed class WindowObservationProcessor : IDisposable
         this.switchSuppression = switchSuppression;
         this.earlyForeground = earlyForeground;
         this.performanceRecorder = performanceRecorder;
+        this.tilingTrigger = tilingTrigger;
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -559,6 +563,7 @@ public sealed class WindowObservationProcessor : IDisposable
             activationTracker?.Clear(windowEvent.WindowHandle);
             switchSuppression?.Clear(windowEvent.WindowHandle);
             earlyForeground?.Clear(windowEvent.WindowHandle);
+            tilingTrigger?.NotifyWindowDestroyed(windowEvent.WindowHandle);
 
             // A window that closed inside its grace period is not moved. There
             // is nothing left to place, and the handle may already have been
@@ -571,6 +576,33 @@ public sealed class WindowObservationProcessor : IDisposable
                 WindowSkipReason.CleanupEvent,
                 correlationId,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        // A move/size drag ended. This is the user's hand finishing, not an
+        // event the assignment rules answer: tiling re-reads the window's
+        // monitor and state once and the pipeline records that it happened.
+        // It deliberately bypasses coalescing — one drag end is already the
+        // burst boundary — and rule matching below.
+        if (windowEvent.Kind == WindowEventKind.MoveSizeEnded)
+        {
+            tilingTrigger?.NotifyMoveSizeEnded(windowEvent.WindowHandle);
+            return await RecordSkipAsync(
+                windowEvent,
+                windowEvent.WindowHandle,
+                WindowSkipReason.TilingMoveSizeEndObserved,
+                correlationId,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        if (windowEvent.Kind is
+            WindowEventKind.Cloaked or
+            WindowEventKind.Uncloaked or
+            WindowEventKind.Hidden or
+            WindowEventKind.Minimized or
+            WindowEventKind.Restored or
+            WindowEventKind.StateChanged)
+        {
+            tilingTrigger?.NotifyWindowStateChanged(windowEvent.WindowHandle);
         }
 
         bool hasPendingSwitchSuppression =
@@ -676,6 +708,11 @@ public sealed class WindowObservationProcessor : IDisposable
 
         if (match is { Rule.Destination: WindowRuleDestination.Anywhere })
         {
+            tilingTrigger?.NotifyAssignmentCompleted(
+                new TilingAssignmentNotification(
+                    window.RootWindowHandle,
+                    match.Rule.TargetDesktopKey,
+                    TilingAssignmentDisposition.AlreadyInPlace));
             return await RecordSkipAsync(
                 windowEvent,
                 window.RootWindowHandle,
@@ -719,6 +756,19 @@ public sealed class WindowObservationProcessor : IDisposable
                     : !answersEvent
                         ? WindowSkipReason.ActivationNotSwept
                         : WindowSkipReason.NoMatchingRule;
+
+                if (windowEvent.Kind is
+                    WindowEventKind.Created or
+                    WindowEventKind.Shown or
+                    WindowEventKind.StartupReconciliation or
+                    WindowEventKind.ManualReassignment)
+                {
+                    tilingTrigger?.NotifyAssignmentCompleted(
+                        new TilingAssignmentNotification(
+                            window.RootWindowHandle,
+                            string.Empty,
+                            TilingAssignmentDisposition.AlreadyInPlace));
+                }
 
                 return await RecordSkipAsync(
                     windowEvent,
@@ -883,6 +933,14 @@ public sealed class WindowObservationProcessor : IDisposable
                     timeProvider.GetElapsedTime(receivedTimestamp),
                     deferred,
                     assignment.Duration));
+
+            // The moment a window is known to live on its managed desktop is
+            // the moment it can be considered for a tile. Tiling decides for
+            // itself whether the desktop is visible; this only vouches.
+            tilingTrigger?.NotifyAssignmentCompleted(new TilingAssignmentNotification(
+                windowHandle,
+                rule.TargetDesktopKey,
+                DispositionFrom(assignment)));
         }
 
         WindowObservationActivity activity = new(
@@ -908,6 +966,19 @@ public sealed class WindowObservationProcessor : IDisposable
             .ConfigureAwait(false);
         return activity;
     }
+
+    private static TilingAssignmentDisposition DispositionFrom(
+        WindowAssignmentActivity assignment) =>
+        assignment.Outcome switch
+        {
+            WindowAssignmentOutcome.Succeeded =>
+                assignment.SkipReason ==
+                    WindowAssignmentSkipReason.AlreadyOnTargetDesktop ||
+                assignment.MoveOutcome == WindowMoveOutcome.AlreadyCorrect
+                    ? TilingAssignmentDisposition.AlreadyInPlace
+                    : TilingAssignmentDisposition.PlacedOnTargetDesktop,
+            _ => TilingAssignmentDisposition.NotPlaced,
+        };
 
     public async Task RunAsync(
         IWindowEventQueue queue,

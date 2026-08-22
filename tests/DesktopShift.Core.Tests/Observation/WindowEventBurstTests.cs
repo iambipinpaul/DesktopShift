@@ -47,8 +47,11 @@ public sealed class WindowEventBurstTests
         FakeWindowEventSource source =
             host.Services.GetRequiredService<FakeWindowEventSource>();
 
-        int accepted = 0;
-        for (int index = 0; index < burst; index++)
+        int accepted = source.Publish(WindowEventKind.Shown, (nint)1) ? 1 : 0;
+        Assert.AreEqual(1, accepted);
+        await resolver.WaitUntilEnteredAsync(TimeSpan.FromSeconds(5));
+
+        for (int index = 1; index < burst; index++)
         {
             if (source.Publish(WindowEventKind.Shown, (nint)(index + 1)))
             {
@@ -305,6 +308,9 @@ public sealed class WindowEventBurstTests
         private readonly TaskCompletionSource released =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        private readonly TaskCompletionSource entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public SelectiveWindowIdentityResolver(
             IReadOnlyCollection<nint> staleWindowHandles,
             bool hold = false)
@@ -319,11 +325,17 @@ public sealed class WindowEventBurstTests
         /// <summary>Lets the pump start draining the backlog.</summary>
         public void Release() => released.TrySetResult();
 
+        public async Task WaitUntilEnteredAsync(TimeSpan timeout)
+        {
+            await entered.Task.WaitAsync(timeout).ConfigureAwait(false);
+        }
+
         public async ValueTask<WindowIdentityResolution> ResolveAsync(
             QualifiedWindow window,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            entered.TrySetResult();
             await released.Task.WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
 

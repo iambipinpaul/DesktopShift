@@ -10,7 +10,7 @@ public sealed class WindowsWinEventSourceTests
     [TestMethod]
     public async Task Start_RegistersOnlyExactRequiredEvents_AndDisposeUnhooksAll()
     {
-        BoundedWindowEventQueue queue = new(8);
+        BoundedWindowEventQueue queue = new(16);
         RecordingHookApi nativeApi = new();
         WindowsWinEventSource source = new(queue, nativeApi);
 
@@ -22,16 +22,21 @@ public sealed class WindowsWinEventSourceTests
             {
                 WindowsWinEventSource.EventObjectCreate,
                 WindowsWinEventSource.EventObjectShow,
+                WindowsWinEventSource.EventObjectHide,
                 WindowsWinEventSource.EventSystemForeground,
                 WindowsWinEventSource.EventObjectDestroy,
                 WindowsWinEventSource.EventObjectCloaked,
                 WindowsWinEventSource.EventObjectUncloaked,
+                WindowsWinEventSource.EventSystemMoveSizeEnd,
+                WindowsWinEventSource.EventSystemMinimizeStart,
+                WindowsWinEventSource.EventSystemMinimizeEnd,
+                WindowsWinEventSource.EventObjectStateChange,
             },
             nativeApi.Registrations.Select(static item => item.Minimum).ToArray());
         Assert.IsTrue(
             nativeApi.Registrations.All(
                 static item => item.Minimum == item.Maximum));
-        Assert.AreEqual(6, nativeApi.Registrations.Count);
+        Assert.AreEqual(11, nativeApi.Registrations.Count);
         Assert.IsTrue(source.IsRunning);
 
         foreach (HookRegistration registration in nativeApi.Registrations)
@@ -72,18 +77,23 @@ public sealed class WindowsWinEventSourceTests
             events.Add(item);
         }
 
-        Assert.AreEqual(6, events.Count);
-        Assert.AreEqual(6L, source.Snapshot.Published);
+        Assert.AreEqual(11, events.Count);
+        Assert.AreEqual(11L, source.Snapshot.Published);
         Assert.AreEqual(0L, source.Snapshot.CallbackFailures);
         CollectionAssert.AreEquivalent(
             new[]
             {
                 WindowEventKind.Created,
                 WindowEventKind.Shown,
+                WindowEventKind.Hidden,
                 WindowEventKind.ForegroundActivated,
                 WindowEventKind.Destroyed,
                 WindowEventKind.Cloaked,
                 WindowEventKind.Uncloaked,
+                WindowEventKind.MoveSizeEnded,
+                WindowEventKind.Minimized,
+                WindowEventKind.Restored,
+                WindowEventKind.StateChanged,
             },
             events.Select(static item => item.Kind).ToArray());
     }

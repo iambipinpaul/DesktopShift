@@ -8,7 +8,23 @@ public sealed record ConfigurationDocument(
     int SchemaVersion,
     ImmutableArray<ManagedDesktopDefinition> ManagedDesktops,
     ImmutableArray<ApplicationRule> ApplicationRules,
-    BehaviorSettings Behavior);
+    BehaviorSettings Behavior,
+    TilingSettings? Tiling = null)
+{
+    /// <summary>
+    /// The automatic window layout settings, normalized so a document written
+    /// before tiling existed reads as <see cref="TilingSettings.Disabled"/>.
+    /// </summary>
+    /// <remarks>
+    /// Declared explicitly rather than left to the positional parameter so the
+    /// absent case can never reach a reader as null. A hand-written
+    /// <c>"tiling": null</c> binds through the constructor parameter and is
+    /// normalized to <see cref="TilingSettings.Disabled"/> by the same
+    /// expression — an explicit null carries no more intent than an absent
+    /// section.
+    /// </remarks>
+    public TilingSettings Tiling { get; init; } = Tiling ?? TilingSettings.Disabled;
+}
 
 public sealed record ManagedDesktopDefinition(
     string SemanticKey,

@@ -79,6 +79,16 @@ public enum ConfigurationEntryKind
     /// A desktop-switching shortcut profile or registration.
     /// </summary>
     Hotkey,
+
+    /// <summary>
+    /// The automatic window layout section as a whole.
+    /// </summary>
+    Tiling,
+
+    /// <summary>
+    /// One float or ignore rule inside the tiling section.
+    /// </summary>
+    TilingRule,
 }
 
 public enum ConfigurationValidationCode
@@ -149,6 +159,14 @@ public enum ConfigurationValidationCode
     /// this build does not understand.
     /// </summary>
     InvalidDesktopSwitchShortcutValue,
+
+    /// <summary>
+    /// The tiling section carries a value this build will not act on — a gap or
+    /// minimum tile size outside its accepted range, or
+    /// <c>applyToAllVirtualDesktops</c> set to <c>false</c>, which the first
+    /// release does not support and refuses to read as <c>true</c>.
+    /// </summary>
+    InvalidTilingValue,
 }
 
 /// <summary>

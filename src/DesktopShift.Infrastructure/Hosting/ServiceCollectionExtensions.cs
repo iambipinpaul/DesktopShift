@@ -9,6 +9,7 @@ using DesktopShift.Core.ManagedDesktops;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Performance;
 using DesktopShift.Core.Recovery;
+using DesktopShift.Core.Tiling;
 using DesktopShift.Infrastructure.Appearance;
 using DesktopShift.Infrastructure.Assignments;
 using DesktopShift.Infrastructure.Configuration;
@@ -17,6 +18,7 @@ using DesktopShift.Infrastructure.Hotkeys;
 using DesktopShift.Infrastructure.ManagedDesktops;
 using DesktopShift.Infrastructure.Observation;
 using DesktopShift.Infrastructure.Recovery;
+using DesktopShift.Infrastructure.Tiling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +27,45 @@ namespace DesktopShift.Infrastructure.Hosting;
 
 public static class ServiceCollectionExtensions
 {
+    /// <summary>Registers native BSP coordination and startup reconciliation.</summary>
+    public static IServiceCollection AddDesktopShiftTiling(
+        this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ITilingIdentitySource, QualifiedTilingIdentitySource>();
+        services.TryAddSingleton(static serviceProvider =>
+        {
+            IConfigurationService configuration =
+                serviceProvider.GetRequiredService<IConfigurationService>();
+            TimeProvider timeProvider =
+                serviceProvider.GetRequiredService<TimeProvider>();
+            IManagedDesktopReconciliationService? reconciliation =
+                serviceProvider.GetService<IManagedDesktopReconciliationService>();
+            return new TilingCoordinator(
+                () => (configuration.CurrentState.Active ??
+                    configuration.CurrentState.Candidate).Tiling,
+                serviceProvider.GetRequiredService<ITilingMonitorCatalog>(),
+                serviceProvider.GetRequiredService<ITilingWindowReader>(),
+                serviceProvider.GetRequiredService<ITilingIdentitySource>(),
+                serviceProvider.GetRequiredService<ITilingPlacementExecutor>(),
+                serviceProvider.GetService<IDesktopTopologyProvider>(),
+                serviceProvider.GetService<ITopLevelWindowEnumerator>(),
+                () => timeProvider.GetUtcNow(),
+                focusReader: serviceProvider.GetService<ITilingFocusReader>(),
+                managedDesktopKeySource: desktopId => reconciliation?.Current.Mappings
+                    .FirstOrDefault(mapping =>
+                        mapping.RuntimeDesktopId == desktopId)
+                    ?.SemanticKey);
+        });
+        services.TryAddSingleton<ITilingTrigger>(static serviceProvider =>
+            serviceProvider.GetRequiredService<TilingCoordinator>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, TilingStartupHostedService>());
+
+        return services;
+    }
+
     public static IServiceCollection AddDesktopShiftFoundation(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);

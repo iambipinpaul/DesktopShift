@@ -1,5 +1,7 @@
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Observation;
+using DesktopShift.Core.Tiling;
 
 namespace DesktopShift.Windows.Tests.Observation;
 
@@ -213,7 +215,9 @@ public sealed class WindowObservationProcessorTests
     private static WindowObservationProcessor CreateProcessor(
         IWindowClassifier classifier,
         IWindowIdentityResolver resolver,
-        RecordingActivitySink sink)
+        RecordingActivitySink sink,
+        ITilingTrigger? tilingTrigger = null,
+        IWindowAssignmentService? assignmentService = null)
     {
         WindowObservationRule rule = new(
             "vscode",
@@ -233,8 +237,193 @@ public sealed class WindowObservationProcessorTests
             classifier,
             resolver,
             new FixedRuleSource([rule]),
-            sink);
+            sink,
+            assignmentService: assignmentService,
+            tilingTrigger: tilingTrigger);
     }
+
+    [TestMethod]
+    public async Task MoveSizeEnd_NotifiesTilingOnceAndNeverReachesRuleMatching()
+    {
+        RecordingActivitySink sink = new();
+        CountingResolver resolver = new();
+        RecordingTilingTrigger trigger = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            resolver,
+            sink,
+            trigger);
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.MoveSizeEnded,
+                (nint)101,
+                DateTimeOffset.UnixEpoch));
+
+        // The drag end belongs to tiling, not to the assignment rules: no
+        // identity is resolved, and the pipeline records why it stepped aside.
+        Assert.HasCount(1, trigger.MoveSizeEnded);
+        Assert.AreEqual((nint)101, trigger.MoveSizeEnded[0]);
+        Assert.AreEqual(0, resolver.Count);
+        Assert.AreEqual(
+            WindowSkipReason.TilingMoveSizeEndObserved,
+            activity.SkipReason);
+    }
+
+    [TestMethod]
+    public async Task Destroy_ClearsTheTilingToken()
+    {
+        RecordingTilingTrigger trigger = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            trigger);
+
+        await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Destroyed,
+                (nint)101,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.HasCount(1, trigger.Destroyed);
+        Assert.AreEqual((nint)101, trigger.Destroyed[0]);
+    }
+
+    [TestMethod]
+    public async Task VisibilityStateEvents_RequestTilingReconciliation()
+    {
+        RecordingTilingTrigger trigger = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            trigger);
+        WindowEventKind[] kinds =
+        [
+            WindowEventKind.Hidden,
+            WindowEventKind.Minimized,
+            WindowEventKind.Restored,
+            WindowEventKind.Cloaked,
+            WindowEventKind.Uncloaked,
+            WindowEventKind.StateChanged,
+        ];
+
+        for (int index = 0; index < kinds.Length; index++)
+        {
+            await processor.ProcessAsync(new WindowEvent(
+                index + 1,
+                kinds[index],
+                (nint)(101 + index),
+                DateTimeOffset.UnixEpoch.AddMilliseconds(index)));
+        }
+
+        CollectionAssert.AreEqual(
+            new nint[] { 101, 102, 103, 104, 105, 106 },
+            trigger.StateChanged.ToArray());
+    }
+
+    [TestMethod]
+    public async Task MatchedAssignment_AdmitsTheWindowIntoTilingWithItsDisposition()
+    {
+        RecordingTilingTrigger movedTrigger = new();
+        WindowObservationProcessor movedProcessor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            movedTrigger,
+            StubAssignment(Activity(
+                WindowAssignmentOutcome.Succeeded,
+                WindowAssignmentSkipReason.None,
+                WindowMoveOutcome.Succeeded)));
+
+        await movedProcessor.ProcessAsync(
+            new WindowEvent(
+                1,
+                // An activation completes immediately; a Shown event would be
+                // held by the open-window grace period instead.
+                WindowEventKind.ForegroundActivated,
+                (nint)101,
+                DateTimeOffset.UnixEpoch));
+
+        TilingAssignmentNotification moved =
+            movedTrigger.Assignments.Single();
+        Assert.AreEqual((nint)101, moved.WindowHandle);
+        Assert.AreEqual("code", moved.TargetDesktopKey);
+        Assert.AreEqual(
+            TilingAssignmentDisposition.PlacedOnTargetDesktop,
+            moved.Disposition);
+
+        RecordingTilingTrigger alreadyTrigger = new();
+        WindowObservationProcessor alreadyProcessor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            alreadyTrigger,
+            StubAssignment(Activity(
+                WindowAssignmentOutcome.Succeeded,
+                WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
+                WindowMoveOutcome.NotAttempted)));
+        await alreadyProcessor.ProcessAsync(
+            new WindowEvent(
+                2,
+                WindowEventKind.ForegroundActivated,
+                (nint)102,
+                DateTimeOffset.UnixEpoch));
+        Assert.AreEqual(
+            TilingAssignmentDisposition.AlreadyInPlace,
+            alreadyTrigger.Assignments.Single().Disposition);
+
+        RecordingTilingTrigger failedTrigger = new();
+        WindowObservationProcessor failedProcessor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            failedTrigger,
+            StubAssignment(Activity(
+                WindowAssignmentOutcome.Failed,
+                WindowAssignmentSkipReason.None,
+                WindowMoveOutcome.Failed)));
+        await failedProcessor.ProcessAsync(
+            new WindowEvent(
+                3,
+                WindowEventKind.ForegroundActivated,
+                (nint)103,
+                DateTimeOffset.UnixEpoch));
+        Assert.AreEqual(
+            TilingAssignmentDisposition.NotPlaced,
+            failedTrigger.Assignments.Single().Disposition);
+    }
+
+    private static WindowAssignmentActivity Activity(
+        WindowAssignmentOutcome outcome,
+        WindowAssignmentSkipReason skipReason,
+        WindowMoveOutcome moveOutcome) =>
+        new(
+            Guid.NewGuid(),
+            DateTimeOffset.UnixEpoch,
+            TimeSpan.FromMilliseconds(5),
+            WindowEventKind.Shown,
+            0,
+            outcome,
+            skipReason,
+            "vscode",
+            "code",
+            TargetDesktopId: null,
+            PreviousDesktopId: null,
+            Identity: new WindowSafeIdentity(
+                "Code.exe",
+                null,
+                null,
+                "Chrome_WidgetWin_1"),
+            Error: null,
+            MoveOutcome: moveOutcome);
+
+    private static IWindowAssignmentService StubAssignment(
+        WindowAssignmentActivity result) =>
+        new FixedAssignmentService(result);
 
     private sealed class PassthroughClassifier : IWindowClassifier
     {
@@ -301,6 +490,39 @@ public sealed class WindowObservationProcessorTests
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(
                 WindowIdentityResolution.Failed(failure, nativeError));
+    }
+
+    private sealed class FixedAssignmentService(WindowAssignmentActivity result)
+        : IWindowAssignmentService
+    {
+        public ValueTask<WindowAssignmentActivity> AssignAsync(
+            WindowAssignmentRequest request,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(result);
+    }
+
+    private sealed class RecordingTilingTrigger : ITilingTrigger
+    {
+        public List<nint> MoveSizeEnded { get; } = [];
+
+        public List<nint> Destroyed { get; } = [];
+
+        public List<nint> StateChanged { get; } = [];
+
+        public List<TilingAssignmentNotification> Assignments { get; } = [];
+
+        public void NotifyMoveSizeEnded(nint windowHandle) =>
+            MoveSizeEnded.Add(windowHandle);
+
+        public void NotifyWindowDestroyed(nint windowHandle) =>
+            Destroyed.Add(windowHandle);
+
+        public void NotifyWindowStateChanged(nint windowHandle) =>
+            StateChanged.Add(windowHandle);
+
+        public void NotifyAssignmentCompleted(
+            in TilingAssignmentNotification notification) =>
+            Assignments.Add(notification);
     }
 
     private sealed class FixedRuleSource : IWindowRuleSource

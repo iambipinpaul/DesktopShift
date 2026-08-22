@@ -10,6 +10,11 @@ public enum WindowEventKind
     ManualReassignment,
     Cloaked,
     Uncloaked,
+    Hidden,
+    Minimized,
+    Restored,
+    StateChanged,
+    MoveSizeEnded,
 }
 
 /// <param name="Sequence">The monotonic order the event was received in.</param>

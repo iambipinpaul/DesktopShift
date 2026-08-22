@@ -69,6 +69,12 @@ public enum WindowSkipReason
     /// switch.
     /// </remarks>
     CloakStateChangeObserved,
+
+    /// <summary>
+    /// Windows reported that a move/size drag ended. Rule matching does not
+    /// answer this event; tiling hears about it and reconciles once.
+    /// </summary>
+    TilingMoveSizeEndObserved,
 }
 
 public sealed record WindowQualification(

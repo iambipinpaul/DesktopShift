@@ -11,8 +11,13 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
     public const uint EventObjectCreate = 0x8000;
     public const uint EventObjectDestroy = 0x8001;
     public const uint EventObjectShow = 0x8002;
+    public const uint EventObjectHide = 0x8003;
+    public const uint EventObjectStateChange = 0x800A;
     public const uint EventObjectCloaked = 0x8017;
     public const uint EventObjectUncloaked = 0x8018;
+    public const uint EventSystemMoveSizeEnd = 0x000B;
+    public const uint EventSystemMinimizeStart = 0x0016;
+    public const uint EventSystemMinimizeEnd = 0x0017;
 
     private const int ObjectIdWindow = 0;
     private const int ChildIdSelf = 0;
@@ -23,10 +28,15 @@ public sealed class WindowsWinEventSource : IWindowEventSource, IRestartableWind
     [
         (EventObjectCreate, WindowEventKind.Created),
         (EventObjectShow, WindowEventKind.Shown),
+        (EventObjectHide, WindowEventKind.Hidden),
         (EventSystemForeground, WindowEventKind.ForegroundActivated),
         (EventObjectDestroy, WindowEventKind.Destroyed),
         (EventObjectCloaked, WindowEventKind.Cloaked),
         (EventObjectUncloaked, WindowEventKind.Uncloaked),
+        (EventSystemMoveSizeEnd, WindowEventKind.MoveSizeEnded),
+        (EventSystemMinimizeStart, WindowEventKind.Minimized),
+        (EventSystemMinimizeEnd, WindowEventKind.Restored),
+        (EventObjectStateChange, WindowEventKind.StateChanged),
     ];
 
     private readonly object syncRoot = new();
