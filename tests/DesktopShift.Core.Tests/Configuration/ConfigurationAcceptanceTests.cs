@@ -52,8 +52,6 @@ public sealed class ConfigurationAcceptanceTests
             {
                 "run-observe",
                 "ide-development",
-                "agent-development",
-                "infrastructure",
                 "remote",
             },
             defaults.ManagedDesktops.Select(static desktop => desktop.SemanticKey).ToArray());
@@ -61,14 +59,12 @@ public sealed class ConfigurationAcceptanceTests
             new[]
             {
                 "Run & Observe",
-                "IDE Development",
-                "Agent Development",
-                "Infrastructure",
+                "Development",
                 "Remote",
             },
             defaults.ManagedDesktops.Select(static desktop => desktop.DisplayName).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 1, 2, 3, 4, 5 },
+            new[] { 1, 2, 3 },
             defaults.ManagedDesktops.Select(static desktop => desktop.PreferredOrder).ToArray());
         Assert.IsTrue(defaults.ManagedDesktops.All(static desktop => desktop.RecreateWhenMissing));
 
@@ -81,21 +77,16 @@ public sealed class ConfigurationAcceptanceTests
         AssertRule(
             defaults.ApplicationRules[1],
             "ide-development",
-            "IDE Development",
+            "Development",
             "ide-development",
-            ["Code.exe", "devenv.exe"]);
-        AssertRule(
-            defaults.ApplicationRules[2],
-            "agent-development",
-            "Agent Development",
-            "agent-development",
-            ["claude.exe", "ChatGPT.exe", "codex.exe"]);
-        AssertRule(
-            defaults.ApplicationRules[3],
-            "infrastructure",
-            "Infrastructure",
-            "infrastructure",
-            ["WindowsTerminal.exe"],
+            [
+                "Code.exe",
+                "devenv.exe",
+                "claude.exe",
+                "ChatGPT.exe",
+                "codex.exe",
+                "WindowsTerminal.exe",
+            ],
             [
                 "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
                 "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
@@ -105,7 +96,7 @@ public sealed class ConfigurationAcceptanceTests
                 "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
             ]);
         AssertRule(
-            defaults.ApplicationRules[4],
+            defaults.ApplicationRules[2],
             "remote",
             "Remote",
             "remote",
@@ -115,6 +106,8 @@ public sealed class ConfigurationAcceptanceTests
         Assert.IsTrue(defaults.Behavior.StartMinimized);
         Assert.IsTrue(defaults.Behavior.CloseToTray);
         Assert.IsFalse(defaults.Behavior.RecordLocalActivity);
+        Assert.IsTrue(defaults.Tiling.IsEnabled);
+        Assert.IsTrue(defaults.Tiling.ApplyToAllVirtualDesktops);
 
         // Desktop switching still ships off. Ten global combinations must not be
         // claimed before the user asks for them.
@@ -202,9 +195,9 @@ public sealed class ConfigurationAcceptanceTests
     }
 
     [TestMethod]
-    public void DefaultInfrastructureRule_DropsTheWindowlessConsoleHosts()
+    public void DefaultDevelopmentRule_DropsTheWindowlessConsoleHosts()
     {
-        ApplicationRule rule = GetDefaultRule("infrastructure");
+        ApplicationRule rule = GetDefaultRule("ide-development");
 
         // Neither owns a top-level window: wt.exe forwards its command line to
         // the running host and exits, and OpenConsole.exe is the windowless
@@ -219,7 +212,7 @@ public sealed class ConfigurationAcceptanceTests
     public void DefaultTerminalRule_IsIdentifiedByPackagedIdentity(
         string packageFamilyName)
     {
-        ApplicationRule rule = GetDefaultRule("infrastructure");
+        ApplicationRule rule = GetDefaultRule("ide-development");
 
         Assert.Contains(packageFamilyName, rule.PackageFamilyNames);
         Assert.Contains($"{packageFamilyName}!App", rule.AppUserModelIds);
@@ -228,10 +221,9 @@ public sealed class ConfigurationAcceptanceTests
     [TestMethod]
     public void DefaultTerminalRule_TreatsTheLauncherStubAsALaunchSignalOnly()
     {
-        ApplicationRule rule = GetDefaultRule("infrastructure");
+        ApplicationRule rule = GetDefaultRule("ide-development");
 
         Assert.DoesNotContain("wt.exe", rule.ProcessNames);
-        Assert.HasCount(1, rule.ProcessNames);
         Assert.Contains("WindowsTerminal.exe", rule.ProcessNames);
     }
 
@@ -265,26 +257,22 @@ public sealed class ConfigurationAcceptanceTests
             .LoadAsync();
 
         Assert.IsEmpty(reloaded.Issues);
-        ApplicationRule terminal = reloaded.Active!.ApplicationRules.Single(
-            static rule => rule.Id == "infrastructure");
+        ApplicationRule development = reloaded.Active!.ApplicationRules.Single(
+            static rule => rule.Id == "ide-development");
         CollectionAssert.AreEqual(
             new[]
             {
                 "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
                 "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
             },
-            terminal.PackageFamilyNames.ToArray());
+            development.PackageFamilyNames.ToArray());
         CollectionAssert.AreEqual(
             new[]
             {
                 "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
                 "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
             },
-            terminal.AppUserModelIds.ToArray());
-        ApplicationRule vscode = reloaded.Active.ApplicationRules.Single(
-            static rule => rule.Id == "ide-development");
-        Assert.IsEmpty(vscode.PackageFamilyNames);
-        Assert.IsEmpty(vscode.AppUserModelIds);
+            development.AppUserModelIds.ToArray());
     }
 
     [TestMethod]
@@ -592,8 +580,8 @@ public sealed class ConfigurationAcceptanceTests
         ConfigurationDocument packagedOnly = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.SetItem(
-                3,
-                defaults.ApplicationRules[3] with
+                1,
+                defaults.ApplicationRules[1] with
                 {
                     ProcessNames = [],
                     AppUserModelIds = [],
@@ -605,10 +593,10 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsTrue(result.Accepted);
         Assert.IsEmpty(result.State.Issues);
-        Assert.IsEmpty(result.State.Active!.ApplicationRules[3].ProcessNames);
+        Assert.IsEmpty(result.State.Active!.ApplicationRules[1].ProcessNames);
         Assert.HasCount(
             2,
-            result.State.Active.ApplicationRules[3].PackageFamilyNames);
+            result.State.Active.ApplicationRules[1].PackageFamilyNames);
     }
 
     [TestMethod]
@@ -623,8 +611,8 @@ public sealed class ConfigurationAcceptanceTests
         ConfigurationDocument unidentified = defaults with
         {
             ApplicationRules = defaults.ApplicationRules.SetItem(
-                3,
-                defaults.ApplicationRules[3] with
+                1,
+                defaults.ApplicationRules[1] with
                 {
                     ProcessNames = [],
                     PackageFamilyNames = [],
@@ -640,7 +628,7 @@ public sealed class ConfigurationAcceptanceTests
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.MissingApplicationIdentity,
-            "infrastructure");
+            "ide-development");
     }
 
     [TestMethod]
@@ -727,8 +715,8 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(result.Accepted);
         Assert.IsNull(result.State.Active);
-        Assert.AreEqual(6, result.State.Candidate.ManagedDesktops.Length);
-        Assert.AreEqual(7, result.State.Candidate.ApplicationRules.Length);
+        Assert.AreEqual(4, result.State.Candidate.ManagedDesktops.Length);
+        Assert.AreEqual(5, result.State.Candidate.ApplicationRules.Length);
         AssertHasIssue(
             result.State.Issues,
             ConfigurationValidationCode.DuplicateDesktopSemanticKey,
@@ -763,8 +751,8 @@ public sealed class ConfigurationAcceptanceTests
             FirstRunState initial = await firstRun.GetStateAsync();
 
             Assert.IsFalse(initial.IsCompleted);
-            Assert.HasCount(5, initial.Candidate.ManagedDesktops);
-            Assert.HasCount(6, initial.Candidate.ApplicationRules);
+            Assert.HasCount(3, initial.Candidate.ManagedDesktops);
+            Assert.HasCount(4, initial.Candidate.ApplicationRules);
 
             ImmutableArray<ApplicationRule> editedRules =
                 initial.Candidate.ApplicationRules.SetItem(
@@ -799,8 +787,8 @@ public sealed class ConfigurationAcceptanceTests
             ConfigurationOverview overview = provider
                 .GetRequiredService<IOverviewConfigurationProjection>()
                 .GetSnapshot();
-            Assert.AreEqual(5, overview.ManagedDesktopCount);
-            Assert.AreEqual(5, overview.EnabledRuleCount);
+            Assert.AreEqual(3, overview.ManagedDesktopCount);
+            Assert.AreEqual(3, overview.EnabledRuleCount);
         }
 
         string json = await File.ReadAllTextAsync(
@@ -852,11 +840,11 @@ public sealed class ConfigurationAcceptanceTests
                 await service.SaveCandidateAsync(invalid);
 
             Assert.IsFalse(rejected.Accepted);
-            Assert.HasCount(7, rejected.State.Candidate.ApplicationRules);
-            Assert.HasCount(6, rejected.State.Active!.ApplicationRules);
+            Assert.HasCount(5, rejected.State.Candidate.ApplicationRules);
+            Assert.HasCount(4, rejected.State.Active!.ApplicationRules);
             Assert.AreEqual(
                 "Candidate duplicate",
-                rejected.State.Candidate.ApplicationRules[6].DisplayName);
+                rejected.State.Candidate.ApplicationRules[4].DisplayName);
             AssertHasIssue(
                 rejected.State.Issues,
                 ConfigurationValidationCode.DuplicateRuleId,
@@ -872,11 +860,11 @@ public sealed class ConfigurationAcceptanceTests
             .GetRequiredService<IConfigurationService>()
             .LoadAsync();
 
-        Assert.HasCount(7, reloaded.Candidate.ApplicationRules);
-        Assert.HasCount(6, reloaded.Active!.ApplicationRules);
+        Assert.HasCount(5, reloaded.Candidate.ApplicationRules);
+        Assert.HasCount(4, reloaded.Active!.ApplicationRules);
         Assert.AreEqual(
             "Candidate duplicate",
-            reloaded.Candidate.ApplicationRules[6].DisplayName);
+            reloaded.Candidate.ApplicationRules[4].DisplayName);
         AssertHasIssue(
             reloaded.Issues,
             ConfigurationValidationCode.UnknownDesktopReference,
@@ -955,7 +943,7 @@ public sealed class ConfigurationAcceptanceTests
 
         Assert.IsFalse(state.IsFirstRun);
         Assert.IsNotNull(state.Active);
-        Assert.HasCount(6, state.Candidate.ApplicationRules);
+        Assert.HasCount(4, state.Candidate.ApplicationRules);
         AssertHasIssue(
             state.Issues,
             ConfigurationValidationCode.CandidateUnreadable);

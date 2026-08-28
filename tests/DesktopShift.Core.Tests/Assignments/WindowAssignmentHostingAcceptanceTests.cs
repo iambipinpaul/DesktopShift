@@ -360,7 +360,7 @@ public sealed class WindowAssignmentHostingAcceptanceTests
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
                 "ide-development",
-                "IDE Development",
+                "Development",
                 1,
                 true,
                 CodeDesktopId,

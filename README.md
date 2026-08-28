@@ -20,7 +20,7 @@ files to edit.
 
 Windows virtual desktops work well right up until you lose track of which one
 your editor ended up on. DesktopShift takes the bookkeeping away: you say once
-that VS Code belongs on **IDE Development**, and from then on its windows go
+that VS Code belongs on **Development**, and from then on its windows go
 there by themselves.
 
 It lives in the tray. This page explains what it does in plain words, so nothing
@@ -31,7 +31,7 @@ desktop counts, and quick settings for automatic assignment](docs/images/home.pn
 
 ## Getting started
 
-1. **Launch it.** DesktopShift creates five managed desktops alongside your
+1. **Launch it.** DesktopShift creates three managed desktops alongside your
    existing first one, and starts with rules for a handful of common apps. You
    can rename any of them.
 2. **Make it yours.** On **Application rules**, point the apps you care about at
@@ -42,7 +42,8 @@ desktop counts, and quick settings for automatic assignment](docs/images/home.pn
 4. **Tidy what is already open.** Press **Reassign now** on Home, or
    **Reassign all windows** in the tray menu.
 
-Start with Windows is off until you turn it on. So is local activity recording.
+Start with Windows and native window tiling are on by default. Local activity
+recording is off until you turn it on.
 
 ![The DesktopShift tray menu, offering Open DesktopShift, Reassign all windows,
 Pause automatic assignment, and Exit](docs/images/tray-menu.png)
@@ -114,9 +115,9 @@ one Task View shows first. DesktopShift never renames it and never adds it to
 your managed desktops.
 
 On a fresh setup, the desktop order is **Default**, **Run & Observe**,
-**IDE Development**, **Agent Development**, **Infrastructure**, then **Remote**.
+**Development**, then **Remote**.
 "Default" is the existing first Windows desktop; DesktopShift creates and owns
-only the five managed desktops that follow it.
+only the three managed desktops that follow it.
 
 DesktopShift ships with one grouped **Anywhere** default for File Explorer and
 Notepad. Windows-managed surfaces such as Settings, credential prompts, and
@@ -142,9 +143,10 @@ Each rule has its own setting for this, in the rule editor.
 ## Native window tiling
 
 DesktopShift can also tile windows with a native BSP layout. It does not need
-an external tiling window manager or tiling hotkeys. The feature is off by
-default. See [Native BSP window tiling](docs/native-bsp-tiling.md) for the
-configuration and known Windows restrictions.
+an external tiling window manager or tiling hotkeys. It is on by default for
+new setups. See [Native BSP window tiling](docs/native-bsp-tiling.md) for the
+configuration and known Windows restrictions. You can turn it off globally or
+for one managed desktop.
 
 ## Activity and diagnostics
 

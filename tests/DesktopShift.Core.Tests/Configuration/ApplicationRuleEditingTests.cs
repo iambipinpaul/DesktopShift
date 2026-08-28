@@ -38,8 +38,8 @@ public sealed class ApplicationRuleEditingTests
             Assert.IsEmpty(draft.Validate(document));
             document = draft.Apply(document);
             Assert.IsTrue((await service.SaveCandidateAsync(document)).Accepted);
-            Assert.HasCount(7, document.ApplicationRules);
-            Assert.AreEqual("paint", document.ApplicationRules[6].Id);
+            Assert.HasCount(5, document.ApplicationRules);
+            Assert.AreEqual("paint", document.ApplicationRules[4].Id);
 
             // Edited in place: the rule keeps its position, which is the
             // matcher's tie breaker.
@@ -100,8 +100,6 @@ public sealed class ApplicationRuleEditingTests
                 "run-observe",
                 "ide-development",
                 "ide-development-copy",
-                "agent-development",
-                "infrastructure",
                 "remote",
                 "default-anywhere",
             },
@@ -124,7 +122,7 @@ public sealed class ApplicationRuleEditingTests
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "infrastructure")!;
+            ApplicationRuleCatalog.Find(document, "ide-development")!;
         ApplicationRuleDraft draft = ApplicationRuleDraft.ForExistingRule(terminal);
 
         Assert.Contains(
@@ -139,7 +137,7 @@ public sealed class ApplicationRuleEditingTests
         Assert.IsTrue(result.Accepted);
         ApplicationRule saved = ApplicationRuleCatalog.Find(
             result.State.Active!,
-            "infrastructure")!;
+            "ide-development")!;
         CollectionAssert.AreEqual(
             terminal.PackageFamilyNames.ToArray(),
             saved.PackageFamilyNames.ToArray());
@@ -378,8 +376,8 @@ public sealed class ApplicationRuleEditingTests
             await service.SaveCandidateAsync(draft.Apply(document));
 
         Assert.IsFalse(result.Accepted);
-        Assert.HasCount(7, result.State.Candidate.ApplicationRules);
-        Assert.HasCount(6, result.State.Active!.ApplicationRules);
+        Assert.HasCount(5, result.State.Candidate.ApplicationRules);
+        Assert.HasCount(4, result.State.Active!.ApplicationRules);
         Assert.IsTrue(result.State.Issues.Any(static issue =>
             issue.Code == ConfigurationValidationCode.InvalidIdentityPattern));
 
@@ -501,7 +499,7 @@ public sealed class ApplicationRuleEditingTests
 
         Assert.AreEqual("ide-development-copy", first!.Id);
         Assert.AreEqual("ide-development-copy-2", second!.Id);
-        Assert.HasCount(8, document.ApplicationRules);
+        Assert.HasCount(6, document.ApplicationRules);
     }
 
     [TestMethod]

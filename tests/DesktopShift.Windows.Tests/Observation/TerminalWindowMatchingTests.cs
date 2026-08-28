@@ -35,8 +35,8 @@ public sealed class TerminalWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -54,8 +54,8 @@ public sealed class TerminalWindowMatchingTests
             eventKind,
             DefaultRules);
 
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -74,8 +74,8 @@ public sealed class TerminalWindowMatchingTests
 
         Assert.IsNull(identity.PackageFamilyName);
         Assert.IsNull(identity.AppUserModelId);
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
 
@@ -98,8 +98,8 @@ public sealed class TerminalWindowMatchingTests
             DefaultRules);
 
         Assert.IsNull(identity.PackageFamilyName);
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.AppUserModelId, result.Strength);
     }
 
@@ -154,8 +154,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.Strength);
     }
 
@@ -169,8 +169,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("infrastructure", result!.Rule.Id);
-        Assert.AreEqual("infrastructure", result.Rule.TargetDesktopKey);
+        Assert.AreEqual("ide-development", result!.Rule.Id);
+        Assert.AreEqual("ide-development", result.Rule.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, result.Strength);
     }
 
@@ -202,8 +202,8 @@ public sealed class TerminalWindowMatchingTests
             WindowEventKind.Shown,
             DefaultRules);
 
-        Assert.AreEqual("infrastructure", first!.Rule.Id);
-        Assert.AreEqual("infrastructure", second!.Rule.Id);
+        Assert.AreEqual("ide-development", first!.Rule.Id);
+        Assert.AreEqual("ide-development", second!.Rule.Id);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, first.Strength);
         Assert.AreEqual(WindowMatchStrength.ProcessName, second.Strength);
         Assert.AreEqual(first.Strength, firstAgain!.Strength);
@@ -217,8 +217,8 @@ public sealed class TerminalWindowMatchingTests
     [DataRow(
         TerminalProcessName,
         TerminalWindowClass,
-        "infrastructure",
-        "infrastructure")]
+        "ide-development",
+        "ide-development")]
     public void Match_DefaultRulesDoNotClaimEachOthersWindows(
         string processName,
         string windowClass,

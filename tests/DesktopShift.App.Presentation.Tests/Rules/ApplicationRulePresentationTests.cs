@@ -38,34 +38,37 @@ public sealed class ApplicationRulePresentationTests
                 Now,
                 icons);
 
-        Assert.HasCount(6, items);
+        Assert.HasCount(4, items);
 
         ApplicationRulePresentation run = items[0];
         Assert.AreEqual("run-observe", run.RuleId);
         Assert.AreEqual("Run & Observe", run.DisplayName);
 
-        ApplicationRulePresentation ide = items[1];
-        Assert.AreEqual("ide-development", ide.RuleId);
-        Assert.AreEqual("IDE Development", ide.DisplayName);
-        Assert.AreEqual("Process: Code.exe, devenv.exe", ide.MatchSummary);
-        Assert.AreEqual("Process name only", ide.IdentityStrengthLabel);
-        Assert.AreEqual("Assigns to IDE Development", ide.TargetSummary);
-        Assert.AreEqual("All triggers", ide.TriggerSummary);
+        ApplicationRulePresentation development = items[1];
+        Assert.AreEqual("ide-development", development.RuleId);
+        Assert.AreEqual("Development", development.DisplayName);
+        Assert.Contains("Process: Code.exe", development.MatchSummary);
+        Assert.Contains(
+            "Package: Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+            development.MatchSummary);
+        Assert.AreEqual("Packaged identity", development.IdentityStrengthLabel);
+        Assert.AreEqual("Assigns to Development", development.TargetSummary);
+        Assert.AreEqual("All triggers", development.TriggerSummary);
         Assert.AreEqual(
             "Switches on foreground activation",
-            ide.SwitchPolicySummary);
-        Assert.IsTrue(ide.IsEnabled);
-        Assert.AreEqual("Enabled", ide.EnabledLabel);
-        Assert.AreEqual("Last match 5 minutes ago", ide.LastMatchSummary);
+            development.SwitchPolicySummary);
+        Assert.IsTrue(development.IsEnabled);
+        Assert.AreEqual("Enabled", development.EnabledLabel);
+        Assert.AreEqual("Last match 5 minutes ago", development.LastMatchSummary);
 
         // No executable path, so no icon: the item falls back to a glyph rather
         // than rendering a hole.
-        Assert.IsNull(ide.Icon);
+        Assert.IsNull(development.Icon);
         Assert.AreEqual(
             ApplicationRulePresentationProjection.DefaultRuleGlyph,
-            ide.FallbackGlyph);
+            development.FallbackGlyph);
 
-        ApplicationRulePresentation remote = items[4];
+        ApplicationRulePresentation remote = items[2];
         Assert.IsNotNull(remote.Icon);
         Assert.AreEqual("No matches recorded", remote.LastMatchSummary);
     }
@@ -109,7 +112,7 @@ public sealed class ApplicationRulePresentationTests
         // Windows Terminal window.
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "infrastructure")!;
+            ApplicationRuleCatalog.Find(document, "ide-development")!;
 
         string summary = ApplicationRulePresentationProjection.DescribeMatch(terminal);
 
@@ -122,7 +125,7 @@ public sealed class ApplicationRulePresentationTests
             summary,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Process: WindowsTerminal.exe",
+            "WindowsTerminal.exe",
             summary,
             StringComparison.Ordinal);
         Assert.AreEqual(
@@ -251,22 +254,22 @@ public sealed class ApplicationRulePresentationTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
 
-        ApplicationRulePresentation terminal =
-            ApplicationRulePresentationProjection.Project(document, [], Now)[3];
+        ApplicationRulePresentation development =
+            ApplicationRulePresentationProjection.Project(document, [], Now)[1];
 
         foreach (string expected in new[]
         {
-            "Infrastructure",
+            "Development",
             "Enabled",
             "Packaged identity",
-            "Assigns to Infrastructure",
+            "Assigns to Development",
             "All triggers",
             "No matches recorded",
         })
         {
             Assert.Contains(
                 expected,
-                terminal.AutomationName,
+                development.AutomationName,
                 StringComparison.Ordinal);
         }
     }
@@ -284,7 +287,7 @@ public sealed class ApplicationRulePresentationTests
             details,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Package family names: none",
+            "Package family names: Microsoft.WindowsTerminal_8wekyb3d8bbwe",
             details,
             StringComparison.Ordinal);
         Assert.Contains(

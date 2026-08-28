@@ -266,8 +266,8 @@ public sealed class RemoteDesktopWindowMatchingTests
     [DataRow(
         "WindowsTerminal.exe",
         "CASCADIA_HOSTING_WINDOW_CLASS",
-        "infrastructure",
-        "infrastructure")]
+        "ide-development",
+        "ide-development")]
     [DataRow(RemoteDesktopProcessName, SessionWindowClass, "remote", "remote")]
     public void Match_DefaultRulesDoNotClaimEachOthersWindows(
         string processName,

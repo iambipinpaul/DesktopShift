@@ -125,7 +125,7 @@ public sealed class RunningApplicationInventoryTests
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();
         ApplicationRule terminal =
-            ApplicationRuleCatalog.Find(document, "infrastructure")!;
+            ApplicationRuleCatalog.Find(document, "ide-development")!;
 
         ApplicationRuleTestResult result = ApplicationRuleTester.Test(
             terminal,
@@ -136,7 +136,7 @@ public sealed class RunningApplicationInventoryTests
             ]);
 
         Assert.AreEqual(3, result.EvaluatedWindowCount);
-        Assert.AreEqual(2, result.MatchCount);
+        Assert.AreEqual(3, result.MatchCount);
         Assert.AreEqual(WindowMatchStrength.PackageFamilyName, result.StrongestSignal);
         Assert.IsTrue(result.IsRuleEnabled);
         Assert.IsTrue(result.SupportsManualReassignment);

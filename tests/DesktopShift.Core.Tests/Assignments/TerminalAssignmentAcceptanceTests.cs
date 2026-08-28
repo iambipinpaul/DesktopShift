@@ -43,8 +43,8 @@ public sealed class TerminalAssignmentAcceptanceTests
                 new WindowEvent(100, WindowEventKind.Created, (nint)801, Now));
 
         Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
-        Assert.AreEqual("infrastructure", observation.RuleId);
-        Assert.AreEqual("infrastructure", observation.TargetDesktopKey);
+        Assert.AreEqual("ide-development", observation.RuleId);
+        Assert.AreEqual("ide-development", observation.TargetDesktopKey);
 
         // The packaged identity, not the executable name, selected the rule.
         Assert.AreEqual(
@@ -57,8 +57,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
             observation.Assignment!.Outcome);
-        Assert.AreEqual("infrastructure", observation.Assignment.RuleId);
-        Assert.AreEqual("infrastructure", observation.Assignment.TargetDesktopKey);
+        Assert.AreEqual("ide-development", observation.Assignment.RuleId);
+        Assert.AreEqual("ide-development", observation.Assignment.TargetDesktopKey);
         Assert.AreEqual(TerminalDesktopId, observation.Assignment.TargetDesktopId);
         Assert.AreEqual(WindowMoveOutcome.Succeeded, observation.Assignment.MoveOutcome);
         Assert.HasCount(1, harness.Placement.Moves);
@@ -99,8 +99,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.IsTrue(assignments.All(
             static assignment =>
                 assignment.Outcome == WindowAssignmentOutcome.Succeeded &&
-                assignment.RuleId == "infrastructure" &&
-                assignment.TargetDesktopKey == "infrastructure" &&
+                assignment.RuleId == "ide-development" &&
+                assignment.TargetDesktopKey == "ide-development" &&
                 assignment.TargetDesktopId == TerminalDesktopId));
 
         // Each window carries its own correlation and its own move. One window
@@ -192,7 +192,7 @@ public sealed class TerminalAssignmentAcceptanceTests
     {
         // wt.exe forwards its command line to the already running
         // WindowsTerminal.exe host and exits, so it never owns a window. Only
-        // the host window may be claimed by the Infrastructure rule; nothing
+        // the host window may be claimed by the Development rule; nothing
         // else may be dragged onto that desktop.
         //
         // The other two windows show the remaining tiers. The launcher is named
@@ -244,7 +244,7 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.AreEqual(UnrelatedProcessName, unrelated.Identity!.ProcessName);
 
         Assert.AreEqual(WindowObservationOutcome.Matched, terminalHost.Outcome);
-        Assert.AreEqual("infrastructure", terminalHost.RuleId);
+        Assert.AreEqual("ide-development", terminalHost.RuleId);
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
             terminalHost.Assignment!.Outcome);
@@ -282,8 +282,8 @@ public sealed class TerminalAssignmentAcceptanceTests
         Assert.IsNull(observation.Identity!.PackageFamilyName);
         Assert.IsNull(observation.Identity.AppUserModelId);
         Assert.AreEqual(WindowObservationOutcome.Matched, observation.Outcome);
-        Assert.AreEqual("infrastructure", observation.RuleId);
-        Assert.AreEqual("infrastructure", observation.TargetDesktopKey);
+        Assert.AreEqual("ide-development", observation.RuleId);
+        Assert.AreEqual("ide-development", observation.TargetDesktopKey);
         Assert.AreEqual(WindowMatchStrength.ProcessName, observation.MatchedOn);
         Assert.AreEqual(
             WindowAssignmentOutcome.Succeeded,
@@ -316,14 +316,14 @@ public sealed class TerminalAssignmentAcceptanceTests
                 (nint)851,
                 Now.AddMilliseconds(500)));
 
-        Assert.AreEqual("infrastructure", first.RuleId);
-        Assert.AreEqual("infrastructure", first.TargetDesktopKey);
+        Assert.AreEqual("ide-development", first.RuleId);
+        Assert.AreEqual("ide-development", first.TargetDesktopKey);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, first.AssignmentOutcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
             first.Assignment!.SkipReason);
         Assert.AreEqual(WindowMoveOutcome.AlreadyCorrect, first.Assignment.MoveOutcome);
-        Assert.AreEqual("infrastructure", repeat.RuleId);
+        Assert.AreEqual("ide-development", repeat.RuleId);
         Assert.AreEqual(WindowAssignmentOutcome.Skipped, repeat.AssignmentOutcome);
         Assert.AreEqual(
             WindowAssignmentSkipReason.AlreadyOnTargetDesktop,
@@ -442,9 +442,9 @@ public sealed class TerminalAssignmentAcceptanceTests
             DesktopTopologyProviderMode.Full,
             ManagedDesktopReconciliationOutcome.Succeeded,
             [new ManagedDesktopRuntimeMapping(
-                "infrastructure",
-                "Infrastructure",
-                3,
+                "ide-development",
+                "Development",
+                2,
                 true,
                 TerminalDesktopId,
                 "Terminal",

@@ -2,9 +2,9 @@
 
 DesktopShift can tile normal application windows without an external window
 manager. It keeps one BSP tree for each Windows virtual desktop and monitor.
-The feature is off by default.
+The feature is on by default for new setups.
 
-Open **System settings > Window tiling** to enable the feature and set the
+Open **System settings > Window tiling** to enable or disable the feature and set the
 outer gap, inner gap, minimum tile width, and minimum tile height. Select
 **Save and apply** to update windows that are already open.
 

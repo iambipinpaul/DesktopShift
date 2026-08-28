@@ -67,20 +67,10 @@ public static class ConfigurationDefaults
                 new ManagedDesktopDefinition("run-observe", "Run & Observe", 1, true),
                 new ManagedDesktopDefinition(
                     "ide-development",
-                    "IDE Development",
+                    "Development",
                     2,
                     true),
-                new ManagedDesktopDefinition(
-                    "agent-development",
-                    "Agent Development",
-                    3,
-                    true),
-                new ManagedDesktopDefinition(
-                    "infrastructure",
-                    "Infrastructure",
-                    4,
-                    true),
-                new ManagedDesktopDefinition("remote", "Remote", 5, true),
+                new ManagedDesktopDefinition("remote", "Remote", 3, true),
             ],
             [
                 CreateRule(
@@ -90,25 +80,25 @@ public static class ConfigurationDefaults
                     ["msedge.exe"]),
                 CreateRule(
                     "ide-development",
-                    "IDE Development",
+                    "Development",
                     "ide-development",
-                    ["Code.exe", "devenv.exe"]),
-                CreateRule(
-                    "agent-development",
-                    "Agent Development",
-                    "agent-development",
-                    ["claude.exe", "ChatGPT.exe", "codex.exe"]),
-                CreateRule(
-                    "infrastructure",
-                    "Infrastructure",
-                    "infrastructure",
+                    // Editors, coding agents, and the terminal are parts of one
+                    // development task. Keeping them together avoids a desktop
+                    // switch for each tool change.
+                    [
+                        "Code.exe",
+                        "devenv.exe",
+                        "claude.exe",
+                        "ChatGPT.exe",
+                        "codex.exe",
+                        "WindowsTerminal.exe",
+                    ],
                     // wt.exe and OpenConsole.exe are deliberately absent.
                     // wt.exe is a launch signal only: it forwards its command
                     // line to the already running WindowsTerminal.exe host and
                     // exits, so it never owns the window it opens.
                     // OpenConsole.exe is the windowless ConPTY host. Neither
                     // can ever match.
-                    ["WindowsTerminal.exe"],
                     packageFamilyNames:
                     [
                         "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
@@ -175,7 +165,10 @@ public static class ConfigurationDefaults
                 // Routine activity is useful while troubleshooting, but it is
                 // noisy during ordinary use and writes rotating files. The
                 // first-run dialog and Activity page make opting in explicit.
-                RecordLocalActivity: false));
+                RecordLocalActivity: false),
+            // Tiling applies to every virtual desktop unless the user disables
+            // it globally or excludes a managed desktop in Settings.
+            Tiling: new TilingSettings(IsEnabled: true));
     }
 
     private static ApplicationRule CreateRule(
