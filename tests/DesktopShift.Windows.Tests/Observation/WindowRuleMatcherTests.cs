@@ -108,6 +108,151 @@ public sealed class WindowRuleMatcherTests
                 [rule]));
     }
 
+    [TestMethod]
+    public void Projection_ProjectsAPinRuleOntoThePinnedDestination()
+    {
+        ConfigurationDocument document = ConfigurationDefaults.Create() with
+        {
+            ApplicationRules =
+            [
+                new ApplicationRule(
+                    "music",
+                    "Music",
+                    IsEnabled: true,
+                    "code",
+                    ["Music.exe"],
+                    Triggers,
+                    DesktopSwitchPolicy.OnForegroundActivation,
+                    Action: ApplicationRuleAction.ShowOnAllDesktops),
+            ],
+        };
+
+        IReadOnlyList<WindowObservationRule> rules =
+            new ConfigurationWindowRuleSource(() => document).GetRules();
+
+        Assert.AreEqual(
+            WindowRuleDestination.PinnedToAllDesktops,
+            rules.Single().Destination);
+        Assert.AreEqual(
+            "code",
+            rules.Single().TargetDesktopKey,
+            "The key stays in the document untouched; the projection is what makes it unread.");
+    }
+
+    [TestMethod]
+    public void IsNamedByAnyRule_CountsAPinRuleWhoseTriggersDoNotAnswerThisEvent()
+    {
+        WindowObservationRule pin = CreateRule(
+            "music",
+            order: 0,
+            WindowMatchCriteria.ForProcessNames(["Code.exe"])) with
+        {
+            Triggers = [ApplicationRuleTrigger.WindowCreated],
+            Destination = WindowRuleDestination.PinnedToAllDesktops,
+        };
+
+        bool named = new WindowRuleMatcher().IsNamedByAnyRule(
+            CreateIdentity("Code.exe"),
+            [pin]);
+
+        Assert.IsTrue(
+            named,
+            "A pinned application the event does not answer must stay out of the sweep.");
+    }
+
+    [TestMethod]
+    public void Match_APinRuleAnswersItsOwnEventSetWhateverItsTriggersStore()
+    {
+        // A pin rule is allowed to store no triggers at all: the field is not
+        // read while the action is a pin, so validation skips it and the editor
+        // hides it. Reading it here would let such a rule name an application
+        // and then never pin a window of it.
+        WindowObservationRule pin = CreateRule(
+            "music",
+            order: 0,
+            WindowMatchCriteria.ForProcessNames(["Code.exe"])) with
+        {
+            Triggers = [],
+            Destination = WindowRuleDestination.PinnedToAllDesktops,
+        };
+        WindowRuleMatcher matcher = new();
+        WindowIdentity identity = CreateIdentity("Code.exe");
+
+        foreach (WindowEventKind answered in new[]
+        {
+            WindowEventKind.Created,
+            WindowEventKind.Shown,
+            WindowEventKind.StartupReconciliation,
+            WindowEventKind.ManualReassignment,
+            WindowEventKind.ForegroundActivated,
+        })
+        {
+            Assert.IsNotNull(
+                matcher.Match(identity, answered, [pin]),
+                $"A pin rule answers {answered} without reading its stored triggers.");
+        }
+
+        Assert.IsNull(
+            matcher.Match(identity, WindowEventKind.MoveSizeEnded, [pin]),
+            "A pin rule answers placement events, not every event it could see.");
+    }
+
+    [TestMethod]
+    public void Match_APinRuleDoesNotAnswerLifecycleEventsThroughTheTriggerFallback()
+    {
+        // Every event kind that has no trigger of its own maps to manual
+        // reassignment, so a pin rule that kept a manual trigger would answer
+        // Hidden, Restored, and the rest if its stored triggers were read. A
+        // pin rule reads none of them.
+        WindowObservationRule pin = CreateRule(
+            "music",
+            order: 0,
+            WindowMatchCriteria.ForProcessNames(["Code.exe"])) with
+        {
+            Triggers = [ApplicationRuleTrigger.ManualReassignment],
+            Destination = WindowRuleDestination.PinnedToAllDesktops,
+        };
+        WindowRuleMatcher matcher = new();
+        WindowIdentity identity = CreateIdentity("Code.exe");
+
+        foreach (WindowEventKind unasked in new[]
+        {
+            WindowEventKind.Hidden,
+            WindowEventKind.Minimized,
+            WindowEventKind.Restored,
+            WindowEventKind.StateChanged,
+            WindowEventKind.MoveSizeEnded,
+        })
+        {
+            Assert.IsNull(
+                matcher.Match(identity, unasked, [pin]),
+                $"{unasked} is not an event a pin rule answers.");
+        }
+
+        Assert.IsNotNull(
+            matcher.Match(identity, WindowEventKind.ManualReassignment, [pin]),
+            "The manual reassignment event is one a pin rule does answer.");
+    }
+
+    [TestMethod]
+    public void Match_AMoveRuleStillAnswersOnlyItsStoredTriggers()
+    {
+        WindowObservationRule move = CreateRule(
+            "vscode",
+            order: 0,
+            WindowMatchCriteria.ForProcessNames(["Code.exe"])) with
+        {
+            Triggers = [],
+        };
+
+        Assert.IsNull(
+            new WindowRuleMatcher().Match(
+                CreateIdentity("Code.exe"),
+                WindowEventKind.Shown,
+                [move]),
+            "Only a pin rule ignores its stored triggers.");
+    }
+
     private static WindowObservationRule CreateRule(
         string id,
         int order,

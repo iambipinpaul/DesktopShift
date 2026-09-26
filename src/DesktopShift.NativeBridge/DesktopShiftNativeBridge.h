@@ -31,6 +31,7 @@ extern "C"
         DesktopShiftNativeStageDesktopRename = 15,
         DesktopShiftNativeStageApplicationViewLookup = 16,
         DesktopShiftNativeStageDesktopReorder = 17,
+        DesktopShiftNativeStageWindowPin = 18,
     };
 
     enum DesktopShiftNativeTopologyReason : uint32_t
@@ -128,6 +129,36 @@ extern "C"
         void* adapter,
         const GUID* desktopId,
         const wchar_t* name,
+        DesktopShiftNativeError* error) noexcept;
+
+    // Pinning is the one operation here that changes what a window is shown on
+    // rather than which desktop it lives on, so it is its own surface with its
+    // own probe: a build whose pin slots were never admitted refuses these
+    // before any pin slot is reached, and a refused pin costs pinning only.
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_IsWindowPinned(
+        void* adapter,
+        intptr_t windowHandle,
+        int32_t* isPinned,
+        DesktopShiftNativeError* error) noexcept;
+
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_PinWindow(
+        void* adapter,
+        intptr_t windowHandle,
+        DesktopShiftNativeError* error) noexcept;
+
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_UnpinWindow(
+        void* adapter,
+        intptr_t windowHandle,
+        DesktopShiftNativeError* error) noexcept;
+
+    // Proves, without changing anything, that this build lays the pinned-apps
+    // surface out where DesktopShift believes it does. It queries the pin state
+    // of a window the Shell already owns and reports what came back. A build
+    // whose layout has shifted fails here instead of discovering it during a
+    // pin, and the failure costs pinning while leaving every other operation in
+    // Full Mode.
+    DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_ProbeWindowPin(
+        void* adapter,
         DesktopShiftNativeError* error) noexcept;
 
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_StartNotifications(

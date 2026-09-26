@@ -13,6 +13,12 @@ namespace DesktopShift.Core.Compatibility;
 /// View index. Like naming, reordering requires the extended shell-manager
 /// layout to be proved before the capability is enabled.
 /// </param>
+/// <param name="CanPinWindow">
+/// Whether this provider may keep a window visible on every virtual desktop.
+/// Pinning lives on its own private Shell surface, so it is proved by its own
+/// read-only probe and defaults to false: a provider that has not proved it
+/// reports pinning as unavailable rather than assuming it works.
+/// </param>
 public sealed record VirtualDesktopCapabilities(
     bool CanGetWindowDesktopId,
     bool CanMoveWindowToDesktop,
@@ -22,7 +28,8 @@ public sealed record VirtualDesktopCapabilities(
     bool CanSwitchDesktop,
     bool CanObserveTopologyChanges,
     bool CanRenameDesktop = false,
-    bool CanReorderDesktop = false)
+    bool CanReorderDesktop = false,
+    bool CanPinWindow = false)
 {
     public static VirtualDesktopCapabilities DocumentedLimited { get; } = new(
         CanGetWindowDesktopId: true,
@@ -33,7 +40,8 @@ public sealed record VirtualDesktopCapabilities(
         CanSwitchDesktop: false,
         CanObserveTopologyChanges: false,
         CanRenameDesktop: false,
-        CanReorderDesktop: false);
+        CanReorderDesktop: false,
+        CanPinWindow: false);
 
     public bool HasPrivateTopologyCapabilities =>
         CanEnumerateDesktops ||
@@ -42,7 +50,8 @@ public sealed record VirtualDesktopCapabilities(
         CanSwitchDesktop ||
         CanObserveTopologyChanges ||
         CanRenameDesktop ||
-        CanReorderDesktop;
+        CanReorderDesktop ||
+        CanPinWindow;
 
     public ImmutableArray<string> AvailableCapabilityNames
     {
@@ -59,6 +68,7 @@ public sealed record VirtualDesktopCapabilities(
             AddIfAvailable(names, CanObserveTopologyChanges, "Observe topology changes");
             AddIfAvailable(names, CanRenameDesktop, "Name desktops");
             AddIfAvailable(names, CanReorderDesktop, "Reorder desktops");
+            AddIfAvailable(names, CanPinWindow, "Keep a window on every desktop");
 
             return names.ToImmutable();
         }

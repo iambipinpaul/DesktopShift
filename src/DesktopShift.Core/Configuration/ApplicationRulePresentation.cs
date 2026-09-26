@@ -59,25 +59,68 @@ public sealed record ApplicationRulePresentation(
 /// <param name="EnumeratedWindowCount">How many windows the batch walked.</param>
 /// <param name="MatchedWindowCount">How many of them this rule claimed.</param>
 /// <param name="MovedWindowCount">How many were moved to the rule's desktop.</param>
-/// <param name="AlreadyOnTargetCount">How many were already there.</param>
-/// <param name="FailedWindowCount">How many could not be moved.</param>
+/// <param name="PinnedWindowCount">
+/// How many were pinned to every desktop. A pin never moves a window, so it is
+/// counted apart from <paramref name="MovedWindowCount"/>.
+/// </param>
+/// <param name="AlreadyOnTargetCount">
+/// How many were already where the rule wants them: on its desktop, or already
+/// pinned to every desktop.
+/// </param>
+/// <param name="UnavailableWindowCount">
+/// How many were left alone because this host has no pinning surface to pin them
+/// on. Counted apart from <paramref name="FailedWindowCount"/>, because nothing
+/// went wrong.
+/// </param>
+/// <param name="FailedWindowCount">How many could not be moved or pinned.</param>
+/// <param name="ShowsOnAllDesktops">
+/// Whether the rule pins its windows instead of moving them, which is what the
+/// sentence's verb follows.
+/// </param>
 public sealed record ApplicationRuleReassignmentSummary(
     string RuleId,
     int EnumeratedWindowCount,
     int MatchedWindowCount,
     int MovedWindowCount,
+    int PinnedWindowCount,
     int AlreadyOnTargetCount,
-    int FailedWindowCount)
+    int UnavailableWindowCount,
+    int FailedWindowCount,
+    bool ShowsOnAllDesktops)
 {
     /// <summary>
     /// The single sentence shown after the batch finishes.
     /// </summary>
+    /// <remarks>
+    /// A rule that pins its windows gets its own verb, because a pin never moves
+    /// one: a count of nothing moved would read as a batch that did nothing.
+    /// What the batch could not do is said out loud for the same reason — on a
+    /// host with no pinning surface, clicking Reassign All has to report the pin
+    /// it did not make rather than look as though it had. Windows a host cannot
+    /// pin and windows that failed are counted apart because they mean different
+    /// things, and one batch can hit both: when it does, the message says both
+    /// rather than letting one count hide the other.
+    /// </remarks>
     public string Message =>
         MatchedWindowCount == 0
             ? $"No open window matched this rule. {EnumeratedWindowCount} windows were checked."
+            : ShowsOnAllDesktops
+                ? PinMessage
+                : MoveMessage;
+
+    private string MoveMessage =>
+        FailedWindowCount > 0
+            ? $"Moved {MovedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already in place and {FailedWindowCount} could not be moved."
+            : $"Moved {MovedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already in place.";
+
+    private string PinMessage =>
+        UnavailableWindowCount > 0
+            ? FailedWindowCount > 0
+                ? $"Pinned {PinnedWindowCount} of {MatchedWindowCount} matching windows. {UnavailableWindowCount} were left alone because this host cannot pin windows to every desktop, and {FailedWindowCount} could not be pinned."
+                : $"Pinned {PinnedWindowCount} of {MatchedWindowCount} matching windows. {UnavailableWindowCount} were left alone because this host cannot pin windows to every desktop."
             : FailedWindowCount > 0
-                ? $"Moved {MovedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already in place and {FailedWindowCount} could not be moved."
-                : $"Moved {MovedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already in place.";
+                ? $"Pinned {PinnedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already pinned and {FailedWindowCount} could not be pinned."
+                : $"Pinned {PinnedWindowCount} of {MatchedWindowCount} matching windows. {AlreadyOnTargetCount} were already pinned.";
 }
 
 /// <summary>
@@ -160,13 +203,14 @@ public static class ApplicationRulePresentationProjection
         string strength = DescribeIdentityStrength(rule);
         string target = DescribeTarget(rule, document);
 
-        // An Anywhere rule never moves a window, so neither the triggers that
-        // would start a move nor the policy that would follow one describes
-        // anything it does.
-        string triggers = rule.AllowsAnywhere
+        // A rule that never moves a window shows the triggers and the switch
+        // policy as unused. Both say when a move happens, and neither Anywhere
+        // nor Show on all desktops makes one.
+        bool neverMoves = rule.AllowsAnywhere || rule.ShowsOnAllDesktops;
+        string triggers = neverMoves
             ? "Not used"
             : DescribeTriggers(rule.Triggers);
-        string switchPolicy = rule.AllowsAnywhere
+        string switchPolicy = neverMoves
             ? DescribeSwitchPolicy(DesktopSwitchPolicy.Never)
             : DescribeSwitchPolicy(rule.SwitchPolicy);
         string enabledLabel = rule.IsEnabled ? "Enabled" : "Disabled";
@@ -225,35 +269,48 @@ public static class ApplicationRulePresentationProjection
     /// Reduces a manual reassignment batch to what it did for one rule.
     /// </summary>
     /// <param name="result">The batch result.</param>
-    /// <param name="ruleId">The rule the user asked about.</param>
+    /// <param name="rule">
+    /// The rule the user asked about. The rule rather than its identifier,
+    /// because whether the batch pinned or moved is the rule's answer: a pin that
+    /// failed, or that this host could not make, has no outcome a reader could
+    /// take the verb from.
+    /// </param>
     /// <returns>The per-rule summary.</returns>
     public static ApplicationRuleReassignmentSummary Summarize(
         WindowReassignmentBatchResult result,
-        string ruleId)
+        ApplicationRule rule)
     {
         ArgumentNullException.ThrowIfNull(result);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ruleId);
+        ArgumentNullException.ThrowIfNull(rule);
 
         ImmutableArray<WindowAssignmentActivity> matched =
         [
             .. result.Assignments.Where(assignment => string.Equals(
                 assignment.RuleId,
-                ruleId,
+                rule.Id,
                 StringComparison.OrdinalIgnoreCase)),
         ];
 
         return new ApplicationRuleReassignmentSummary(
-            ruleId,
+            rule.Id,
             result.EnumeratedWindowCount,
             matched.Length,
             matched.Count(static assignment =>
                 assignment.MoveOutcome == WindowMoveOutcome.Succeeded),
             matched.Count(static assignment =>
+                assignment.MoveOutcome == WindowMoveOutcome.PinnedToAllDesktops),
+            matched.Count(static assignment =>
                 assignment.MoveOutcome == WindowMoveOutcome.AlreadyCorrect ||
+                assignment.MoveOutcome ==
+                    WindowMoveOutcome.AlreadyPinnedToAllDesktops ||
                 assignment.SkipReason ==
                     WindowAssignmentSkipReason.AlreadyOnTargetDesktop),
             matched.Count(static assignment =>
-                assignment.Outcome == WindowAssignmentOutcome.Failed));
+                assignment.SkipReason ==
+                    WindowAssignmentSkipReason.PinUnavailable),
+            matched.Count(static assignment =>
+                assignment.Outcome == WindowAssignmentOutcome.Failed),
+            rule.ShowsOnAllDesktops);
     }
 
     /// <summary>
@@ -313,7 +370,8 @@ public static class ApplicationRulePresentationProjection
     }
 
     /// <summary>
-    /// Names the destination of a rule: a Managed Desktop, or Anywhere.
+    /// Names the destination of a rule: a Managed Desktop, Anywhere, or every
+    /// desktop.
     /// </summary>
     /// <param name="rule">The rule being described.</param>
     /// <param name="document">The document holding the Managed Desktops.</param>
@@ -328,6 +386,13 @@ public static class ApplicationRulePresentationProjection
         if (rule.AllowsAnywhere)
         {
             return "Anywhere — stays where it opens";
+        }
+
+        // Named with the same phrase the editor's picker offers, so a rule reads
+        // the same way in the list as it did in the dialog that wrote it.
+        if (rule.ShowsOnAllDesktops)
+        {
+            return "Show on all desktops";
         }
 
         ManagedDesktopDefinition? desktop = document.ManagedDesktops.FirstOrDefault(
@@ -452,7 +517,9 @@ public static class ApplicationRulePresentationProjection
             $"Identifier: {rule.Id}",
             rule.AllowsAnywhere
                 ? "Destination: Anywhere"
-                : $"Target key: {rule.TargetDesktopKey}",
+                : rule.ShowsOnAllDesktops
+                    ? "Destination: Show on all desktops"
+                    : $"Target key: {rule.TargetDesktopKey}",
             $"Package family names: {FormatList(rule.PackageFamilyNames)}",
             $"AppUserModelIds: {FormatList(rule.AppUserModelIds)}",
             $"Executable paths: {FormatList(rule.ExecutablePaths)}",

@@ -395,6 +395,37 @@ public sealed class ConfigurationAcceptanceTests
     }
 
     [TestMethod]
+    public async Task APinRuleWhoseStoredDestinationNoLongerExists_IsStillAccepted()
+    {
+        // A rule switched to Show on all desktops keeps the key it had, and
+        // that key is not read while the action pins. Reporting it would refuse
+        // a rule the editor cannot correct, because the field it faults is one
+        // the editor hides for this destination.
+        using ConfigurationTestDirectory storage = new();
+        await using ServiceProvider provider = CreateProvider(storage);
+        ConfigurationDocument defaults = ConfigurationDefaults.Create();
+
+        ConfigurationSaveResult result = await provider
+            .GetRequiredService<IConfigurationService>()
+            .SaveCandidateAsync(defaults with
+            {
+                ApplicationRules = defaults.ApplicationRules.Add(
+                    new ApplicationRule(
+                        "music",
+                        "Music",
+                        IsEnabled: true,
+                        TargetDesktopKey: "a-desktop-that-no-longer-exists",
+                        ["music.exe"],
+                        Triggers: [],
+                        DesktopSwitchPolicy.OnNewWindowActivation,
+                        Action: ApplicationRuleAction.ShowOnAllDesktops)),
+            });
+
+        Assert.IsTrue(result.Accepted);
+        Assert.IsEmpty(result.State.Issues);
+    }
+
+    [TestMethod]
     public async Task AMoveRuleWithNoDestination_IsStillReported()
     {
         // The exemption is for Anywhere rules only. A rule that says it moves

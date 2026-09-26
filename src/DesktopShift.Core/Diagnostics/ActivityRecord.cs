@@ -118,6 +118,12 @@ public sealed record ActivityErrorDetail(
 /// event. Structured for the same reason: the three recovery paths have to be
 /// distinguishable in an exported log without reading prose.
 /// </param>
+/// <param name="PinnedToAllDesktops">
+/// Whether the event's destination is the pin to every desktop. A pin never
+/// reads the desktop key its rule stores, so the records that describe one
+/// carry this member and a null target: the destination exists, and it is
+/// every desktop, not "no desktop".
+/// </param>
 public sealed record ActivityRecord(
     Guid CorrelationId,
     Guid SessionId,
@@ -137,7 +143,8 @@ public sealed record ActivityRecord(
     string? TopologyReason = null,
     string? RecoverySignal = null,
     Guid? SourceDesktopId = null,
-    Guid? DestinationDesktopId = null);
+    Guid? DestinationDesktopId = null,
+    bool PinnedToAllDesktops = false);
 
 /// <summary>
 /// Projects the pipeline's own activity records onto the privacy-safe
@@ -195,6 +202,8 @@ public static class ActivityRecordFactory
         // swept because nothing named the application at all.
         bool isMatched = activity.Outcome == WindowObservationOutcome.Matched;
         bool isSwept = UnmanagedWindowSweep.IsSweptRuleId(activity.RuleId);
+        bool isPinned =
+            activity.Destination == WindowRuleDestination.PinnedToAllDesktops;
         string resultCode = isMatched
             ? isSwept ? "observation.swept" : "observation.matched"
             : $"observation.skipped.{ToCode(activity.SkipReason)}";
@@ -204,6 +213,8 @@ public static class ActivityRecordFactory
             {
                 WindowSkipReason.AllowedAnywhere =>
                     "An Anywhere rule names this application, so the window stays where it opened.",
+                WindowSkipReason.PinReleaseFailed =>
+                    "A rule names this application, but the pin an earlier rule left on the window could not be released, so it may still appear on every desktop.",
                 WindowSkipReason.SystemWindow =>
                     "Windows manages this window, so it stays where Windows opened it.",
                 WindowSkipReason.ActivationNotSwept =>
@@ -229,9 +240,13 @@ public static class ActivityRecordFactory
             activity.Identity?.ProcessName,
             activity.Identity,
             activity.RuleId,
-            activity.TargetDesktopKey,
+            // A pin names no desktop: the rule's stored key is not read while
+            // its action is a pin, so nothing is reported as this window's
+            // target.
+            isPinned ? null : activity.TargetDesktopKey,
             EventSequence: activity.EventSequence,
-            Error: error);
+            Error: error,
+            PinnedToAllDesktops: isPinned);
     }
 
     /// <summary>
@@ -262,6 +277,11 @@ public static class ActivityRecordFactory
                     activity.MoveOutcome switch
                     {
                         WindowMoveOutcome.Succeeded => ActivityResult.Succeeded,
+                        // A pin is what the rule asked for, so it reduces to the
+                        // same success a move does: the window is now on every
+                        // desktop.
+                        WindowMoveOutcome.PinnedToAllDesktops =>
+                            ActivityResult.Succeeded,
                         WindowMoveOutcome.Failed => ActivityResult.Failed,
                         _ => ActivityResult.Skipped,
                     },
@@ -730,14 +750,19 @@ public static class ActivityRecordFactory
             activity.Identity.ProcessName,
             activity.Identity,
             activity.RuleId,
-            activity.TargetDesktopKey,
+            // A pin names no desktop, so every stage of a pin reports no target:
+            // the rule's stored key is not read while its action is a pin, and
+            // repeating it here would show a desktop the pin never used beside
+            // an observation row that says the window is on every desktop.
+            IsPin(activity) ? null : activity.TargetDesktopKey,
             duration,
             EventSequence: null,
             Error: error,
             SourceDesktopId:
                 carriesPlacement ? activity.PreviousDesktopId : null,
             DestinationDesktopId:
-                carriesPlacement ? activity.TargetDesktopId : null);
+                carriesPlacement ? activity.TargetDesktopId : null,
+            PinnedToAllDesktops: IsPin(activity));
     }
 
     private static ActivityErrorDetail? ToErrorDetail(
@@ -767,7 +792,10 @@ public static class ActivityRecordFactory
 
     private static string BuildMatchSummary(WindowObservationActivity activity)
     {
-        string target = DescribeDestination(activity.TargetDesktopKey);
+        string target =
+            activity.Destination == WindowRuleDestination.PinnedToAllDesktops
+                ? "every desktop"
+                : DescribeDestination(activity.TargetDesktopKey);
         if (UnmanagedWindowSweep.IsSweptRuleId(activity.RuleId))
         {
             return $"No rule names this application, so the window is moved to {target}.";
@@ -792,6 +820,10 @@ public static class ActivityRecordFactory
                 $"The window could not be moved to {target}.",
             WindowMoveOutcome.WindowUnavailable =>
                 $"The window became unavailable before it could be moved to {target}.",
+            WindowMoveOutcome.PinnedToAllDesktops =>
+                "Pinned the window to every desktop.",
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops =>
+                "The window was already pinned to every desktop.",
             _ => "No move was attempted.",
         };
     }
@@ -812,17 +844,40 @@ public static class ActivityRecordFactory
         };
     }
 
+    /// <summary>
+    /// Whether the assignment pinned the window rather than moving it.
+    /// </summary>
+    /// <remarks>
+    /// A pin that failed, or that this host could not make, records no pin
+    /// outcome of its own, so the switch reason is what identifies it: every pin
+    /// path records that no switch was considered because the rule pins.
+    /// </remarks>
+    private static bool IsPin(WindowAssignmentActivity activity) =>
+        activity.MoveOutcome is
+            WindowMoveOutcome.PinnedToAllDesktops or
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops ||
+        activity.SwitchDecisionReason ==
+            DesktopSwitchDecisionReason.PinnedToAllDesktops;
+
     private static string BuildAssignmentSummary(
         WindowAssignmentActivity activity) =>
         activity.Outcome switch
         {
+            WindowAssignmentOutcome.Succeeded when IsPin(activity) =>
+                $"Pinned {activity.Identity.ProcessName} to every desktop.",
             WindowAssignmentOutcome.Succeeded =>
                 $"Assigned {activity.Identity.ProcessName} to {DescribeDestination(activity.TargetDesktopKey)}.",
+            WindowAssignmentOutcome.Failed when IsPin(activity) =>
+                $"Could not pin {activity.Identity.ProcessName} to every desktop.",
             WindowAssignmentOutcome.Failed =>
                 $"Could not assign {activity.Identity.ProcessName} to {DescribeDestination(activity.TargetDesktopKey)}.",
             WindowAssignmentOutcome.Skipped
                 when activity.SkipReason == WindowAssignmentSkipReason.WindowNotTracked =>
                 $"Skipped an {activity.Identity.ProcessName} window that Windows was not tracking on a virtual desktop.",
+            WindowAssignmentOutcome.Skipped
+                when activity.SkipReason ==
+                    WindowAssignmentSkipReason.PinHeldUntilRepairEvent =>
+                $"Kept the {activity.Identity.ProcessName} window pinned on every desktop until its next placement event.",
             _ =>
                 $"Skipped {activity.Identity.ProcessName}: {Humanize(activity.SkipReason)}.",
         };

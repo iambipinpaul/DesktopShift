@@ -6,8 +6,8 @@ namespace DesktopShift.App.ViewModels;
 /// <param name="destinationSummary">
 /// Where the rule sends what it claims, in words. It is the only thing that
 /// distinguishes a rule bound for a Managed Desktop from one that is exempt from
-/// placement, because an Anywhere rule has no destination to show in the editable
-/// desktop field.
+/// placement, because a rule that never moves a window has no destination to show
+/// in the editable desktop field.
 /// </param>
 /// <param name="identitySummary">
 /// Every identity the rule declares, not only its process names. Three of the
@@ -15,9 +15,15 @@ namespace DesktopShift.App.ViewModels;
 /// path and carry no process name at all, so a row showing process names alone
 /// reads as though the rule were empty.
 /// </param>
-/// <param name="allowsAnywhere">
-/// Whether the rule exempts its windows from placement. The desktop name field is
-/// meaningless on such a rule — nothing writes it back — so it is not offered.
+/// <param name="hasManagedDestination">
+/// Whether the rule sends its windows to a Managed Desktop. Only such a rule has
+/// a desktop name the row could edit: an Anywhere rule leaves a window where it
+/// opened and a Show on all desktops rule pins it in place, so neither reads its
+/// stored key and the field is not offered.
+/// </param>
+/// <param name="destinationNote">
+/// What the row says in place of that field, so a rule with no Managed Desktop
+/// still explains itself instead of leaving a gap.
 /// </param>
 public sealed class FirstRunMappingViewModel : INotifyPropertyChanged
 {
@@ -34,7 +40,8 @@ public sealed class FirstRunMappingViewModel : INotifyPropertyChanged
         bool isEnabled,
         string destinationSummary = "",
         string identitySummary = "",
-        bool allowsAnywhere = false)
+        bool hasManagedDestination = true,
+        string destinationNote = "")
     {
         SemanticKey = semanticKey;
         RuleId = ruleId;
@@ -44,7 +51,8 @@ public sealed class FirstRunMappingViewModel : INotifyPropertyChanged
         _isEnabled = isEnabled;
         DestinationSummary = destinationSummary;
         IdentitySummary = identitySummary;
-        AllowsAnywhere = allowsAnywhere;
+        HasManagedDestination = hasManagedDestination;
+        DestinationNote = destinationNote;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -59,12 +67,14 @@ public sealed class FirstRunMappingViewModel : INotifyPropertyChanged
 
     public string IdentitySummary { get; }
 
-    public bool AllowsAnywhere { get; }
+    public bool HasManagedDestination { get; }
+
+    public string DestinationNote { get; }
 
     /// <summary>
     /// Whether the editable Managed Desktop name is worth offering.
     /// </summary>
-    public bool IsDesktopNameEditable => !AllowsAnywhere;
+    public bool IsDesktopNameEditable => HasManagedDestination;
 
     public string DesktopName
     {

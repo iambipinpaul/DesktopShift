@@ -95,7 +95,9 @@ internal static class DiagnosticTestData
         WindowAssignmentError? error = null,
         string ruleId = "vscode",
         string targetDesktopKey = "code",
-        WindowSafeIdentity? identity = null) =>
+        WindowSafeIdentity? identity = null,
+        DesktopSwitchDecisionReason switchReason =
+            DesktopSwitchDecisionReason.PolicyApproved) =>
         new(
             correlationId ?? Correlation,
             startedAtUtc ?? Occurred,
@@ -113,6 +115,6 @@ internal static class DiagnosticTestData
             moveOutcome,
             DesktopSwitchPolicy.OnNewWindowActivation,
             switchOutcome,
-            DesktopSwitchDecisionReason.PolicyApproved,
+            switchReason,
             TimeSpan.FromMilliseconds(7));
 }

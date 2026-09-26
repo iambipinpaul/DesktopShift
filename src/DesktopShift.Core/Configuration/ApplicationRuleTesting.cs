@@ -125,8 +125,9 @@ public static class ApplicationRuleTester
     /// </summary>
     /// <remarks>
     /// The projection mirrors <see cref="ConfigurationWindowRuleSource"/>, down
-    /// to leaving the title and command line refinements empty, so a test result
-    /// says what the running observer would decide and not something close to it.
+    /// to leaving the title and command line refinements empty and carrying the
+    /// destination the rule's action means, so a test result says what the
+    /// running observer would decide and not something close to it.
     /// The only differences are deliberate: the rule is enabled and declares
     /// every trigger, because a test asks about identity, not about timing.
     /// </remarks>
@@ -148,5 +149,7 @@ public static class ApplicationRuleTester
                 rule.WindowClasses,
                 TitleContains: [],
                 CommandLineContains: []),
-            Order: 0);
+            Order: 0,
+            Destination: ConfigurationWindowRuleSource.ToDestination(
+                rule.Action));
 }

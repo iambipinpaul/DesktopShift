@@ -26,7 +26,7 @@ public sealed class AnywhereDestinationTests
             ApplicationRuleDraft.ForNewRule(document));
 
         Assert.HasCount(
-            document.ManagedDesktops.Length + 1,
+            document.ManagedDesktops.Length + 2,
             viewModel.ManagedDesktops);
         CollectionAssert.AreEqual(
             document.ManagedDesktops
@@ -37,7 +37,9 @@ public sealed class AnywhereDestinationTests
                 .Select(static choice => choice.SemanticKey)
                 .ToArray());
 
-        ManagedDesktopChoice anywhere = viewModel.ManagedDesktops[^1];
+        // Show on all desktops follows Anywhere, so the Managed Desktops still
+        // come first and Anywhere still comes after all of them.
+        ManagedDesktopChoice anywhere = viewModel.ManagedDesktops[^2];
         Assert.AreEqual(ApplicationRuleAction.AllowAnywhere, anywhere.Action);
         Assert.IsEmpty(anywhere.SemanticKey);
         Assert.Contains("Anywhere", anywhere.DisplayName, StringComparison.Ordinal);
@@ -55,7 +57,7 @@ public sealed class AnywhereDestinationTests
         Assert.IsFalse(viewModel.AllowsAnywhere);
         Assert.IsTrue(viewModel.IsPlacementConfigurable);
 
-        viewModel.SelectedDesktopIndex = viewModel.ManagedDesktops.Count - 1;
+        viewModel.SelectedDesktopIndex = viewModel.ManagedDesktops.Count - 2;
 
         Assert.IsTrue(viewModel.AllowsAnywhere);
         Assert.IsFalse(viewModel.IsPlacementConfigurable);
@@ -78,11 +80,11 @@ public sealed class AnywhereDestinationTests
         };
         string chosen = viewModel.ToDraft().TargetDesktopKey;
 
-        viewModel.SelectedDesktopIndex = viewModel.ManagedDesktops.Count - 1;
+        viewModel.SelectedDesktopIndex = viewModel.ManagedDesktops.Count - 2;
 
         Assert.AreEqual(chosen, viewModel.ToDraft().TargetDesktopKey);
         Assert.AreEqual(
-            viewModel.ManagedDesktops.Count - 1,
+            viewModel.ManagedDesktops.Count - 2,
             viewModel.SelectedDesktopIndex);
 
         viewModel.SelectedDesktopIndex = 2;
@@ -106,7 +108,7 @@ public sealed class AnywhereDestinationTests
 
         Assert.IsTrue(viewModel.AllowsAnywhere);
         Assert.AreEqual(
-            viewModel.ManagedDesktops.Count - 1,
+            viewModel.ManagedDesktops.Count - 2,
             viewModel.SelectedDesktopIndex);
     }
 

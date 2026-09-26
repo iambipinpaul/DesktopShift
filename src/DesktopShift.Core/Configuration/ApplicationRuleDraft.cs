@@ -115,8 +115,9 @@ public static class ApplicationRuleValidation
 /// rule in place or appends one.
 /// </param>
 /// <param name="Action">
-/// The selected destination: a Managed Desktop, or Anywhere. Selecting Anywhere
-/// keeps <paramref name="TargetDesktopKey"/>, <paramref name="Triggers"/>, and
+/// The selected destination: a Managed Desktop, Anywhere, or every desktop at
+/// once. Selecting a destination that does not move the window keeps
+/// <paramref name="TargetDesktopKey"/>, <paramref name="Triggers"/>, and
 /// <paramref name="SwitchPolicy"/> untouched rather than clearing them, so
 /// changing the destination and changing it back does not discard what the user
 /// had chosen.
@@ -153,6 +154,13 @@ public sealed record ApplicationRuleDraft(
     /// hides the trigger and switch policy controls on.
     /// </summary>
     public bool AllowsAnywhere => Action == ApplicationRuleAction.AllowAnywhere;
+
+    /// <summary>
+    /// Whether the selected destination keeps the application on every virtual
+    /// desktop, which hides the same placement controls Anywhere hides.
+    /// </summary>
+    public bool ShowsOnAllDesktops =>
+        Action == ApplicationRuleAction.ShowOnAllDesktops;
 
     /// <summary>
     /// Starts a new rule, pre-targeted at the document's first Managed Desktop
@@ -439,11 +447,13 @@ public sealed record ApplicationRuleDraft(
                 "A name is required."));
         }
 
-        // An Anywhere rule never moves a window, so it has no destination to
-        // check. Its triggers and switch policy are skipped below for the same
-        // reason: they say when a move happens, and no move happens.
+        // A rule that never moves a window has no destination to check:
+        // Anywhere leaves the window where it opened, and Show on all desktops
+        // pins it in place. Their triggers and switch policy are skipped below
+        // for the same reason: they say when a move happens, and no move
+        // happens.
         string trimmedTarget = TargetDesktopKey.Trim();
-        if (!AllowsAnywhere)
+        if (!AllowsAnywhere && !ShowsOnAllDesktops)
         {
             if (string.IsNullOrWhiteSpace(trimmedTarget))
             {
@@ -509,7 +519,7 @@ public sealed record ApplicationRuleDraft(
                     : "Add at least one process name, package family name, AppUserModelId, or executable path."));
         }
 
-        if (AllowsAnywhere)
+        if (AllowsAnywhere || ShowsOnAllDesktops)
         {
             return issues.ToImmutable();
         }

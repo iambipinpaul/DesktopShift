@@ -235,6 +235,15 @@ public static class ManagedDesktopCatalogProjection
 
         foreach (ApplicationRule rule in configuration.ApplicationRules)
         {
+            if (!rule.MovesWindows)
+            {
+                // A rule that never moves a window names no desktop, even when
+                // it still stores a key, so counting it here would tell a user a
+                // desktop is where an application is sent when nothing sends it
+                // there.
+                continue;
+            }
+
             RuleCounts current = counts.GetValueOrDefault(
                 rule.TargetDesktopKey,
                 RuleCounts.None);

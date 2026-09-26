@@ -63,10 +63,16 @@ public sealed record ActivityRecordDisplay(
         string source = FormatSource(record.Source, record.RecoverySignal);
 
         // The sweep's rule and destination are internal names, not things a
-        // user wrote, so they are said rather than shown.
+        // user wrote, so they are said rather than shown. A pin names no
+        // desktop key at all — its destination is every desktop — so a null
+        // key must not read as no destination.
         string target = isSwept
             ? "First desktop"
-            : ValueOrFallback(record.TargetDesktopKey, "No desktop assigned");
+            : record.PinnedToAllDesktops
+                ? "Every desktop"
+                : ValueOrFallback(
+                    record.TargetDesktopKey,
+                    "No desktop assigned");
         string rule = isSwept
             ? "No rule names this app"
             : ValueOrFallback(

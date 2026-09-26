@@ -1,4 +1,5 @@
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Configuration;
 using DesktopShift.Core.Observation;
 using DesktopShift.Core.Tiling;
@@ -212,33 +213,36 @@ public sealed class WindowObservationProcessorTests
         Assert.AreEqual(2, resolver.Count);
     }
 
+    private static readonly WindowObservationRule DefaultRule = new(
+        "vscode",
+        "Visual Studio Code",
+        IsEnabled: true,
+        "code",
+        [
+            ApplicationRuleTrigger.WindowCreated,
+            ApplicationRuleTrigger.WindowShown,
+            ApplicationRuleTrigger.ForegroundActivated,
+        ],
+        DesktopSwitchPolicy.OnForegroundActivation,
+        WindowMatchCriteria.ForProcessNames(["Code.exe"]),
+        Order: 0);
+
     private static WindowObservationProcessor CreateProcessor(
         IWindowClassifier classifier,
         IWindowIdentityResolver resolver,
         RecordingActivitySink sink,
         ITilingTrigger? tilingTrigger = null,
-        IWindowAssignmentService? assignmentService = null)
+        IWindowAssignmentService? assignmentService = null,
+        IWindowDesktopPlacementService? placementService = null,
+        WindowObservationRule? rule = null)
     {
-        WindowObservationRule rule = new(
-            "vscode",
-            "Visual Studio Code",
-            IsEnabled: true,
-            "code",
-            [
-                ApplicationRuleTrigger.WindowCreated,
-                ApplicationRuleTrigger.WindowShown,
-                ApplicationRuleTrigger.ForegroundActivated,
-            ],
-            DesktopSwitchPolicy.OnForegroundActivation,
-            WindowMatchCriteria.ForProcessNames(["Code.exe"]),
-            Order: 0);
-
         return new WindowObservationProcessor(
             classifier,
             resolver,
-            new FixedRuleSource([rule]),
+            new FixedRuleSource([rule ?? DefaultRule]),
             sink,
             assignmentService: assignmentService,
+            placementService: placementService,
             tilingTrigger: tilingTrigger);
     }
 
@@ -422,6 +426,346 @@ public sealed class WindowObservationProcessorTests
         Assert.AreEqual(
             TilingAssignmentDisposition.Unconfirmed,
             failedTrigger.Assignments.Single().Disposition);
+    }
+
+    [TestMethod]
+    public async Task PinRule_RunsTheAssignmentAndNeverMovesTheWindow()
+    {
+        RecordingActivitySink sink = new();
+        RecordingTilingTrigger trigger = new();
+        RecordingAssignmentService assignment = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            trigger,
+            assignment,
+            rule: CreatePinRule());
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                // Manual reassignment is not held for an opening window, so the
+                // assignment this test is about runs before the call returns.
+                WindowEventKind.ManualReassignment,
+                (nint)301,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(WindowObservationOutcome.Matched, activity.Outcome);
+        Assert.AreEqual(
+            WindowRuleDestination.PinnedToAllDesktops,
+            activity.Destination);
+        Assert.HasCount(1, assignment.Requests);
+        Assert.AreEqual(
+            WindowRuleDestination.PinnedToAllDesktops,
+            assignment.Requests[0].Rule.Destination);
+        Assert.AreEqual(
+            TilingAssignmentDisposition.AlreadyInPlace,
+            trigger.Assignments.Single().Disposition,
+            "A pinned window keeps the tile it already owns.");
+    }
+
+    [TestMethod]
+    public async Task PinRule_WhoseStoredTriggersDoNotAnswerThisEvent_StillPins()
+    {
+        RecordingActivitySink sink = new();
+        RecordingAssignmentService assignment = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            assignmentService: assignment,
+            rule: CreatePinRule() with
+            {
+                Triggers = [ApplicationRuleTrigger.WindowCreated],
+            });
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.ForegroundActivated,
+                (nint)302,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(WindowObservationOutcome.Matched, activity.Outcome);
+        Assert.HasCount(
+            1,
+            assignment.Requests,
+            "A pin rule keeps its application pinned without reading its stored triggers.");
+        Assert.AreEqual(
+            WindowRuleDestination.PinnedToAllDesktops,
+            assignment.Requests[0].Rule.Destination);
+    }
+
+    [TestMethod]
+    public async Task AnywhereRule_ReleasesAHeldPinOnARepairEvent()
+    {
+        RecordingActivitySink sink = new();
+        RecordingPlacementService placement = new(isPinned: true);
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            placementService: placement,
+            rule: CreateAnywhereRule());
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Shown,
+                (nint)303,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(WindowSkipReason.AllowedAnywhere, activity.SkipReason);
+        Assert.AreEqual(1, placement.UnpinCallCount);
+    }
+
+    [TestMethod]
+    public async Task AnywhereRule_DoesNotReleaseAHeldPinOnAForegroundActivation()
+    {
+        RecordingActivitySink sink = new();
+        RecordingPlacementService placement = new(isPinned: true);
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            placementService: placement,
+            rule: CreateAnywhereRule());
+
+        await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.ForegroundActivated,
+                (nint)304,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(
+            0,
+            placement.UnpinCallCount,
+            "Switching to a window must not change its placement.");
+    }
+
+    [TestMethod]
+    public async Task AnywhereRule_WhenTheReleaseIsRefused_SaysTheWindowMayStillBePinned()
+    {
+        RecordingActivitySink sink = new();
+        RecordingPlacementService placement = new(
+            isPinned: true,
+            pinStateResult: DesktopTopologyProviderResult<bool>.Failed(
+                "window_placement.pin_state_failed",
+                "Windows refused to report the window's pin state.",
+                hResult: unchecked((int)0x80004005)));
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            placementService: placement,
+            rule: CreateAnywhereRule());
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Shown,
+                (nint)305,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(
+            WindowSkipReason.PinReleaseFailed,
+            activity.SkipReason,
+            "An Anywhere rule that could not release a held pin must not read as though the window were free of it.");
+        Assert.AreEqual(0, placement.UnpinCallCount);
+    }
+
+    [TestMethod]
+    public async Task DeferredPinAssignment_LeavesTilingsOwnershipAlone()
+    {
+        // A lifecycle event is not a placement repair, so a move rule that
+        // answers one defers while a pin is still held. Tiling must not read
+        // that deferral as a window that was never placed: the window keeps
+        // whatever tile it already owns.
+        RecordingTilingTrigger trigger = new();
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            new RecordingActivitySink(),
+            trigger,
+            StubAssignment(Activity(
+                WindowAssignmentOutcome.Skipped,
+                WindowAssignmentSkipReason.PinHeldUntilRepairEvent,
+                WindowMoveOutcome.NotAttempted)),
+            rule: DefaultRule with
+            {
+                Triggers = [ApplicationRuleTrigger.ManualReassignment],
+            });
+
+        await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Hidden,
+                (nint)306,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(
+            TilingAssignmentDisposition.Unconfirmed,
+            trigger.Assignments.Single().Disposition,
+            "A deferred pin preserves existing tiling ownership rather than forgetting the window.");
+    }
+
+    [TestMethod]
+    public async Task NamedRuleThatDoesNotAnswerTheEvent_StillReleasesAHeldPinOnARepairEvent()
+    {
+        // The pin rule is gone — one still in force would have answered this
+        // repair event — but another enabled rule names the application, so the
+        // sweep must not take the window. The repair event is still the moment
+        // the stale pin is dropped.
+        RecordingActivitySink sink = new();
+        RecordingPlacementService placement = new(isPinned: true);
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            placementService: placement,
+            rule: DefaultRule with
+            {
+                Triggers = [ApplicationRuleTrigger.ForegroundActivated],
+            });
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Shown,
+                (nint)307,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(WindowObservationOutcome.Skipped, activity.Outcome);
+        Assert.AreEqual(WindowSkipReason.NoMatchingRule, activity.SkipReason);
+        Assert.AreEqual(
+            1,
+            placement.UnpinCallCount,
+            "A stale pin is dropped on the repair events even when no rule answers them.");
+    }
+
+    [TestMethod]
+    public async Task NamedRuleThatDoesNotAnswerTheEvent_WhenTheReleaseIsRefused_SaysSo()
+    {
+        RecordingActivitySink sink = new();
+        RecordingPlacementService placement = new(
+            isPinned: true,
+            pinStateResult: DesktopTopologyProviderResult<bool>.Failed(
+                "window_placement.pin_state_failed",
+                "Windows refused to report the window's pin state.",
+                hResult: unchecked((int)0x80004005)));
+        WindowObservationProcessor processor = CreateProcessor(
+            new PassthroughClassifier(),
+            new SuccessfulResolver(),
+            sink,
+            placementService: placement,
+            rule: DefaultRule with
+            {
+                Triggers = [ApplicationRuleTrigger.ForegroundActivated],
+            });
+
+        WindowObservationActivity activity = await processor.ProcessAsync(
+            new WindowEvent(
+                1,
+                WindowEventKind.Shown,
+                (nint)308,
+                DateTimeOffset.UnixEpoch));
+
+        Assert.AreEqual(
+            WindowSkipReason.PinReleaseFailed,
+            activity.SkipReason,
+            "A release that is refused must be reported rather than read as an unanswered event.");
+        Assert.AreEqual(0, placement.UnpinCallCount);
+    }
+
+    private static WindowObservationRule CreatePinRule() =>
+        new(
+            "music",
+            "Music",
+            IsEnabled: true,
+            string.Empty,
+            [
+                ApplicationRuleTrigger.WindowCreated,
+                ApplicationRuleTrigger.WindowShown,
+                ApplicationRuleTrigger.ForegroundActivated,
+                ApplicationRuleTrigger.ManualReassignment,
+            ],
+            DesktopSwitchPolicy.Never,
+            WindowMatchCriteria.ForProcessNames(["Code.exe"]),
+            Order: 0,
+            WindowRuleDestination.PinnedToAllDesktops);
+
+    private static WindowObservationRule CreateAnywhereRule() =>
+        CreatePinRule() with
+        {
+            Id = "anywhere",
+            Destination = WindowRuleDestination.Anywhere,
+        };
+
+    private sealed class RecordingAssignmentService : IWindowAssignmentService
+    {
+        public List<WindowAssignmentRequest> Requests { get; } = [];
+
+        public ValueTask<WindowAssignmentActivity> AssignAsync(
+            WindowAssignmentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            WindowMoveOutcome moveOutcome =
+                request.Rule.Destination ==
+                    WindowRuleDestination.PinnedToAllDesktops
+                    ? WindowMoveOutcome.PinnedToAllDesktops
+                    : WindowMoveOutcome.Succeeded;
+            return ValueTask.FromResult(
+                Activity(
+                    WindowAssignmentOutcome.Succeeded,
+                    WindowAssignmentSkipReason.None,
+                    moveOutcome) with
+                {
+                    RuleId = request.Rule.Id,
+                    TargetDesktopKey = request.Rule.TargetDesktopKey,
+                });
+        }
+    }
+
+    private sealed class RecordingPlacementService(
+        bool isPinned,
+        DesktopTopologyProviderResult<bool>? pinStateResult = null) :
+        IWindowDesktopPlacementService
+    {
+        public int UnpinCallCount { get; private set; }
+
+        public ValueTask<DesktopTopologyProviderResult<Guid>>
+            GetWindowDesktopIdAsync(
+                nint windowHandle,
+                CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(
+                DesktopTopologyProviderResult<Guid>.Succeeded(Guid.NewGuid()));
+
+        public ValueTask<DesktopTopologyProviderResult>
+            MoveWindowToDesktopAsync(
+                nint windowHandle,
+                Guid desktopId,
+                CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(DesktopTopologyProviderResult.Succeeded());
+
+        public ValueTask<DesktopTopologyProviderResult<bool>>
+            GetWindowPinnedAsync(
+                nint windowHandle,
+                CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(
+                pinStateResult ??
+                DesktopTopologyProviderResult<bool>.Succeeded(isPinned));
+
+        public ValueTask<DesktopTopologyProviderResult> UnpinWindowAsync(
+            nint windowHandle,
+            CancellationToken cancellationToken = default)
+        {
+            UnpinCallCount++;
+            return ValueTask.FromResult(
+                DesktopTopologyProviderResult.Succeeded());
+        }
     }
 
     private static WindowAssignmentActivity Activity(

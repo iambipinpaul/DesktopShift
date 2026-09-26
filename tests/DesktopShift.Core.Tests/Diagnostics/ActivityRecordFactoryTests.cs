@@ -56,6 +56,30 @@ public sealed class ActivityRecordFactoryTests
     }
 
     [TestMethod]
+    public void PinnedObservation_NamesEveryDesktopAndNeverTheStoredKey()
+    {
+        // The rule's stored key is not read while its action is a pin, so the
+        // decision names the destination the pin does have — every desktop —
+        // rather than the key the rule happens to store or "no desktop".
+        ActivityRecord record = ActivityRecordFactory.FromObservation(
+            DiagnosticTestData.MatchedObservation() with
+            {
+                Destination = WindowRuleDestination.PinnedToAllDesktops,
+            },
+            DiagnosticTestData.Session);
+
+        Assert.AreEqual(ActivityResult.Succeeded, record.Result);
+        Assert.AreEqual("observation.matched", record.ResultCode);
+        Assert.IsNull(
+            record.TargetDesktopKey,
+            "A pin never repeats the key its rule stores.");
+        Assert.IsTrue(record.PinnedToAllDesktops);
+        Assert.AreEqual(
+            "Every desktop",
+            ActivityRecordDisplay.Create(record).Target);
+    }
+
+    [TestMethod]
     public void SkippedObservation_NamesTheSkipReasonInItsCode()
     {
         ActivityRecord record = ActivityRecordFactory.FromObservation(
@@ -274,6 +298,137 @@ public sealed class ActivityRecordFactoryTests
         Assert.AreEqual(ActivityResult.Skipped, switchRecord.Result);
         Assert.AreEqual("switch.suppressed", switchRecord.ResultCode);
         Assert.IsNull(switchRecord.Error);
+    }
+
+    [TestMethod]
+    public void PinnedWindow_IsASuccessItNeverCallsAMove()
+    {
+        // A pin is not a move: the stage reads as pinned, reduces to the same
+        // success a move does, and names no desktop because the rule never
+        // reads the key it stores.
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Succeeded,
+                    moveOutcome: WindowMoveOutcome.PinnedToAllDesktops,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    switchReason:
+                        DesktopSwitchDecisionReason.PinnedToAllDesktops),
+                DiagnosticTestData.Session);
+
+        ActivityRecord move = records.Single(
+            static record => record.Source == ActivityEventSource.Move);
+        Assert.AreEqual(ActivityResult.Succeeded, move.Result);
+        Assert.AreEqual("move.pinned_to_all_desktops", move.ResultCode);
+        Assert.AreEqual("Pinned the window to every desktop.", move.Summary);
+
+        ActivityRecord assignment = records.Single(
+            static record => record.Source == ActivityEventSource.Assignment);
+        Assert.AreEqual(ActivityResult.Succeeded, assignment.Result);
+        Assert.AreEqual(
+            "Pinned Code.exe to every desktop.",
+            assignment.Summary);
+
+        Assert.IsNull(
+            move.TargetDesktopKey,
+            "A pin names no desktop, so no stage of it repeats the key the rule stores.");
+        Assert.IsNull(assignment.TargetDesktopKey);
+        Assert.IsTrue(
+            move.PinnedToAllDesktops,
+            "The destination a pin does have — every desktop — travels on the record instead.");
+        Assert.IsTrue(assignment.PinnedToAllDesktops);
+        Assert.AreEqual(
+            "Every desktop",
+            ActivityRecordDisplay.Create(move).Target);
+        Assert.AreEqual(
+            "Every desktop",
+            ActivityRecordDisplay.Create(assignment).Target);
+    }
+
+    [TestMethod]
+    public void AlreadyPinnedWindow_IsASkipThatIsNotAFailure()
+    {
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Skipped,
+                    skipReason: WindowAssignmentSkipReason
+                        .AlreadyPinnedToAllDesktops,
+                    moveOutcome: WindowMoveOutcome.AlreadyPinnedToAllDesktops,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    switchReason:
+                        DesktopSwitchDecisionReason.PinnedToAllDesktops),
+                DiagnosticTestData.Session);
+
+        ActivityRecord move = records.Single(
+            static record => record.Source == ActivityEventSource.Move);
+        Assert.AreEqual(ActivityResult.Skipped, move.Result);
+        Assert.AreEqual("move.already_pinned_to_all_desktops", move.ResultCode);
+        Assert.AreEqual(
+            "The window was already pinned to every desktop.",
+            move.Summary);
+
+        ActivityRecord assignment = records.Single(
+            static record => record.Source == ActivityEventSource.Assignment);
+        Assert.AreEqual(ActivityResult.Skipped, assignment.Result);
+        Assert.AreEqual(
+            "assignment.skipped.already_pinned_to_all_desktops",
+            assignment.ResultCode);
+        Assert.AreEqual(
+            "Skipped Code.exe: Already pinned to all desktops.",
+            assignment.Summary);
+    }
+
+    [TestMethod]
+    public void UnavailablePin_IsASkipThatSaysWhyNothingWasPinned()
+    {
+        // Limited Mode pins nothing. The window is left alone, which is a skip
+        // and not a failure, and the summary has to say so rather than report an
+        // empty pin.
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Skipped,
+                    skipReason: WindowAssignmentSkipReason.PinUnavailable,
+                    moveOutcome: WindowMoveOutcome.NotAttempted,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    switchReason:
+                        DesktopSwitchDecisionReason.PinnedToAllDesktops),
+                DiagnosticTestData.Session);
+
+        Assert.HasCount(1, records);
+        Assert.AreEqual(ActivityEventSource.Assignment, records[0].Source);
+        Assert.AreEqual(ActivityResult.Skipped, records[0].Result);
+        Assert.AreEqual(
+            "assignment.skipped.pin_unavailable",
+            records[0].ResultCode);
+        Assert.Contains("Pin unavailable", records[0].Summary);
+    }
+
+    [TestMethod]
+    public void FailedPin_IsAFailureThatNamesAPin()
+    {
+        ImmutableArray<ActivityRecord> records =
+            ActivityRecordFactory.FromAssignment(
+                DiagnosticTestData.Assignment(
+                    outcome: WindowAssignmentOutcome.Failed,
+                    moveOutcome: WindowMoveOutcome.NotAttempted,
+                    switchOutcome: DesktopSwitchOutcome.NotRequested,
+                    switchReason:
+                        DesktopSwitchDecisionReason.PinnedToAllDesktops,
+                    error: new WindowAssignmentError(
+                        "assignment.pin_failed",
+                        "The window could not be pinned to every desktop.")),
+                DiagnosticTestData.Session);
+
+        ActivityRecord assignment = records.Single(
+            static record => record.Source == ActivityEventSource.Assignment);
+        Assert.AreEqual(ActivityResult.Failed, assignment.Result);
+        Assert.AreEqual("assignment.failed", assignment.ResultCode);
+        Assert.AreEqual(
+            "Could not pin Code.exe to every desktop.",
+            assignment.Summary);
+        Assert.AreEqual("assignment.pin_failed", assignment.Error?.Code);
     }
 
     [TestMethod]

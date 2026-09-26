@@ -166,4 +166,43 @@ public sealed class RecentIssueProjectionTests
         Assert.IsNotNull(assignmentWins);
         Assert.AreEqual(RecentIssueKind.AssignmentFailure, assignmentWins.Kind);
     }
+
+    [TestMethod]
+    public void Project_OnlyAFailedPinCountsAsAFailure()
+    {
+        // A pin is not a move, so the move and switch arms of IsFailure never
+        // catch one: a pin that took, and one this host could not make, are not
+        // failures, and only a pin that failed is worth the notification area.
+        WindowAssignmentActivity pinned =
+            AssignmentActivities.Succeeded(DateTimeOffset.UnixEpoch) with
+            {
+                MoveOutcome = WindowMoveOutcome.PinnedToAllDesktops,
+                SwitchDecisionReason =
+                    DesktopSwitchDecisionReason.PinnedToAllDesktops,
+            };
+        WindowAssignmentActivity unavailable =
+            AssignmentActivities.AlreadyCorrect(DateTimeOffset.UnixEpoch.AddSeconds(1)) with
+            {
+                Outcome = WindowAssignmentOutcome.Skipped,
+                SkipReason = WindowAssignmentSkipReason.PinUnavailable,
+                MoveOutcome = WindowMoveOutcome.NotAttempted,
+                SwitchDecisionReason =
+                    DesktopSwitchDecisionReason.PinnedToAllDesktops,
+            };
+        WindowAssignmentActivity failed =
+            AssignmentActivities.Failed(DateTimeOffset.UnixEpoch.AddSeconds(2)) with
+            {
+                MoveOutcome = WindowMoveOutcome.NotAttempted,
+                SwitchDecisionReason =
+                    DesktopSwitchDecisionReason.PinnedToAllDesktops,
+            };
+
+        Assert.IsFalse(RecentIssueProjection.IsFailure(pinned));
+        Assert.IsFalse(RecentIssueProjection.IsFailure(unavailable));
+        Assert.IsTrue(RecentIssueProjection.IsFailure(failed));
+        Assert.IsNull(
+            RecentIssueProjection.Project(
+                [pinned, unavailable],
+                CompatibilityStatuses.FullModePassed()));
+    }
 }

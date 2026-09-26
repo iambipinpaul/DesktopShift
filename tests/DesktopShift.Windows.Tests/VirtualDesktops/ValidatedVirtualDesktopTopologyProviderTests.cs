@@ -88,6 +88,171 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
+    public async Task ValidatedPinSurface_AdvertisesThePinCapability()
+    {
+        FakeNativeBridge bridge = new(CreateSnapshot());
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+
+        DesktopTopologyProviderResult result =
+            await provider.TestCompatibilityAsync(Build26200);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsTrue(provider.Capabilities.CanPinWindow);
+        Assert.IsNull(provider.LastFallback);
+
+        // Asked once, at activation, rather than inferred from Full Mode.
+        Assert.AreEqual(1, bridge.PinProbeCount);
+    }
+
+    [TestMethod]
+    public async Task FailedPinProbe_CostsPinningAloneAndKeepsFullMode()
+    {
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            PinProbeResult = NativeBridgeResult.Failed(
+                new NativeBridgeError(
+                    "native.window_pin",
+                    "WindowPin",
+                    "The pin surface did not answer.",
+                    unchecked((int)0x80070032))),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+
+        DesktopTopologyProviderResult result =
+            await provider.TestCompatibilityAsync(Build26200);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsFalse(provider.Capabilities.CanPinWindow);
+
+        // Every other capability, including the ones this same activation
+        // proved, is untouched by a refused pin probe.
+        Assert.IsTrue(provider.Capabilities.CanGetWindowDesktopId);
+        Assert.IsTrue(provider.Capabilities.CanMoveWindowToDesktop);
+        Assert.IsTrue(provider.Capabilities.CanEnumerateDesktops);
+        Assert.IsTrue(provider.Capabilities.CanGetCurrentDesktop);
+        Assert.IsTrue(provider.Capabilities.CanCreateDesktop);
+        Assert.IsTrue(provider.Capabilities.CanSwitchDesktop);
+        Assert.IsTrue(provider.Capabilities.CanObserveTopologyChanges);
+        Assert.IsTrue(provider.Capabilities.CanRenameDesktop);
+        Assert.IsTrue(provider.Capabilities.CanReorderDesktop);
+
+        // A refusal is not a fallback: the validated adapter is still the one
+        // answering.
+        Assert.IsNull(provider.LastFallback);
+        Assert.IsFalse(bridge.IsDisposed);
+    }
+
+    [TestMethod]
+    public async Task PinWithoutAProvedSurface_IsUnsupportedBeforeTheBridgeIsAsked()
+    {
+        nint windowHandle = (nint)0x2468;
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            PinProbeResult = NativeBridgeResult.Failed(
+                new NativeBridgeError(
+                    "native.window_pin",
+                    "WindowPin",
+                    "The pin surface did not answer.",
+                    unchecked((int)0x80070032))),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        NativeBridgeResult<bool> query =
+            ((IValidatedWindowDesktopMover)provider).IsWindowPinned(windowHandle);
+        NativeBridgeResult pin =
+            ((IValidatedWindowDesktopMover)provider).PinWindow(windowHandle);
+        NativeBridgeResult unpin =
+            ((IValidatedWindowDesktopMover)provider).UnpinWindow(windowHandle);
+
+        Assert.IsFalse(query.IsSuccess);
+        Assert.AreEqual("native.pin_unsupported", query.Error?.Code);
+        Assert.AreEqual("WindowPin", query.Error?.Stage);
+        Assert.IsFalse(pin.IsSuccess);
+        Assert.AreEqual("native.pin_unsupported", pin.Error?.Code);
+        Assert.IsFalse(unpin.IsSuccess);
+        Assert.AreEqual("native.pin_unsupported", unpin.Error?.Code);
+
+        // The gate is read, not tried: no pin slot was reached, not even the
+        // read-only one.
+        Assert.AreEqual(0, bridge.PinQueryCount);
+        Assert.AreEqual(0, bridge.PinCount);
+        Assert.AreEqual(0, bridge.UnpinCount);
+        Assert.AreEqual(0, bridge.MutationCount);
+    }
+
+    [TestMethod]
+    public async Task ValidatedPinSurface_SendsEveryPinCallThroughTheValidatedBridge()
+    {
+        nint windowHandle = (nint)0x2468;
+        FakeNativeBridge bridge = new(CreateSnapshot())
+        {
+            PinQueryResult = NativeBridgeResult<bool>.Succeeded(true),
+        };
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        NativeBridgeResult<bool> query =
+            ((IValidatedWindowDesktopMover)provider).IsWindowPinned(windowHandle);
+        NativeBridgeResult pin =
+            ((IValidatedWindowDesktopMover)provider).PinWindow(windowHandle);
+        NativeBridgeResult unpin =
+            ((IValidatedWindowDesktopMover)provider).UnpinWindow(windowHandle);
+
+        Assert.IsTrue(query.IsSuccess);
+        Assert.IsTrue(query.Value);
+        Assert.IsTrue(pin.IsSuccess);
+        Assert.IsTrue(unpin.IsSuccess);
+        Assert.AreEqual(windowHandle, bridge.LastPinQueriedWindowHandle);
+        Assert.AreEqual(windowHandle, bridge.LastPinnedWindowHandle);
+        Assert.AreEqual(windowHandle, bridge.LastUnpinnedWindowHandle);
+        Assert.AreEqual(1, bridge.PinQueryCount);
+        Assert.AreEqual(1, bridge.PinCount);
+        Assert.AreEqual(1, bridge.UnpinCount);
+
+        // Applying and releasing a pin change what a window is shown on, so
+        // both count as mutations. Asking does not.
+        Assert.AreEqual(2, bridge.MutationCount);
+        Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
+        Assert.IsNull(provider.LastFallback);
+    }
+
+    [TestMethod]
+    public async Task RebuiltAdapter_ProvesThePinSurfaceAgain()
+    {
+        FakeNativeBridge dead = new(CreateSnapshot())
+        {
+            SnapshotResult =
+                NativeBridgeResult<NativeDesktopSnapshot>.Failed(DeadShellError()),
+        };
+        FakeNativeBridge restarted = new(CreateSnapshot());
+        Queue<FakeNativeBridge> bridges = new([dead, restarted]);
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(
+                    bridges.Dequeue())));
+        _ = await provider.TestCompatibilityAsync(Build26200);
+
+        _ = await provider.EnumerateDesktopsAsync();
+
+        // A rebuild proves what activation proves. A restart that dropped pin
+        // would silently take pinning away from a machine that had it.
+        Assert.AreEqual(1, provider.ReconnectCount);
+        Assert.IsTrue(provider.Capabilities.CanPinWindow);
+        Assert.AreEqual(1, restarted.PinProbeCount);
+    }
+
+    [TestMethod]
     public async Task ValidatedAdapter_EnumerationReturnsOrderedInventoryAndCurrentMarker()
     {
         NativeDesktopSnapshot snapshot = CreateSnapshot();
@@ -859,6 +1024,26 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public NativeBridgeResult DesktopReorderResult { get; init; } =
             NativeBridgeResult.Succeeded;
 
+        /// <summary>
+        /// What the read-only pin surface probe answers.
+        /// </summary>
+        /// <remarks>
+        /// Defaults to success so existing tests describe a build that can keep
+        /// windows on every desktop. A test that wants the opposite sets this
+        /// and asserts that pinning, and only pinning, went away.
+        /// </remarks>
+        public NativeBridgeResult PinProbeResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
+        public NativeBridgeResult<bool> PinQueryResult { get; init; } =
+            NativeBridgeResult<bool>.Succeeded(false);
+
+        public NativeBridgeResult PinResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
+        public NativeBridgeResult UnpinResult { get; init; } =
+            NativeBridgeResult.Succeeded;
+
         public ManualResetEventSlim? ValidationEntered { get; init; }
 
         public ManualResetEventSlim? MoveEntered { get; init; }
@@ -883,6 +1068,14 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
 
         public int ProbeCount { get; private set; }
 
+        public int PinProbeCount { get; private set; }
+
+        public int PinQueryCount { get; private set; }
+
+        public int PinCount { get; private set; }
+
+        public int UnpinCount { get; private set; }
+
         public int SnapshotCount { get; private set; }
 
         /// <summary>
@@ -903,6 +1096,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         public Guid LastReorderedDesktopId { get; private set; }
 
         public int LastReorderPosition { get; private set; }
+
+        public nint LastPinQueriedWindowHandle { get; private set; }
+
+        public nint LastPinnedWindowHandle { get; private set; }
+
+        public nint LastUnpinnedWindowHandle { get; private set; }
 
         public NativeBridgeResult Validate()
         {
@@ -978,6 +1177,38 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
             LastMovedWindowHandle = windowHandle;
             LastMovedDesktopId = desktopId;
             return MoveResult;
+        }
+
+        // A pin changes what a window is shown on, so it counts as a mutation
+        // exactly as a move does. The query and the probe do not: a count that
+        // included them would hide the very thing it exists to prove.
+        public NativeBridgeResult<bool> IsWindowPinned(nint windowHandle)
+        {
+            PinQueryCount++;
+            LastPinQueriedWindowHandle = windowHandle;
+            return PinQueryResult;
+        }
+
+        public NativeBridgeResult PinWindow(nint windowHandle)
+        {
+            MutationCount++;
+            PinCount++;
+            LastPinnedWindowHandle = windowHandle;
+            return PinResult;
+        }
+
+        public NativeBridgeResult UnpinWindow(nint windowHandle)
+        {
+            MutationCount++;
+            UnpinCount++;
+            LastUnpinnedWindowHandle = windowHandle;
+            return UnpinResult;
+        }
+
+        public NativeBridgeResult ProbeWindowPin()
+        {
+            PinProbeCount++;
+            return PinProbeResult;
         }
 
         public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)

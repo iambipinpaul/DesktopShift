@@ -111,6 +111,7 @@ public sealed class SweptWindowActivityTests
     [DataRow(WindowSkipReason.AllowedAnywhere, 17)]
     [DataRow(WindowSkipReason.ActivationNotSwept, 18)]
     [DataRow(WindowSkipReason.CloakStateChangeObserved, 19)]
+    [DataRow(WindowSkipReason.PinReleaseFailed, 21)]
     public void SkipReason_NumericValueIsStable(
         WindowSkipReason reason,
         int expectedValue)

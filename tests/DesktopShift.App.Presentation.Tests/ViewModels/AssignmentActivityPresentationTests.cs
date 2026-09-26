@@ -279,6 +279,140 @@ public sealed class AssignmentActivityPresentationTests
             presentation.RelatedCorrelation);
     }
 
+    [TestMethod]
+    public void Create_PinnedWindow_ReadsAsPinnedAndNamesNoDesktop()
+    {
+        // A pin rule keeps a stored desktop key that nothing reads, so no
+        // sentence may send the window to it — and no sentence may end in the
+        // "to " of an empty target either.
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Succeeded,
+            WindowAssignmentSkipReason.None,
+            TimeSpan.FromMilliseconds(6),
+            moveOutcome: WindowMoveOutcome.PinnedToAllDesktops,
+            switchOutcome: DesktopSwitchOutcome.NotRequested,
+            switchReason: DesktopSwitchDecisionReason.PinnedToAllDesktops);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Pinned", presentation.Outcome);
+        Assert.AreEqual("Pinned Code.exe to all desktops", presentation.Decision);
+        Assert.AreEqual("Pinned to all desktops", presentation.Movement);
+        Assert.AreEqual(
+            "No switch — the rule pins the window rather than moving it",
+            presentation.DesktopNavigation);
+        Assert.AreEqual(
+            "Pinned to all desktops. No switch — the rule pins the window rather than moving it.",
+            presentation.Diagnostic);
+        Assert.Contains("Target desktop: Every desktop.", presentation.AutomationName);
+        Assert.DoesNotContain("to code", presentation.Decision);
+    }
+
+    [TestMethod]
+    public void Create_AlreadyPinnedWindow_ReadsAsAlreadyPinned()
+    {
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.AlreadyPinnedToAllDesktops,
+            TimeSpan.FromMilliseconds(2),
+            moveOutcome: WindowMoveOutcome.AlreadyPinnedToAllDesktops,
+            switchOutcome: DesktopSwitchOutcome.NotRequested,
+            switchReason: DesktopSwitchDecisionReason.PinnedToAllDesktops);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Already pinned", presentation.Outcome);
+        Assert.AreEqual(
+            "Code.exe is already pinned to all desktops",
+            presentation.Decision);
+        Assert.AreEqual("Already pinned to all desktops", presentation.Movement);
+    }
+
+    [TestMethod]
+    public void Create_UnavailablePin_SaysTheHostCannotPinRatherThanFailing()
+    {
+        // Limited Mode leaves the window alone. Reporting a failure would send
+        // the user looking for a fault in something that never ran.
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.PinUnavailable,
+            TimeSpan.FromMilliseconds(2),
+            moveOutcome: WindowMoveOutcome.NotAttempted,
+            switchOutcome: DesktopSwitchOutcome.NotRequested,
+            switchReason: DesktopSwitchDecisionReason.PinnedToAllDesktops);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Pin unavailable", presentation.Outcome);
+        Assert.AreEqual(
+            "Skipped Code.exe: this host cannot pin windows yet",
+            presentation.Decision);
+        Assert.AreEqual("Pin not attempted", presentation.Movement);
+        Assert.DoesNotContain(
+            "failed",
+            presentation.Decision,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [TestMethod]
+    public void Create_PinHeldAcrossAForegroundActivation_ReadsAsStillPinned()
+    {
+        // The move waits for an event that repairs placement, so the row must
+        // not read as a pin that failed or a pin that never happened.
+        WindowAssignmentActivity activity = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Skipped,
+            WindowAssignmentSkipReason.PinHeldUntilRepairEvent,
+            TimeSpan.FromMilliseconds(2),
+            moveOutcome: WindowMoveOutcome.NotAttempted,
+            switchOutcome: DesktopSwitchOutcome.NotRequested,
+            switchReason: DesktopSwitchDecisionReason.PinnedToAllDesktops);
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Still pinned", presentation.Outcome);
+        Assert.AreEqual(
+            "Kept Code.exe pinned; the move waits for its next placement event",
+            presentation.Decision);
+        Assert.AreEqual("Kept pinned", presentation.Movement);
+        Assert.AreEqual("Every desktop", presentation.TargetDesktop);
+    }
+
+    [TestMethod]
+    public void Create_FailedPin_ReadsAsAPinFailureRatherThanAMoveFailure()
+    {
+        WindowAssignmentActivity source = CreateActivity(
+            Guid.NewGuid(),
+            WindowAssignmentOutcome.Failed,
+            WindowAssignmentSkipReason.None,
+            TimeSpan.FromMilliseconds(3),
+            moveOutcome: WindowMoveOutcome.NotAttempted,
+            switchOutcome: DesktopSwitchOutcome.NotRequested,
+            switchReason: DesktopSwitchDecisionReason.PinnedToAllDesktops);
+        WindowAssignmentActivity activity = source with
+        {
+            Error = new WindowAssignmentError(
+                "assignment.pin_failed",
+                "The window could not be pinned to every desktop."),
+        };
+
+        AssignmentActivityPresentation presentation =
+            AssignmentActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Pin failed", presentation.Outcome);
+        Assert.AreEqual("Couldn’t pin Code.exe to all desktops", presentation.Decision);
+        Assert.AreEqual("Pin failed", presentation.Movement);
+        Assert.Contains("assignment.pin_failed", presentation.Diagnostic);
+        Assert.DoesNotContain("move", presentation.Decision);
+    }
+
     private static WindowAssignmentActivity CreateActivity(
         Guid correlationId,
         WindowAssignmentOutcome outcome,

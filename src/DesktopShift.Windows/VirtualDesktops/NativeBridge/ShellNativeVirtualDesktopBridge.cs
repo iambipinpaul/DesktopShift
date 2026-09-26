@@ -299,6 +299,82 @@ internal sealed class ShellNativeVirtualDesktopBridge :
         }
     }
 
+    public NativeBridgeResult<bool> IsWindowPinned(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_IsWindowPinned(
+                adapter,
+                windowHandle,
+                out int isPinned,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult<bool>.Succeeded(isPinned != 0)
+                : NativeBridgeResult<bool>.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.window_pin_query_failed"));
+        }
+    }
+
+    public NativeBridgeResult PinWindow(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_PinWindow(
+                adapter,
+                windowHandle,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.window_pin_failed"));
+        }
+    }
+
+    public NativeBridgeResult UnpinWindow(nint windowHandle)
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_UnpinWindow(
+                adapter,
+                windowHandle,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.window_unpin_failed"));
+        }
+    }
+
+    public NativeBridgeResult ProbeWindowPin()
+    {
+        lock (syncRoot)
+        {
+            ObjectDisposedException.ThrowIf(adapter == 0, this);
+            int result = NativeMethods.DesktopShiftNative_ProbeWindowPin(
+                adapter,
+                out NativeMethods.NativeError error);
+            return result >= 0
+                ? NativeBridgeResult.Succeeded
+                : NativeBridgeResult.Failed(
+                    ShellNativeVirtualDesktopBridgeFactory.ToError(
+                        error,
+                        result,
+                        "native.window_pin_probe_failed"));
+        }
+    }
+
     public NativeBridgeResult StartNotifications(Action<string> onTopologyChanged)
     {
         ArgumentNullException.ThrowIfNull(onTopologyChanged);

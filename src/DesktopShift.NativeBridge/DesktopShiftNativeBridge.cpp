@@ -43,13 +43,20 @@ namespace
         // A family only earns this once its layout is confirmed; unconfirmed
         // families still enumerate, create, switch and move as before.
         bool ExtendedLayoutValidated;
+        // Whether this build family may reach the view-pin slots of the
+        // pinned-apps surface. Pinning is a second private interface rather
+        // than a slot in the manager, so it is admitted on its own evidence:
+        // it is proved at runtime by the read-only pin probe, and a family that
+        // has not been confirmed here still enumerates, creates, switches and
+        // moves exactly as before while reporting pinning as unavailable.
+        bool PinnedAppsValidated;
     };
 
     constexpr AdapterProfile Profiles[] = {
-        {22631, false, false},
-        {26100, true, true},
-        {26200, true, true},
-        {28000, false, false},
+        {22631, false, false, false},
+        {26100, true, true, true},
+        {26200, true, true, true},
+        {28000, false, false, false},
     };
 
     void ClearError(DesktopShiftNativeError* error) noexcept
@@ -263,9 +270,12 @@ namespace
     class NativeAdapter final
     {
     public:
-        explicit NativeAdapter(bool extendedLayoutValidated)
+        explicit NativeAdapter(
+            bool extendedLayoutValidated,
+            bool pinnedAppsValidated)
             : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
-              extendedLayoutValidated_(extendedLayoutValidated)
+              extendedLayoutValidated_(extendedLayoutValidated),
+              pinnedAppsValidated_(pinnedAppsValidated)
         {
             if (workEvent_ == nullptr)
             {
@@ -289,6 +299,7 @@ namespace
                 {
                     StopNotificationsCore();
                     notificationService_.Reset();
+                    pinnedApps_.Reset();
                     applicationViews_.Reset();
                     manager_.Reset();
                     shell_.Reset();
@@ -1272,20 +1283,13 @@ namespace
                 }
 
                 ComPtr<IApplicationView> view;
-                result = applicationViews_->GetViewForHwnd(
-                    window,
-                    view.ReleaseAndGetAddressOf());
-                if (FAILED(result) || view == nullptr)
+                result = ResolveApplicationView(window, view, error);
+                if (FAILED(result))
                 {
-                    // Its own stage, because this is the one step in a move that
-                    // a window can fail simply by being too new. The Shell
-                    // registers a view shortly after the window is shown, so a
-                    // caller can read this as "not yet" rather than "refused".
-                    return SetError(
-                        error,
-                        FAILED(result) ? result : HrContractMismatch,
-                        DesktopShiftNativeStageApplicationViewLookup,
-                        L"The Windows Shell could not resolve an application view for the window.");
+                    // Its own stage: a window the Shell has not registered yet
+                    // fails here, and a caller reads that as "not yet" rather
+                    // than "refused".
+                    return result;
                 }
 
                 BOOL canMove = FALSE;
@@ -1320,6 +1324,164 @@ namespace
 
                 // Shell has committed the move. Return immediately rather than
                 // adding a post-commit failure path that could invite a retry.
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        /// Whether the Shell currently shows this window on every desktop.
+        ///
+        /// The read-only half of the pin surface, gated exactly like the
+        /// mutating half: it is asked only on a build whose pin surface was
+        /// admitted and proved. The probe reaches IsViewPinned itself, one
+        /// level below this, and that is the only use of the slot that does not
+        /// depend on the probe having already answered.
+        HRESULT IsWindowPinned(
+            HWND window,
+            int32_t* isPinned,
+            DesktopShiftNativeError* error)
+        {
+            if (isPinned == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_POINTER,
+                    DesktopShiftNativeStageWindowPin,
+                    L"A pin-state output pointer was not provided.");
+            }
+            *isPinned = 0;
+
+            if (window == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageWindowPin,
+                    L"A nonzero top-level window handle is required.");
+            }
+
+            return Invoke([this, window, isPinned, error]()
+            {
+                HRESULT result = ValidatePinRequest(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                result = ValidatePinWindow(window, error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                ComPtr<IApplicationView> view;
+                result = ResolveApplicationView(window, view, error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                BOOL pinned = FALSE;
+                result = pinnedApps_->IsViewPinned(view.Get(), &pinned);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowPin,
+                        L"The Windows Shell could not report whether the window is shown on every virtual desktop.");
+                }
+
+                *isPinned = pinned ? 1 : 0;
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
+        HRESULT PinWindow(HWND window, DesktopShiftNativeError* error)
+        {
+            return SetWindowPinned(window, true, error);
+        }
+
+        HRESULT UnpinWindow(HWND window, DesktopShiftNativeError* error)
+        {
+            return SetWindowPinned(window, false, error);
+        }
+
+        /// Proves the pinned-apps surface is laid out where this build family
+        /// says it is, without changing anything.
+        ///
+        /// IsViewPinned is a pure query, so a wrong answer costs nothing while a
+        /// wrong *slot* would: the three slots ahead of the view trio are app-id
+        /// pins, and reaching past them on a build whose layout has moved would
+        /// pin the wrong thing. The subject is a window the Shell already owns —
+        /// whatever is foreground now, or the Shell's own window when nothing is
+        /// focused — so the probe needs nothing a caller has to set up.
+        HRESULT ProbeWindowPin(DesktopShiftNativeError* error)
+        {
+            return Invoke([this, error]()
+            {
+                if (!behaviorValidated_)
+                {
+                    return SetError(
+                        error,
+                        HrAdapterNotValidated,
+                        DesktopShiftNativeStageWindowPin,
+                        L"The pin surface probe is disabled until harmless adapter validation succeeds.");
+                }
+
+                if (!pinnedAppsValidated_)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+                        DesktopShiftNativeStageWindowPin,
+                        L"This Windows build family is not cleared for the window pin surface.");
+                }
+
+                HRESULT result = EnsurePinnedApps(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                // Nothing is chosen about the window beyond it being one the
+                // Shell tracks: the question is whether the surface answers at
+                // all, not what it answers.
+                HWND subject = GetForegroundWindow();
+                if (subject == nullptr)
+                {
+                    subject = GetShellWindow();
+                }
+
+                if (subject == nullptr)
+                {
+                    return SetError(
+                        error,
+                        HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE),
+                        DesktopShiftNativeStageWindowPin,
+                        L"The pin surface probe found no window it could ask about.");
+                }
+
+                ComPtr<IApplicationView> view;
+                result = ResolveApplicationView(subject, view, error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                BOOL pinned = FALSE;
+                result = pinnedApps_->IsViewPinned(view.Get(), &pinned);
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowPin,
+                        L"The pin surface did not answer its first question, so this build does not lay the pinned-apps vtable out where DesktopShift expects.");
+                }
+
+                pinProbed_ = true;
                 ClearError(error);
                 return S_OK;
             });
@@ -1520,6 +1682,217 @@ namespace
             return S_OK;
         }
 
+        /// Resolves the pinned-apps service the same way the notification
+        /// service is resolved: on first use, from the shell, and without
+        /// making the adapter's activation depend on it. A machine that cannot
+        /// answer for pinning is still a machine that enumerates, creates,
+        /// switches and moves.
+        HRESULT EnsurePinnedApps(DesktopShiftNativeError* error)
+        {
+            if (pinnedApps_ != nullptr)
+            {
+                return S_OK;
+            }
+
+            HRESULT result = shell_->QueryService(
+                CLSID_VirtualDesktopPinnedApps,
+                __uuidof(IVirtualDesktopPinnedApps),
+                reinterpret_cast<void**>(pinnedApps_.ReleaseAndGetAddressOf()));
+            if (FAILED(result))
+            {
+                return SetError(
+                    error,
+                    result,
+                    DesktopShiftNativeStageWindowPin,
+                    L"The virtual-desktop pinned-apps service was unavailable.");
+            }
+
+            return S_OK;
+        }
+
+        /// Resolves the application view the Shell keeps for a window.
+        ///
+        /// Every operation that targets a window needs one, and each gets it
+        /// the same way: through the view collection the Shell already exposes.
+        /// This is also the one step in such an operation that a window can
+        /// fail simply by being too new — the Shell registers a view shortly
+        /// after the window is shown — so it reports under its own stage and a
+        /// caller can read it as "not yet" rather than "refused".
+        HRESULT ResolveApplicationView(
+            HWND window,
+            ComPtr<IApplicationView>& view,
+            DesktopShiftNativeError* error) noexcept
+        {
+            if (applicationViews_ == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_UNEXPECTED,
+                    DesktopShiftNativeStageApplicationViewActivation,
+                    L"The build-specific application-view collection is not active.");
+            }
+
+            HRESULT result = applicationViews_->GetViewForHwnd(
+                window,
+                view.ReleaseAndGetAddressOf());
+            if (FAILED(result) || view == nullptr)
+            {
+                return SetError(
+                    error,
+                    FAILED(result) ? result : HrContractMismatch,
+                    DesktopShiftNativeStageApplicationViewLookup,
+                    L"The Windows Shell could not resolve an application view for the window.");
+            }
+
+            return S_OK;
+        }
+
+        /// The gate every pin operation passes before a pin slot is reached.
+        ///
+        /// Three questions are asked in the order that keeps the pin surface
+        /// unreachable until it is earned: harmless validation, the per-build
+        /// admission, and the read-only probe. A family that never admitted the
+        /// surface answers "not supported" rather than "failed", because
+        /// pinning being unavailable on that build is a property of the machine
+        /// and not something a caller can retry away.
+        HRESULT ValidatePinRequest(DesktopShiftNativeError* error)
+        {
+            if (!behaviorValidated_)
+            {
+                return SetError(
+                    error,
+                    HrAdapterNotValidated,
+                    DesktopShiftNativeStageWindowPin,
+                    L"Window pinning is disabled until harmless adapter validation succeeds.");
+            }
+
+            if (!pinnedAppsValidated_)
+            {
+                return SetError(
+                    error,
+                    HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
+                    DesktopShiftNativeStageWindowPin,
+                    L"This Windows build family is not cleared for the window pin surface.");
+            }
+
+            if (!pinProbed_)
+            {
+                return SetError(
+                    error,
+                    HrAdapterNotValidated,
+                    DesktopShiftNativeStageWindowPin,
+                    L"Window pinning is disabled until the pin surface probe has succeeded.");
+            }
+
+            return S_OK;
+        }
+
+        /// Validates the window a pin was asked about.
+        ///
+        /// The pin surface takes application views, and only a live top-level
+        /// window has one, so the checks are the ones a move makes: the window
+        /// must still exist, its root must exist, and the handle must be that
+        /// root.
+        HRESULT ValidatePinWindow(
+            HWND window,
+            DesktopShiftNativeError* error) noexcept
+        {
+            if (!IsWindow(window))
+            {
+                return SetError(
+                    error,
+                    HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE),
+                    DesktopShiftNativeStageWindowPin,
+                    L"The top-level window handle is no longer live.");
+            }
+
+            const HWND root = GetAncestor(window, GA_ROOT);
+            if (root == nullptr || !IsWindow(root))
+            {
+                return SetError(
+                    error,
+                    HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE),
+                    DesktopShiftNativeStageWindowPin,
+                    L"The top-level window handle is no longer live.");
+            }
+
+            if (root != window)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageWindowPin,
+                    L"The window handle does not identify a top-level window.");
+            }
+
+            return S_OK;
+        }
+
+        /// Applies or releases the pin for one window.
+        ///
+        /// Both directions are one call — PinView and UnpinView differ in which
+        /// slot they are, not in what they need — so they share the gate, the
+        /// window checks and the view lookup, and split only at the slot. A
+        /// refusal is reported and never retried: the Shell's answer does not
+        /// change between two identical calls.
+        HRESULT SetWindowPinned(
+            HWND window,
+            bool pinned,
+            DesktopShiftNativeError* error)
+        {
+            if (window == nullptr)
+            {
+                return SetError(
+                    error,
+                    E_INVALIDARG,
+                    DesktopShiftNativeStageWindowPin,
+                    L"A nonzero top-level window handle is required.");
+            }
+
+            return Invoke([this, window, pinned, error]()
+            {
+                HRESULT result = ValidatePinRequest(error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                result = ValidatePinWindow(window, error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                ComPtr<IApplicationView> view;
+                result = ResolveApplicationView(window, view, error);
+                if (FAILED(result))
+                {
+                    return result;
+                }
+
+                result = pinned
+                    ? pinnedApps_->PinView(view.Get())
+                    : pinnedApps_->UnpinView(view.Get());
+                if (FAILED(result))
+                {
+                    return SetError(
+                        error,
+                        result,
+                        DesktopShiftNativeStageWindowPin,
+                        pinned
+                            ? L"The Windows Shell rejected showing the window on every virtual desktop."
+                            : L"The Windows Shell rejected returning the window to a single virtual desktop.");
+                }
+
+                // Shell has committed the change. Return immediately rather than
+                // adding a post-commit failure path that could invite a retry,
+                // and let the caller read the state back through the query
+                // instead of reporting what it hoped for.
+                ClearError(error);
+                return S_OK;
+            });
+        }
+
         HRESULT ReadSnapshot(DesktopShiftNativeError* error)
         {
             if (manager_ == nullptr)
@@ -1718,6 +2091,7 @@ namespace
         ComPtr<IServiceProvider> shell_;
         ComPtr<IVirtualDesktopManagerInternal24H2> manager_;
         ComPtr<IApplicationViewCollection> applicationViews_;
+        ComPtr<IVirtualDesktopPinnedApps> pinnedApps_;
         ComPtr<IVirtualDesktopNotificationService24H2> notificationService_;
         ComPtr<NotificationSink> notificationSink_;
         DWORD notificationCookie_{0};
@@ -1725,7 +2099,9 @@ namespace
         GUID currentDesktop_{};
         bool behaviorValidated_{false};
         bool extendedLayoutValidated_{false};
+        bool pinnedAppsValidated_{false};
         bool layoutProbed_{false};
+        bool pinProbed_{false};
     };
 
     NativeAdapter* AsAdapter(void* adapter) noexcept
@@ -1789,7 +2165,9 @@ extern "C"
 
         try
         {
-            auto value = std::make_unique<NativeAdapter>(profile->ExtendedLayoutValidated);
+            auto value = std::make_unique<NativeAdapter>(
+                profile->ExtendedLayoutValidated,
+                profile->PinnedAppsValidated);
             const HRESULT result = value->Activate(error);
             if (FAILED(result))
             {
@@ -2090,6 +2468,105 @@ extern "C"
         catch (...)
         {
             return SetUnexpectedError(error, DesktopShiftNativeStageWindowMove);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_IsWindowPinned(
+        void* adapter,
+        intptr_t windowHandle,
+        int32_t* isPinned,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        if (isPinned == nullptr)
+        {
+            return SetError(
+                error,
+                E_POINTER,
+                DesktopShiftNativeStageWindowPin,
+                L"A pin-state output pointer was not provided.");
+        }
+
+        try
+        {
+            const HWND requestedWindow = reinterpret_cast<HWND>(windowHandle);
+            return AsAdapter(adapter)->IsWindowPinned(
+                requestedWindow,
+                isPinned,
+                error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageWindowPin);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_PinWindow(
+        void* adapter,
+        intptr_t windowHandle,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        try
+        {
+            const HWND requestedWindow = reinterpret_cast<HWND>(windowHandle);
+            return AsAdapter(adapter)->PinWindow(requestedWindow, error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageWindowPin);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_UnpinWindow(
+        void* adapter,
+        intptr_t windowHandle,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        try
+        {
+            const HWND requestedWindow = reinterpret_cast<HWND>(windowHandle);
+            return AsAdapter(adapter)->UnpinWindow(requestedWindow, error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageWindowPin);
+        }
+    }
+
+    int32_t __stdcall DesktopShiftNative_ProbeWindowPin(
+        void* adapter,
+        DesktopShiftNativeError* error) noexcept
+    {
+        ClearError(error);
+        if (FAILED(ValidateHandle(adapter, error)))
+        {
+            return E_POINTER;
+        }
+
+        try
+        {
+            return AsAdapter(adapter)->ProbeWindowPin(error);
+        }
+        catch (...)
+        {
+            return SetUnexpectedError(error, DesktopShiftNativeStageWindowPin);
         }
     }
 

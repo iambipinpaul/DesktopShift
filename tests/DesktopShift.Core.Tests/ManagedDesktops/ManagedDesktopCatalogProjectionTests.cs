@@ -288,6 +288,43 @@ public sealed class ManagedDesktopCatalogProjectionTests
             DesktopTopologyProviderAvailability.Ready,
             "Ready.");
 
+    [TestMethod]
+    public void Project_DoesNotCountRulesThatNeverMoveAWindow()
+    {
+        // A rule that pins its application, or exempts it, still stores whatever
+        // key it had — but nothing is sent to that desktop, so counting it would
+        // tell a user a desktop is where an application lives when nothing puts
+        // it there.
+        Guid codeId = Guid.NewGuid();
+        ConfigurationDocument configuration = new(
+            ConfigurationDefaults.CurrentSchemaVersion,
+            [new ManagedDesktopDefinition("code", "Code", 1, true)],
+            [
+                CreateRule("vscode", "code", isEnabled: true),
+                CreateRule("music", "code", isEnabled: true) with
+                {
+                    Action = ApplicationRuleAction.ShowOnAllDesktops,
+                },
+                CreateRule("paint", "code", isEnabled: true) with
+                {
+                    Action = ApplicationRuleAction.AllowAnywhere,
+                },
+            ],
+            new BehaviorSettings(false, false, false));
+
+        ManagedDesktopCatalog catalog = ManagedDesktopCatalogProjection.Project(
+            configuration,
+            CreateSnapshot(
+                ManagedDesktopReconciliationOutcome.Succeeded,
+                Bound("code", "Code", 1, true, codeId, "Code", 0)),
+            [],
+            CreateProviderState());
+
+        ManagedDesktopCatalogEntry code = catalog.Entries.Single();
+        Assert.AreEqual(1, code.AssignedRuleCount);
+        Assert.AreEqual(1, code.EnabledRuleCount);
+    }
+
     private static ConfigurationDocument CreateConfiguration(
         params ManagedDesktopDefinition[] definitions) =>
         new(

@@ -71,6 +71,76 @@ public sealed class WindowAssignmentService(
         long startedTimestamp = timeProvider.GetTimestamp();
         bool isFirstForegroundActivation = false;
 
+        // A pin is the whole placement, so it is decided before anything that
+        // belongs to a move: no desktop is resolved, the switch policy is never
+        // consulted, and the mover is never reached. That is what keeps a
+        // pinned window from being moved out from under the user while its rule
+        // says the window belongs everywhere.
+        if (request.Rule.Destination == WindowRuleDestination.PinnedToAllDesktops)
+        {
+            return await PinAsync(
+                request,
+                correlationId,
+                startedAtUtc,
+                startedTimestamp,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        // Only the events that repair placement release a pin, and they release
+        // it here, before the destination is resolved and before the window's
+        // current desktop is read. Those steps exist to place the window, and a
+        // pin an earlier rule left must not outlive that rule just because
+        // placement cannot happen: an unresolved destination or an unreadable
+        // desktop leaves the pin dropped rather than carried to some later
+        // event. A release that is refused fails the assignment, because the
+        // window may still be on every desktop and nothing below may read as
+        // though it were free of the pin.
+        if (WindowPinRelease.IsRepairEvent(request.Trigger))
+        {
+            DesktopTopologyProviderResult repairRelease;
+            try
+            {
+                repairRelease = await WindowPinRelease
+                    .ReleaseHeldPinAsync(
+                        placementService,
+                        request.WindowHandle,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                repairRelease = DesktopTopologyProviderResult.Failed(
+                    "assignment.unpin_exception",
+                    "The window's pin could not be released.",
+                    exception.HResult);
+            }
+
+            if (!repairRelease.IsSuccess)
+            {
+                return await RecordAsync(
+                    CreateActivity(
+                        request,
+                        correlationId,
+                        startedAtUtc,
+                        startedTimestamp,
+                        WindowAssignmentOutcome.Failed,
+                        WindowAssignmentSkipReason.None,
+                        targetDesktopId: null,
+                        previousDesktopId: null,
+                        ToAssignmentError(
+                            repairRelease.Error,
+                            "assignment.unpin_failed",
+                            "The window's pin could not be released before moving it."),
+                        WindowMoveOutcome.Failed),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+
         if (request.Trigger == WindowEventKind.ForegroundActivated)
         {
             if (suppression is not null &&
@@ -220,12 +290,85 @@ public sealed class WindowAssignmentService(
                 cancellationToken).ConfigureAwait(false);
         }
 
+        bool needsMove = previousDesktopId != targetDesktopId;
+
+        // A non-repair event never releases a pin: a foreground activation must
+        // never move a window out from under a click, and the lifecycle events a
+        // move rule answers through the manual reassignment fallback are not
+        // repairs either. Ask whether a pin is held before doing anything: a
+        // window whose rule stopped pinning it keeps the pin — and its place —
+        // until a repair event drops it, while a window that holds no pin moves
+        // exactly as it always did.
+        if (needsMove && !WindowPinRelease.IsRepairEvent(request.Trigger))
+        {
+            DesktopTopologyProviderResult<bool> heldPin;
+            try
+            {
+                heldPin = await WindowPinRelease
+                    .QueryHeldPinAsync(
+                        placementService,
+                        request.WindowHandle,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                heldPin = DesktopTopologyProviderResult<bool>.Failed(
+                    "assignment.unpin_exception",
+                    "The window's pin could not be released.",
+                    exception.HResult);
+            }
+
+            if (!heldPin.IsSuccess)
+            {
+                return await RecordAsync(
+                    CreateActivity(
+                        request,
+                        correlationId,
+                        startedAtUtc,
+                        startedTimestamp,
+                        WindowAssignmentOutcome.Failed,
+                        WindowAssignmentSkipReason.None,
+                        targetDesktopId,
+                        previousDesktopId,
+                        ToAssignmentError(
+                            heldPin.Error,
+                            "assignment.unpin_failed",
+                            "The window's pin could not be released before moving it."),
+                        WindowMoveOutcome.Failed),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+
+            if (heldPin.Value)
+            {
+                return await RecordAsync(
+                    CreateActivity(
+                        request,
+                        correlationId,
+                        startedAtUtc,
+                        startedTimestamp,
+                        WindowAssignmentOutcome.Skipped,
+                        WindowAssignmentSkipReason.PinHeldUntilRepairEvent,
+                        targetDesktopId,
+                        previousDesktopId,
+                        error: null,
+                        WindowMoveOutcome.NotAttempted,
+                        PinnedSwitchResult),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         // An unplaced window is moved rather than abandoned. Moving a window
         // that already sits on the target desktop is a no-op, so being wrong
         // costs nothing, and if Windows still has not placed the window it
         // refuses with an HRESULT of its own instead of the window being left
         // behind until it next takes focus.
-        if (previousDesktopId != targetDesktopId)
+        if (needsMove)
         {
             DesktopTopologyProviderResult move;
             try
@@ -369,6 +512,170 @@ public sealed class WindowAssignmentService(
         return await RecordAsync(activity, CancellationToken.None)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Pins one window to every virtual desktop, and records what happened.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is moved and no desktop is resolved: the pin itself is the
+    /// placement. The three answers mirror a move's, so Activity reads pinned
+    /// beside moved, already pinned beside already correct, and a pin that
+    /// could not be applied beside a move that could not be made. On a host
+    /// that never proved a pinning surface the outcome is a deliberate skip
+    /// that says so, rather than a failure the user cannot act on.
+    /// </remarks>
+    private async ValueTask<WindowAssignmentActivity> PinAsync(
+        WindowAssignmentRequest request,
+        Guid correlationId,
+        DateTimeOffset startedAtUtc,
+        long startedTimestamp,
+        CancellationToken cancellationToken)
+    {
+        DesktopTopologyProviderResult<bool> pinned;
+        try
+        {
+            pinned = await placementService
+                .GetWindowPinnedAsync(request.WindowHandle, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return await RecordAsync(
+                CreateActivity(
+                    request,
+                    correlationId,
+                    startedAtUtc,
+                    startedTimestamp,
+                    WindowAssignmentOutcome.Failed,
+                    WindowAssignmentSkipReason.None,
+                    targetDesktopId: null,
+                    previousDesktopId: null,
+                    new WindowAssignmentError(
+                        "assignment.pin_state_exception",
+                        "The window's pin state could not be queried.",
+                        exception.HResult),
+                    WindowMoveOutcome.NotAttempted,
+                    PinnedSwitchResult),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!pinned.IsSuccess)
+        {
+            bool isUnsupported =
+                pinned.Outcome == DesktopTopologyResultOutcome.Unsupported;
+            return await RecordAsync(
+                CreateActivity(
+                    request,
+                    correlationId,
+                    startedAtUtc,
+                    startedTimestamp,
+                    isUnsupported
+                        ? WindowAssignmentOutcome.Skipped
+                        : WindowAssignmentOutcome.Failed,
+                    isUnsupported
+                        ? WindowAssignmentSkipReason.PinUnavailable
+                        : WindowAssignmentSkipReason.None,
+                    targetDesktopId: null,
+                    previousDesktopId: null,
+                    ToAssignmentError(
+                        pinned.Error,
+                        "assignment.pin_state_failed",
+                        "The window's pin state could not be queried."),
+                    WindowMoveOutcome.NotAttempted,
+                    PinnedSwitchResult),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
+        if (pinned.Value)
+        {
+            // Already pinned is this rule's answer to "already on the target
+            // desktop": the window is where the rule wants it, and nothing was
+            // asked of the Shell this time.
+            return await RecordAsync(
+                CreateActivity(
+                    request,
+                    correlationId,
+                    startedAtUtc,
+                    startedTimestamp,
+                    WindowAssignmentOutcome.Skipped,
+                    WindowAssignmentSkipReason.AlreadyPinnedToAllDesktops,
+                    targetDesktopId: null,
+                    previousDesktopId: null,
+                    error: null,
+                    WindowMoveOutcome.AlreadyPinnedToAllDesktops,
+                    PinnedSwitchResult),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        DesktopTopologyProviderResult pin;
+        try
+        {
+            pin = await placementService
+                .PinWindowAsync(request.WindowHandle, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            pin = DesktopTopologyProviderResult.Failed(
+                "assignment.pin_exception",
+                "The window pin failed unexpectedly.",
+                exception.HResult);
+        }
+
+        bool pinUnsupported =
+            pin.Outcome == DesktopTopologyResultOutcome.Unsupported;
+
+        // A pin result is post-commit state, so it is persisted even when the
+        // caller's token becomes cancelled immediately after the call returns.
+        return await RecordAsync(
+            CreateActivity(
+                request,
+                correlationId,
+                startedAtUtc,
+                startedTimestamp,
+                pin.IsSuccess
+                    ? WindowAssignmentOutcome.Succeeded
+                    : pinUnsupported
+                        ? WindowAssignmentOutcome.Skipped
+                        : WindowAssignmentOutcome.Failed,
+                pinUnsupported
+                    ? WindowAssignmentSkipReason.PinUnavailable
+                    : WindowAssignmentSkipReason.None,
+                targetDesktopId: null,
+                previousDesktopId: null,
+                pin.IsSuccess
+                    ? null
+                    : ToAssignmentError(
+                        pin.Error,
+                        "assignment.pin_failed",
+                        "The window could not be pinned to every desktop."),
+                pin.IsSuccess
+                    ? WindowMoveOutcome.PinnedToAllDesktops
+                    : WindowMoveOutcome.NotAttempted,
+                PinnedSwitchResult),
+            CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The switch answer every pin gives: none was considered.
+    /// </summary>
+    /// <remarks>
+    /// A pin never relocates the window, and the switch policy only says when a
+    /// move may switch the foreground desktop. Recording the reason keeps
+    /// Activity from reading as though a switch had been weighed and refused.
+    /// </remarks>
+    private static DesktopSwitchResult PinnedSwitchResult { get; } = new(
+        DesktopSwitchOutcome.NotRequested,
+        DesktopSwitchDecisionReason.PinnedToAllDesktops,
+        TimeSpan.Zero);
 
     /// <summary>
     /// Where a request's rule sends the window, and whether that destination
