@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
@@ -11,7 +11,7 @@
     submission with it, so the manifest and any certificate used to validate a
     package locally must both carry this exact value.
   -->
-  <Identity Name="BipinPaul.DesktopShift" Publisher="CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47" Version="1.0.0.0" ProcessorArchitecture="x64" />
+  <Identity Name="BipinPaul.DesktopShift" Publisher="CN=B035082D-0ECF-4DD6-B68E-293CC1A48C47" Version="1.2.0.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>DesktopShift</DisplayName>
     <PublisherDisplayName>Bipin Paul</PublisherDisplayName>
