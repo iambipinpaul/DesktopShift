@@ -19,7 +19,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         Architecture.X64);
 
     [TestMethod]
-    public async Task ValidatedAdapter_EnablesManagedDesktopCreationCapability()
+    [DataRow(26200, Architecture.X64, "windows.shell.25h2.26200")]
+    [DataRow(26300, Architecture.Arm64, "windows.shell.26h2.26300")]
+    public async Task ValidatedAdapter_EnablesManagedDesktopCreationCapability(
+        int buildNumber,
+        Architecture architecture,
+        string expectedProviderId)
     {
         FakeNativeBridge bridge = new(CreateSnapshot());
         using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
@@ -27,11 +32,12 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
                 NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
 
         DesktopTopologyProviderResult result =
-            await provider.TestCompatibilityAsync(Build26200);
+            await provider.TestCompatibilityAsync(new WindowsBuildInfo(
+                true, 10, 0, buildNumber, 9711, architecture));
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
-        Assert.AreEqual("windows.shell.25h2.26200", provider.Identity.Id);
+        Assert.AreEqual(expectedProviderId, provider.Identity.Id);
         Assert.IsTrue(provider.Identity.UsesPrivateApis);
         Assert.IsTrue(provider.Capabilities.CanEnumerateDesktops);
         Assert.IsTrue(provider.Capabilities.CanGetCurrentDesktop);
@@ -305,6 +311,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     [DataRow(22631, "windows.shell.23h2.22631")]
     [DataRow(26100, "windows.shell.24h2.26100")]
     [DataRow(26200, "windows.shell.25h2.26200")]
+    [DataRow(26300, "windows.shell.26h2.26300")]
     [DataRow(28000, "windows.shell.26h1.28000")]
     public async Task BuildSelection_PreservesExactFamilyInFallback(
         int buildNumber,

@@ -785,6 +785,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             {
                 26100 => "Windows Shell adapter (24H2)",
                 26200 => "Windows Shell adapter (25H2)",
+                26300 => "Windows Shell adapter (26H2)",
                 _ => "Windows Shell adapter",
             },
             "shell-abi-24h2-v1",
@@ -797,6 +798,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             22631 => "windows.shell.23h2.22631",
             26100 => "windows.shell.24h2.26100",
             26200 => "windows.shell.25h2.26200",
+            26300 => "windows.shell.26h2.26300",
             28000 => "windows.shell.26h1.28000",
             _ => $"windows.shell.unrecognized.{build}",
         };

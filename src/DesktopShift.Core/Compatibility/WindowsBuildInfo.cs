@@ -99,6 +99,10 @@ public static class WindowsBuildClassifier
                 WindowsBuildSupport.Supported,
                 $"Windows 11 25H2 (build {build.ExactVersion})",
                 "This Windows 11 build family is recognized."),
+            26300 => new(
+                WindowsBuildSupport.Supported,
+                $"Windows 11 26H2 (build {build.ExactVersion})",
+                "This Windows 11 build family is recognized."),
             28000 => new(
                 WindowsBuildSupport.Supported,
                 $"Windows 11 26H1 (build {build.ExactVersion})",
