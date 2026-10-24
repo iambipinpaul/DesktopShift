@@ -105,24 +105,21 @@ public sealed class NativeBridgeOptInContractTests
     }
 
     [TestMethod]
-    public async Task CurrentMachine_HarmlessInventoryContractOnly()
+    [DataRow(0)]
+    [DataRow(28000)]
+    [DataRow(29999)]
+    public async Task CurrentMachine_HarmlessInventoryContractOnly(int buildOverride)
     {
-        if (!string.Equals(
-                Environment.GetEnvironmentVariable(
-                    "DESKTOPSHIFT_RUN_NATIVE_CONTRACT_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-        {
-            Assert.Inconclusive(
-                "Set DESKTOPSHIFT_RUN_NATIVE_CONTRACT_TESTS=1 on a designated Windows test machine.");
-        }
+        RequireOptIn();
 
+        // Override only build metadata; these tests still exercise the real
+        // Shell interfaces on this machine, not a future Windows installation.
         OperatingSystemVersion version = GetCurrentWindowsVersion();
         WindowsBuildInfo build = new(
             OperatingSystem.IsWindows(),
             version.Major,
             version.Minor,
-            version.Build,
+            buildOverride == 0 ? version.Build : buildOverride,
             version.Revision,
             RuntimeInformation.OSArchitecture);
         using ValidatedVirtualDesktopTopologyProvider provider = new();
@@ -160,6 +157,89 @@ public sealed class NativeBridgeOptInContractTests
         // Switch targets only the already-current desktop, so this contract
         // does not change the user's active desktop. It deliberately does not
         // create, remove, rename, or move any desktop or window.
+    }
+
+    [TestMethod]
+    public void CurrentMachine_FutureBuildRetainsValidationAndProbeGates()
+    {
+        RequireOptIn();
+        NativeBridgeResult<INativeVirtualDesktopBridge> activation =
+            new ShellNativeVirtualDesktopBridgeFactory().TryCreate(29999);
+        Assert.IsTrue(activation.IsSuccess, activation.Error?.Message);
+        using INativeVirtualDesktopBridge bridge = activation.Value!;
+
+        NativeBridgeResult switching = bridge.SwitchDesktop(Guid.NewGuid());
+        Assert.IsFalse(switching.IsSuccess);
+        Assert.AreEqual(unchecked((int)0x80040201), switching.Error?.HResult);
+
+        Assert.IsTrue(bridge.Validate().IsSuccess);
+        Assert.IsTrue(bridge.ProbeDesktopLookup().IsSuccess);
+
+        // Revalidation invalidates the earlier optional-probe results. The
+        // targets below cannot identify a real desktop or window even if a
+        // gate regresses; the specific refusal proves it is the gate answering.
+        Assert.IsTrue(bridge.Validate().IsSuccess);
+        NativeBridgeResult rename = bridge.SetDesktopName(Guid.NewGuid(), "Unused");
+        NativeBridgeResult reorder = bridge.MoveDesktop(Guid.NewGuid(), 0);
+        Assert.AreEqual(unchecked((int)0x80040201), rename.Error?.HResult);
+        Assert.AreEqual(unchecked((int)0x80040201), reorder.Error?.HResult);
+    }
+
+    [TestMethod]
+    public void CurrentMachine_RevalidationClearsSuccessfulPinProbe()
+    {
+        RequireOptIn();
+        NativeBridgeResult<INativeVirtualDesktopBridge> activation =
+            new ShellNativeVirtualDesktopBridgeFactory().TryCreate(29999);
+        Assert.IsTrue(activation.IsSuccess, activation.Error?.Message);
+        using INativeVirtualDesktopBridge bridge = activation.Value!;
+        Assert.IsTrue(bridge.Validate().IsSuccess);
+        NativeBridgeResult probe = bridge.ProbeWindowPin();
+        if (!probe.IsSuccess)
+        {
+            Assert.Inconclusive($"This contract requires a pin-capable host: {probe.Error?.Message}");
+        }
+
+        Assert.IsTrue(bridge.Validate().IsSuccess);
+        // An invalid HWND cannot change a real window if this gate regresses.
+        NativeBridgeResult pin = bridge.PinWindow(1);
+        Assert.AreEqual(unchecked((int)0x80040201), pin.Error?.HResult);
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(22000)]
+    [DataRow(22631)]
+    [DataRow(26099)]
+    public void NativeBridge_OlderBuildsAreRejectedBeforeShellActivation(int build)
+    {
+        int result = NativeMethods.DesktopShiftNative_CreateAdapter(
+            (uint)build, out nint adapter, out NativeMethods.NativeError error);
+        try
+        {
+            Assert.IsLessThan(0, result);
+            Assert.AreEqual(0, adapter);
+            Assert.AreEqual(NativeMethods.NativeStage.BuildSelection, error.Stage);
+        }
+        finally
+        {
+            if (adapter != 0)
+            {
+                NativeMethods.DesktopShiftNative_DestroyAdapter(adapter);
+            }
+        }
+    }
+
+    private static void RequireOptIn()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("DESKTOPSHIFT_RUN_NATIVE_CONTRACT_TESTS"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            Assert.Inconclusive(
+                "Set DESKTOPSHIFT_RUN_NATIVE_CONTRACT_TESTS=1 on a designated Windows test machine.");
+        }
     }
 
     private static OperatingSystemVersion GetCurrentWindowsVersion()

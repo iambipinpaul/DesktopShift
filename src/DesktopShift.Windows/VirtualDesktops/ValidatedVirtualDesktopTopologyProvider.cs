@@ -265,10 +265,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         // Naming and reordering need manager slots past the validated prefix,
         // so they are not inferred from Full Mode — they are asked for and
-        // answered together. The bridge
-        // refuses outright on a build family that is not cleared for those
-        // slots, so an unrecognized build never reaches them, and the probe
-        // itself only ever performs a read-only lookup.
+        // answered together. The bridge negotiates the known manager interface
+        // by IID, validates its base behavior, then performs a read-only lookup.
+        // A new build number does not substitute for any of those checks.
         //
         // A refusal here is not a fallback. It costs naming and desktop
         // reordering while leaving every other Full Mode capability standing.
@@ -786,7 +785,8 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
                 26100 => "Windows Shell adapter (24H2)",
                 26200 => "Windows Shell adapter (25H2)",
                 26300 => "Windows Shell adapter (26H2)",
-                _ => "Windows Shell adapter",
+                28000 => "Windows Shell adapter (26H1)",
+                _ => "Windows Shell adapter (runtime validated)",
             },
             "shell-abi-24h2-v1",
             DesktopTopologyProviderMode.Full,
@@ -800,6 +800,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             26200 => "windows.shell.25h2.26200",
             26300 => "windows.shell.26h2.26300",
             28000 => "windows.shell.26h1.28000",
+            >= 26100 => $"windows.shell.runtime.{build}",
             _ => $"windows.shell.unrecognized.{build}",
         };
 
@@ -922,10 +923,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     /// <remarks>
     /// <para>
     /// The capability is read rather than tried. Pinning is asked and answered
-    /// at activation: a build whose pin surface the read-only probe never
-    /// proved advertises no pin capability, and a machine in Limited Mode
-    /// advertises nothing. Reading the flag is what keeps every pin slot off a
-    /// build that never admitted the surface.
+    /// at activation: an interface whose read-only probe failed advertises no
+    /// pin capability, and a machine in Limited Mode advertises nothing.
+    /// Reading the flag keeps mutating pin slots off an unvalidated interface.
     /// </para>
     /// <para>
     /// The adapter is held through the single native call, under the same lock

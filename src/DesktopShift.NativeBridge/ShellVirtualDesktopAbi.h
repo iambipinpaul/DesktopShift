@@ -1,7 +1,9 @@
 #pragma once
 
 // This is the only file in DesktopShift that declares private Windows Shell
-// virtual-desktop COM ABI. The declarations are intentionally build-scoped.
+// virtual-desktop COM ABI. Activation negotiates these exact interface IIDs;
+// it does not infer the layout from the Windows build number. Automatic
+// compatibility depends on those IIDs continuing to identify these contracts.
 
 #include <inspectable.h>
 #include <objectarray.h>
@@ -52,11 +54,9 @@ namespace DesktopShift::NativeBridge::ShellAbi
     // DesktopShift may call them.
     //
     // Of the view trio only IsViewPinned is reached before this layout has been
-    // proved, and proving it is exactly what the read-only pin probe does: it
-    // queries a window the Shell already owns and changes nothing. PinView and
-    // UnpinView are reached only after that probe has answered and only behind
-    // the per-build AdapterProfile gate, so a build whose pin surface was never
-    // admitted never has a mutating pin slot called on it.
+    // checked, and the read-only pin probe queries a window the Shell already
+    // owns without changing it. The pinned-apps service must expose this exact
+    // IID, and PinView and UnpinView are reached only after that probe succeeds.
     MIDL_INTERFACE("4CE81583-1E4C-4632-A621-07A53543148F")
     IVirtualDesktopPinnedApps : public IUnknown
     {
@@ -121,17 +121,18 @@ namespace DesktopShift::NativeBridge::ShellAbi
         //
         // Three things hold that risk down, and all three are required:
         //
-        //   1. The AdapterProfile table in DesktopShiftNativeBridge.cpp gates
-        //      extended-layout operations per build. An unrecognized build
-        //      never reaches any slot declared here, so the first call is never
-        //      a blind one.
+        //   1. Activation negotiates this exact manager IID and validates the
+        //      inventory and notification contract before extended slots are
+        //      reached. This assumes the IID retains its declared COM contract;
+        //      a private interface changing layout under the same IID remains
+        //      a compatibility risk that a read-only probe cannot eliminate.
         //   2. The destructive RemoveDesktop slot and the unused slot 13 keep
         //      deliberately unusable signatures and DoNotCall names.
         //   3. FindDesktop at slot 12 is read-only and is called first, as a
         //      behavioural probe. If it does not return the desktop whose ID it
         //      was handed, the layout has moved and both operations stay off.
         //
-        // Reordering is exported only after the build gate and read-only probe.
+        // Reordering is usable only after validation and the read-only probe.
         // Removal remains unavailable at every layer.
         virtual HRESULT STDMETHODCALLTYPE MoveDesktop(
             IVirtualDesktop24H2* desktop,

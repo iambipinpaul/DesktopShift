@@ -114,11 +114,10 @@ extern "C"
         const GUID* desktopId,
         DesktopShiftNativeError* error) noexcept;
 
-    // Proves, without changing anything, that this build lays the manager
-    // vtable out where DesktopShift believes it does. Resolves a desktop the
-    // caller already enumerated through FindDesktop and checks the identity
-    // that comes back. A build whose layout has shifted fails here instead of
-    // discovering it during a rename.
+    // Checks, without changing anything, the known manager interface negotiated
+    // during activation. Resolves an enumerated desktop through FindDesktop
+    // and checks its returned identity. A failed lookup or identity mismatch
+    // disables naming and reordering. The IID must retain its known contract.
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_ProbeDesktopLookup(
         void* adapter,
         DesktopShiftNativeError* error) noexcept;
@@ -133,8 +132,8 @@ extern "C"
 
     // Pinning is the one operation here that changes what a window is shown on
     // rather than which desktop it lives on, so it is its own surface with its
-    // own probe: a build whose pin slots were never admitted refuses these
-    // before any pin slot is reached, and a refused pin costs pinning only.
+    // own probe: an interface that did not pass validation refuses these
+    // before a mutating pin slot is reached. A refused pin costs pinning only.
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_IsWindowPinned(
         void* adapter,
         intptr_t windowHandle,
@@ -151,12 +150,10 @@ extern "C"
         intptr_t windowHandle,
         DesktopShiftNativeError* error) noexcept;
 
-    // Proves, without changing anything, that this build lays the pinned-apps
-    // surface out where DesktopShift believes it does. It queries the pin state
-    // of a window the Shell already owns and reports what came back. A build
-    // whose layout has shifted fails here instead of discovering it during a
-    // pin, and the failure costs pinning while leaving every other operation in
-    // Full Mode.
+    // Checks, without changing anything, the known pinned-apps interface
+    // negotiated from the Shell. It queries the pin state of an existing
+    // window. A failed query disables pinning while leaving other validated
+    // operations available. The IID must retain its known contract.
     DESKTOPSHIFT_NATIVE_API int32_t __stdcall DesktopShiftNative_ProbeWindowPin(
         void* adapter,
         DesktopShiftNativeError* error) noexcept;

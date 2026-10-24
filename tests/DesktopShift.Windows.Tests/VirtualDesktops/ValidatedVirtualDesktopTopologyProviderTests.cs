@@ -21,6 +21,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     [TestMethod]
     [DataRow(26200, Architecture.X64, "windows.shell.25h2.26200")]
     [DataRow(26300, Architecture.Arm64, "windows.shell.26h2.26300")]
+    [DataRow(29999, Architecture.Arm64, "windows.shell.runtime.29999")]
     public async Task ValidatedAdapter_EnablesManagedDesktopCreationCapability(
         int buildNumber,
         Architecture architecture,
@@ -69,7 +70,9 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
-    public async Task FailedExtendedLayoutProbe_LeavesReorderingUnsupported()
+    [DataRow(26200)]
+    [DataRow(29999)]
+    public async Task FailedExtendedLayoutProbe_LeavesReorderingUnsupported(int buildNumber)
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
@@ -83,7 +86,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
             new FakeNativeBridgeFactory(_ =>
                 NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
-        _ = await provider.TestCompatibilityAsync(Build26200);
+        _ = await provider.TestCompatibilityAsync(CreateBuild(buildNumber));
 
         DesktopTopologyProviderResult result =
             await provider.MoveDesktopAsync(Guid.NewGuid(), targetPosition: 0);
@@ -114,7 +117,9 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
-    public async Task FailedPinProbe_CostsPinningAloneAndKeepsFullMode()
+    [DataRow(26200)]
+    [DataRow(29999)]
+    public async Task FailedPinProbe_CostsPinningAloneAndKeepsFullMode(int buildNumber)
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
@@ -130,7 +135,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
                 NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
 
         DesktopTopologyProviderResult result =
-            await provider.TestCompatibilityAsync(Build26200);
+            await provider.TestCompatibilityAsync(CreateBuild(buildNumber));
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(DesktopTopologyProviderMode.Full, provider.Identity.Mode);
@@ -313,6 +318,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     [DataRow(26200, "windows.shell.25h2.26200")]
     [DataRow(26300, "windows.shell.26h2.26300")]
     [DataRow(28000, "windows.shell.26h1.28000")]
+    [DataRow(29999, "windows.shell.runtime.29999")]
     public async Task BuildSelection_PreservesExactFamilyInFallback(
         int buildNumber,
         string expectedProviderId)
@@ -347,7 +353,9 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
     }
 
     [TestMethod]
-    public async Task ValidationFailure_DisposesUntrustedAdapterAndFallsBack()
+    [DataRow(26200)]
+    [DataRow(29999)]
+    public async Task ValidationFailure_DisposesUntrustedAdapterAndFallsBack(int buildNumber)
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
@@ -363,18 +371,21 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
                 NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
 
         DesktopTopologyProviderResult result =
-            await provider.TestCompatibilityAsync(Build26200);
+            await provider.TestCompatibilityAsync(CreateBuild(buildNumber));
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
         Assert.IsTrue(bridge.IsDisposed);
+        Assert.AreEqual(0, bridge.MutationCount);
         Assert.AreEqual(
             "native.behavior_validation",
             provider.LastFallback?.Error.Code);
     }
 
     [TestMethod]
-    public async Task NotificationRegistrationFailure_FallsBackAndPublishesProviderChange()
+    [DataRow(26200)]
+    [DataRow(29999)]
+    public async Task NotificationRegistrationFailure_FallsBackAndPublishesProviderChange(int buildNumber)
     {
         FakeNativeBridge bridge = new(CreateSnapshot())
         {
@@ -392,7 +403,7 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         provider.TopologyChanged += (_, args) => change = args;
 
         DesktopTopologyProviderResult result =
-            await provider.TestCompatibilityAsync(Build26200);
+            await provider.TestCompatibilityAsync(CreateBuild(buildNumber));
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
@@ -968,6 +979,57 @@ public sealed class ValidatedVirtualDesktopTopologyProviderTests
         Assert.AreEqual(0, provider.ReconnectCount);
         Assert.AreEqual(DesktopTopologyResultOutcome.Unsupported, result.Outcome);
     }
+
+    [TestMethod]
+    public async Task FutureBuild_MissingKnownInterface_FallsBackWithItsReason()
+    {
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Failed(
+                    new NativeBridgeError(
+                        "native.manager_activation",
+                        "ManagerActivation",
+                        "The known Shell manager interface is unavailable.",
+                        unchecked((int)0x80004002)))));
+
+        DesktopTopologyProviderResult result =
+            await provider.TestCompatibilityAsync(CreateBuild(29999));
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(DesktopTopologyProviderMode.Limited, provider.Identity.Mode);
+        Assert.IsFalse(provider.Capabilities.CanCreateDesktop);
+        Assert.IsFalse(provider.Capabilities.CanMoveWindowToDesktop);
+        Assert.AreEqual("windows.shell.runtime.29999", provider.LastFallback?.RequestedProviderId);
+        Assert.AreEqual("ManagerActivation", provider.LastFallback?.Stage);
+        Assert.AreEqual(unchecked((int)0x80004002), provider.LastFallback?.Error.HResult);
+    }
+
+    [TestMethod]
+    public async Task FutureBuild_ValidatedInterfacesPublishFullModeInDiagnostics()
+    {
+        FakeNativeBridge bridge = new(CreateSnapshot());
+        using ValidatedVirtualDesktopTopologyProvider provider = CreateProvider(
+            new FakeNativeBridgeFactory(_ =>
+                NativeBridgeResult<INativeVirtualDesktopBridge>.Succeeded(bridge)));
+        CompatibilityCoordinator coordinator = new(
+            new StubBuildInfoProvider(CreateBuild(29999)), provider);
+
+        CompatibilityTestResult result = await coordinator.RunCompatibilityTestAsync();
+
+        Assert.AreEqual(CompatibilityTestOutcome.PassedFullMode, result.Outcome);
+        Assert.IsFalse(coordinator.Current.IsLimitedMode);
+        Assert.IsFalse(coordinator.Current.BuildAssessment.IsRecognized);
+        StringAssert.Contains(coordinator.Current.Provider.Identity.DisplayName, "runtime validated");
+        Assert.IsFalse(result.Diagnostics.Any(
+            static diagnostic => diagnostic.EventName == "Compatibility.ProviderFallbackActivated"));
+        Assert.AreEqual(CompatibilityDiagnosticSeverity.Information,
+            result.Diagnostics.Single(
+                static diagnostic => diagnostic.EventName == "Compatibility.BuildDetected").Severity);
+        Assert.AreEqual(0, bridge.MutationCount);
+    }
+
+    private static WindowsBuildInfo CreateBuild(int buildNumber) =>
+        new(true, 10, 0, buildNumber, 1, Architecture.Arm64);
 
     private static ValidatedVirtualDesktopTopologyProvider CreateProvider(
         INativeVirtualDesktopBridgeFactory bridgeFactory) =>

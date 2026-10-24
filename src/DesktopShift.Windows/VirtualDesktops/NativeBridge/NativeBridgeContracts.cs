@@ -59,15 +59,15 @@ internal interface INativeVirtualDesktopBridge : IDisposable
     NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
 
     /// <summary>
-    /// Proves the shell manager lays its vtable out where this build family
-    /// expects, using a read-only lookup that changes nothing.
+    /// Checks the known shell-manager interface negotiated during activation,
+    /// using a read-only lookup that changes nothing.
     /// </summary>
     /// <remarks>
-    /// Naming a desktop needs a slot well past the read-only prefix every other
-    /// operation lives in, and a shifted layout would land that call on a
-    /// neighbour. This is how the layout is established by behaviour instead of
-    /// by assumption. A failure here means naming stays unavailable; it says
-    /// nothing about enumeration, creation, switching or window moves.
+    /// Naming a desktop needs a slot past the inventory operations, and a
+    /// shifted layout would land that call on a
+    /// neighbour. The exact IID must retain its declared contract, and this
+    /// probe also checks its behavior. A failure means naming stays unavailable;
+    /// it says nothing about enumeration, creation, switching or window moves.
     /// </remarks>
     NativeBridgeResult ProbeDesktopLookup();
 
@@ -103,8 +103,8 @@ internal interface INativeVirtualDesktopBridge : IDisposable
         NativeBridgeResult.Failed(UnsupportedPin());
 
     /// <summary>
-    /// Proves the pinned-apps surface lays its vtable out where this build
-    /// family expects, using a read-only query that changes nothing.
+    /// Checks the known pinned-apps interface using a read-only query that
+    /// changes nothing.
     /// </summary>
     /// <remarks>
     /// Pinning lives on its own private interface with its own vtable, so it is
