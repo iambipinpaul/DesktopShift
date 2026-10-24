@@ -16,6 +16,17 @@ Windows 11 22H2 or newer, on x64 or ARM64. Everything the app needs ships inside
 the package: no separate runtime to install, no DLLs to copy, no configuration
 files to edit.
 
+DesktopShift checks Windows desktop compatibility when it starts. On Windows
+11 build 26100 (24H2) and later, a new build number does not require an app
+update when the known desktop interfaces remain compatible and pass runtime
+validation. Naming, reordering, and pinning have their own checks. If an
+interface is unavailable or validation fails, the affected features stay
+unavailable; a failed core check selects Limited Mode.
+
+These are private Windows interfaces. A future Windows release that changes
+their contract can still require an adapter update, including changes made
+under an existing interface identifier.
+
 ## What it does
 
 Windows virtual desktops work well right up until you lose track of which one

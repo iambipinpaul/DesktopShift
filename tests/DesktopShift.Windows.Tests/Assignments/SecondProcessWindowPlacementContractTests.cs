@@ -14,7 +14,9 @@ public sealed class SecondProcessWindowPlacementContractTests
     private const int QueryAttempts = 100;
 
     [TestMethod]
-    public async Task CurrentMachine_ChildOwnedWindowMovesToAnotherDesktopAndBack()
+    [DataRow(0)]
+    [DataRow(29999)]
+    public async Task CurrentMachine_ChildOwnedWindowMovesToAnotherDesktopAndBack(int buildOverride)
     {
         RequireOptIn();
         if (!Environment.UserInteractive)
@@ -24,9 +26,14 @@ public sealed class SecondProcessWindowPlacementContractTests
         }
 
         using ValidatedVirtualDesktopTopologyProvider topology = new();
+        WindowsBuildInfo currentBuild = new EnvironmentWindowsBuildInfoProvider().GetCurrent();
+        WindowsBuildInfo build = buildOverride == 0
+            ? currentBuild
+            : new WindowsBuildInfo(
+                currentBuild.IsWindows, currentBuild.Major, currentBuild.Minor,
+                buildOverride, currentBuild.Revision, currentBuild.Architecture);
         DesktopTopologyProviderResult compatibility =
-            await topology.TestCompatibilityAsync(
-                new EnvironmentWindowsBuildInfoProvider().GetCurrent());
+            await topology.TestCompatibilityAsync(build);
         Assert.IsTrue(compatibility.IsSuccess, compatibility.Error?.Message);
         Assert.AreEqual(
             DesktopTopologyProviderMode.Full,

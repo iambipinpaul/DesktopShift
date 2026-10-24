@@ -106,11 +106,11 @@ public static class WindowsBuildClassifier
             28000 => new(
                 WindowsBuildSupport.Supported,
                 $"Windows 11 26H1 (build {build.ExactVersion})",
-                "This Windows 11 build family is recognized and must use an independently validated adapter for Full Mode."),
+                "This Windows 11 build family is recognized. Full Mode is checked at runtime."),
             _ => new(
                 WindowsBuildSupport.UnknownWindows11Build,
                 $"Windows 11 (unrecognized build {build.ExactVersion})",
-                "This Windows 11 build is not in DesktopShift's validated build matrix. Safe Limited Mode remains available."),
+                "This Windows release is not named in DesktopShift's release list. Full Mode is checked automatically using the known desktop interfaces. Safe Limited Mode remains available if validation fails."),
         };
     }
 }

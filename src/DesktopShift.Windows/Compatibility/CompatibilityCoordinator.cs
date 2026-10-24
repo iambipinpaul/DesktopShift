@@ -129,12 +129,13 @@ public sealed class CompatibilityCoordinator : ICompatibilityCoordinator
     private static string GetProviderExplanation(IDesktopTopologyProvider provider) =>
         provider.Identity.Mode == DesktopTopologyProviderMode.Limited
             ? "Limited Mode uses only documented Windows APIs. Desktop enumeration, creation, switching, and topology notifications are unavailable."
-            : "Full Mode capabilities must be validated for this exact Windows build before use.";
+            : "Full Mode capabilities are checked against the available Windows desktop interfaces before use.";
 
     private static CompatibilityDiagnostic BuildDetectedDiagnostic(CompatibilityStatus status) =>
         CompatibilityDiagnostic.Create(
             "Compatibility.BuildDetected",
-            status.BuildAssessment.IsRecognized
+            status.BuildAssessment.IsRecognized ||
+                status.BuildAssessment.Support == WindowsBuildSupport.UnknownWindows11Build
                 ? CompatibilityDiagnosticSeverity.Information
                 : CompatibilityDiagnosticSeverity.Warning,
             status.BuildAssessment.Explanation,

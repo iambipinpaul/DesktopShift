@@ -9,7 +9,9 @@ namespace DesktopShift.Windows.Tests.Assignments;
 public sealed class WindowsAssignmentOptInContractTests
 {
     [TestMethod]
-    public void CurrentMachine_TestOwnedWindowSupportsQueryAndEnumeration()
+    [DataRow(0)]
+    [DataRow(29999)]
+    public void CurrentMachine_TestOwnedWindowSupportsQueryAndEnumeration(int buildOverride)
     {
         if (!string.Equals(
                 Environment.GetEnvironmentVariable(
@@ -25,7 +27,7 @@ public sealed class WindowsAssignmentOptInContractTests
         nint windowHandle = testWindow.Handle;
         using ValidatedVirtualDesktopTopologyProvider provider = new();
         DesktopTopologyProviderResult compatibility =
-            provider.TestCompatibilityAsync(GetCurrentBuildInfo())
+            provider.TestCompatibilityAsync(GetCurrentBuildInfo(buildOverride))
                 .AsTask()
                 .GetAwaiter()
                 .GetResult();
@@ -61,6 +63,10 @@ public sealed class WindowsAssignmentOptInContractTests
             placementResult.Error?.Message);
         Assert.AreNotEqual(Guid.Empty, placementResult.Value);
         Assert.Contains(windowHandle, windows);
+        DesktopTopologyProviderResult<Guid> currentDesktop = provider.GetCurrentDesktopIdAsync()
+            .AsTask().GetAwaiter().GetResult();
+        Assert.IsTrue(currentDesktop.IsSuccess, currentDesktop.Error?.Message);
+        Assert.AreEqual(currentDesktop.Value, placementResult.Value);
 
         DesktopTopologyProviderResult moveResult =
             placement.MoveWindowToDesktopAsync(
@@ -83,14 +89,14 @@ public sealed class WindowsAssignmentOptInContractTests
         // the exact GUID already returned for it, so placement is unchanged.
     }
 
-    private static WindowsBuildInfo GetCurrentBuildInfo()
+    private static WindowsBuildInfo GetCurrentBuildInfo(int buildOverride)
     {
         Version version = Environment.OSVersion.Version;
         return new WindowsBuildInfo(
             OperatingSystem.IsWindows(),
             version.Major,
             version.Minor,
-            version.Build,
+            buildOverride == 0 ? version.Build : buildOverride,
             Math.Max(version.Revision, 0),
             RuntimeInformation.OSArchitecture);
     }

@@ -31,36 +31,10 @@ namespace
     constexpr HRESULT HrContractMismatch =
         MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0x202);
 
-    struct AdapterProfile
-    {
-        uint32_t Build;
-        bool Validated;
-        // Whether this build family may reach the manager slots past
-        // CreateDesktop. Tracked separately from Validated because the two rest
-        // on different evidence: the read-only prefix has been exercised on
-        // real machines, whereas slots 10 to 14 are documented by published
-        // reverse-engineering and proved at runtime by the FindDesktop probe.
-        // A family only earns this once its layout is confirmed; unconfirmed
-        // families still enumerate, create, switch and move as before.
-        bool ExtendedLayoutValidated;
-        // Whether this build family may reach the view-pin slots of the
-        // pinned-apps surface. Pinning is a second private interface rather
-        // than a slot in the manager, so it is admitted on its own evidence:
-        // it is proved at runtime by the read-only pin probe, and a family that
-        // has not been confirmed here still enumerates, creates, switches and
-        // moves exactly as before while reporting pinning as unavailable.
-        bool PinnedAppsValidated;
-    };
-
-    constexpr AdapterProfile Profiles[] = {
-        {22631, false, false, false},
-        {26100, true, true, true},
-        {26200, true, true, true},
-        // 26300.9711 ARM64: inventory, FindDesktop and the read-only pin probe
-        // confirmed the existing layout on a Windows 11 26H2 VM.
-        {26300, true, true, true},
-        {28000, false, false, false},
-    };
+    // The known Shell contract first used by this adapter is from 24H2.
+    // Later builds negotiate these exact interface IIDs and prove their
+    // behavior at runtime rather than needing another build-number entry.
+    constexpr uint32_t MinimumWindowsBuild = 26100;
 
     void ClearError(DesktopShiftNativeError* error) noexcept
     {
@@ -104,18 +78,6 @@ namespace
             E_UNEXPECTED,
             stage,
             L"The native virtual-desktop bridge encountered an unexpected failure.");
-    }
-
-    const AdapterProfile* SelectProfile(uint32_t build) noexcept
-    {
-        const auto found = std::find_if(
-            std::begin(Profiles),
-            std::end(Profiles),
-            [build](const AdapterProfile& profile)
-            {
-                return profile.Build == build;
-            });
-        return found == std::end(Profiles) ? nullptr : found;
     }
 
     class NotificationSink final : public IVirtualDesktopNotification24H2
@@ -273,12 +235,8 @@ namespace
     class NativeAdapter final
     {
     public:
-        explicit NativeAdapter(
-            bool extendedLayoutValidated,
-            bool pinnedAppsValidated)
-            : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr)),
-              extendedLayoutValidated_(extendedLayoutValidated),
-              pinnedAppsValidated_(pinnedAppsValidated)
+        NativeAdapter()
+            : workEvent_(CreateEventW(nullptr, FALSE, FALSE, nullptr))
         {
             if (workEvent_ == nullptr)
             {
@@ -339,11 +297,11 @@ namespace
                     nullptr,
                     CLSCTX_LOCAL_SERVER,
                     IID_PPV_ARGS(shell_.ReleaseAndGetAddressOf()));
-                if (FAILED(result))
+                if (FAILED(result) || shell_ == nullptr)
                 {
                     return SetError(
                         error,
-                        result,
+                        FAILED(result) ? result : HrContractMismatch,
                         DesktopShiftNativeStageShellActivation,
                         L"Windows Shell service activation failed.");
                 }
@@ -352,26 +310,26 @@ namespace
                     CLSID_VirtualDesktopManagerInternal,
                     __uuidof(IVirtualDesktopManagerInternal24H2),
                     reinterpret_cast<void**>(manager_.ReleaseAndGetAddressOf()));
-                if (FAILED(result))
+                if (FAILED(result) || manager_ == nullptr)
                 {
                     return SetError(
                         error,
-                        result,
+                        FAILED(result) ? result : HrContractMismatch,
                         DesktopShiftNativeStageManagerActivation,
-                        L"The build-specific virtual-desktop manager interface was unavailable.");
+                        L"The known virtual-desktop manager interface was unavailable.");
                 }
 
                 result = shell_->QueryService(
                     __uuidof(IApplicationViewCollection),
                     __uuidof(IApplicationViewCollection),
                     reinterpret_cast<void**>(applicationViews_.ReleaseAndGetAddressOf()));
-                if (FAILED(result))
+                if (FAILED(result) || applicationViews_ == nullptr)
                 {
                     return SetError(
                         error,
-                        result,
+                        FAILED(result) ? result : HrContractMismatch,
                         DesktopShiftNativeStageApplicationViewActivation,
-                        L"The build-specific application-view collection was unavailable.");
+                        L"The known application-view collection interface was unavailable.");
                 }
 
                 ClearError(error);
@@ -384,6 +342,8 @@ namespace
             return Invoke([this, error]()
             {
                 behaviorValidated_ = false;
+                layoutProbed_ = false;
+                pinProbed_ = false;
                 HRESULT result = ReadSnapshot(error);
                 if (FAILED(result))
                 {
@@ -588,18 +548,14 @@ namespace
             });
         }
 
-        /// Proves the manager vtable is laid out where this build family says
-        /// it is, without changing anything.
-        ///
-        /// FindDesktop is slot 12 and is a pure lookup, so a wrong answer costs
-        /// nothing while a wrong *slot* would. It is reached only after the
-        /// per-build naming gate, so an unrecognized family never calls into
-        /// this region at all — the ordering is the safety, not the probe on
-        /// its own.
+        /// Checks FindDesktop on the exact manager interface negotiated during
+        /// activation. Its IID must still identify the declared COM contract;
+        /// a read-only probe alone cannot make an unknown vtable safe to call.
         HRESULT ProbeDesktopLookup(DesktopShiftNativeError* error)
         {
             return Invoke([this, error]()
             {
+                layoutProbed_ = false;
                 if (!behaviorValidated_)
                 {
                     return SetError(
@@ -607,15 +563,6 @@ namespace
                         HrAdapterNotValidated,
                         DesktopShiftNativeStageLayoutProbe,
                         L"The vtable layout probe is disabled until harmless adapter validation succeeds.");
-                }
-
-                if (!extendedLayoutValidated_)
-                {
-                    return SetError(
-                        error,
-                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
-                        DesktopShiftNativeStageLayoutProbe,
-                        L"This Windows build family is not cleared for the manager slots past desktop creation.");
                 }
 
                 HRESULT result = ReadSnapshot(error);
@@ -636,17 +583,28 @@ namespace
                         L"The layout probe had no validated desktop to look up.");
                 }
 
-                ComPtr<IVirtualDesktop24H2> found;
+                ComPtr<IVirtualDesktop24H2> candidate;
                 result = manager_->FindDesktop(
                     &knownId,
-                    found.ReleaseAndGetAddressOf());
-                if (FAILED(result) || found == nullptr)
+                    candidate.ReleaseAndGetAddressOf());
+                if (FAILED(result) || candidate == nullptr)
                 {
                     return SetError(
                         error,
                         FAILED(result) ? result : HrContractMismatch,
                         DesktopShiftNativeStageLayoutProbe,
                         L"Desktop lookup did not answer, so the manager vtable layout is not the one this build expects.");
+                }
+
+                ComPtr<IVirtualDesktop24H2> found;
+                result = candidate.As(&found);
+                if (FAILED(result) || found == nullptr)
+                {
+                    return SetError(
+                        error,
+                        FAILED(result) ? result : HrContractMismatch,
+                        DesktopShiftNativeStageLayoutProbe,
+                        L"Desktop lookup did not return the known virtual-desktop interface.");
                 }
 
                 GUID foundId{};
@@ -691,7 +649,7 @@ namespace
                         L"Desktop reordering is disabled until harmless adapter validation succeeds.");
                 }
 
-                if (!extendedLayoutValidated_ || !layoutProbed_)
+                if (!layoutProbed_)
                 {
                     return SetError(
                         error,
@@ -863,15 +821,6 @@ namespace
                         HrAdapterNotValidated,
                         DesktopShiftNativeStageDesktopRename,
                         L"Desktop naming is disabled until harmless adapter validation succeeds.");
-                }
-
-                if (!extendedLayoutValidated_)
-                {
-                    return SetError(
-                        error,
-                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
-                        DesktopShiftNativeStageDesktopRename,
-                        L"This Windows build family is not cleared for desktop naming.");
                 }
 
                 if (!layoutProbed_)
@@ -1411,19 +1360,19 @@ namespace
             return SetWindowPinned(window, false, error);
         }
 
-        /// Proves the pinned-apps surface is laid out where this build family
-        /// says it is, without changing anything.
+        /// Checks the known pinned-apps interface without changing a window.
         ///
         /// IsViewPinned is a pure query, so a wrong answer costs nothing while a
         /// wrong *slot* would: the three slots ahead of the view trio are app-id
-        /// pins, and reaching past them on a build whose layout has moved would
-        /// pin the wrong thing. The subject is a window the Shell already owns —
+        /// pins. The exact interface IID must identify the declared contract
+        /// before this query is reached. The subject is a window the Shell owns —
         /// whatever is foreground now, or the Shell's own window when nothing is
         /// focused — so the probe needs nothing a caller has to set up.
         HRESULT ProbeWindowPin(DesktopShiftNativeError* error)
         {
             return Invoke([this, error]()
             {
+                pinProbed_ = false;
                 if (!behaviorValidated_)
                 {
                     return SetError(
@@ -1431,15 +1380,6 @@ namespace
                         HrAdapterNotValidated,
                         DesktopShiftNativeStageWindowPin,
                         L"The pin surface probe is disabled until harmless adapter validation succeeds.");
-                }
-
-                if (!pinnedAppsValidated_)
-                {
-                    return SetError(
-                        error,
-                        HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
-                        DesktopShiftNativeStageWindowPin,
-                        L"This Windows build family is not cleared for the window pin surface.");
                 }
 
                 HRESULT result = EnsurePinnedApps(error);
@@ -1673,11 +1613,11 @@ namespace
                 CLSID_VirtualDesktopNotificationService,
                 __uuidof(IVirtualDesktopNotificationService24H2),
                 reinterpret_cast<void**>(notificationService_.ReleaseAndGetAddressOf()));
-            if (FAILED(result))
+            if (FAILED(result) || notificationService_ == nullptr)
             {
                 return SetError(
                     error,
-                    result,
+                    FAILED(result) ? result : HrContractMismatch,
                     DesktopShiftNativeStageNotificationActivation,
                     L"The virtual-desktop notification service was unavailable.");
             }
@@ -1701,11 +1641,11 @@ namespace
                 CLSID_VirtualDesktopPinnedApps,
                 __uuidof(IVirtualDesktopPinnedApps),
                 reinterpret_cast<void**>(pinnedApps_.ReleaseAndGetAddressOf()));
-            if (FAILED(result))
+            if (FAILED(result) || pinnedApps_ == nullptr)
             {
                 return SetError(
                     error,
-                    result,
+                    FAILED(result) ? result : HrContractMismatch,
                     DesktopShiftNativeStageWindowPin,
                     L"The virtual-desktop pinned-apps service was unavailable.");
             }
@@ -1732,7 +1672,7 @@ namespace
                     error,
                     E_UNEXPECTED,
                     DesktopShiftNativeStageApplicationViewActivation,
-                    L"The build-specific application-view collection is not active.");
+                    L"The known application-view collection is not active.");
             }
 
             HRESULT result = applicationViews_->GetViewForHwnd(
@@ -1752,12 +1692,8 @@ namespace
 
         /// The gate every pin operation passes before a pin slot is reached.
         ///
-        /// Three questions are asked in the order that keeps the pin surface
-        /// unreachable until it is earned: harmless validation, the per-build
-        /// admission, and the read-only probe. A family that never admitted the
-        /// surface answers "not supported" rather than "failed", because
-        /// pinning being unavailable on that build is a property of the machine
-        /// and not something a caller can retry away.
+        /// Harmless adapter validation and the read-only probe of the known
+        /// pinned-apps interface must succeed before a mutating slot is reached.
         HRESULT ValidatePinRequest(DesktopShiftNativeError* error)
         {
             if (!behaviorValidated_)
@@ -1767,15 +1703,6 @@ namespace
                     HrAdapterNotValidated,
                     DesktopShiftNativeStageWindowPin,
                     L"Window pinning is disabled until harmless adapter validation succeeds.");
-            }
-
-            if (!pinnedAppsValidated_)
-            {
-                return SetError(
-                    error,
-                    HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
-                    DesktopShiftNativeStageWindowPin,
-                    L"This Windows build family is not cleared for the window pin surface.");
             }
 
             if (!pinProbed_)
@@ -1904,7 +1831,7 @@ namespace
                     error,
                     E_UNEXPECTED,
                     DesktopShiftNativeStageManagerActivation,
-                    L"The build-specific virtual-desktop manager is not active.");
+                    L"The known virtual-desktop manager is not active.");
             }
 
             UINT reportedCount = 0;
@@ -1920,11 +1847,11 @@ namespace
 
             ComPtr<IObjectArray> desktops;
             result = manager_->GetDesktops(desktops.ReleaseAndGetAddressOf());
-            if (FAILED(result))
+            if (FAILED(result) || desktops == nullptr)
             {
                 return SetError(
                     error,
-                    result,
+                    FAILED(result) ? result : HrContractMismatch,
                     DesktopShiftNativeStageEnumeration,
                     L"The virtual-desktop inventory probe failed.");
             }
@@ -1949,15 +1876,26 @@ namespace
                     L"The manager and collection returned inconsistent desktop counts.");
             }
 
-            ComPtr<IVirtualDesktop24H2> current;
-            result = manager_->GetCurrentDesktop(current.ReleaseAndGetAddressOf());
-            if (FAILED(result))
+            ComPtr<IVirtualDesktop24H2> currentCandidate;
+            result = manager_->GetCurrentDesktop(currentCandidate.ReleaseAndGetAddressOf());
+            if (FAILED(result) || currentCandidate == nullptr)
             {
                 return SetError(
                     error,
-                    result,
+                    FAILED(result) ? result : HrContractMismatch,
                     DesktopShiftNativeStageCurrentDesktop,
                     L"The current virtual desktop could not be queried.");
+            }
+
+            ComPtr<IVirtualDesktop24H2> current;
+            result = currentCandidate.As(&current);
+            if (FAILED(result) || current == nullptr)
+            {
+                return SetError(
+                    error,
+                    FAILED(result) ? result : HrContractMismatch,
+                    DesktopShiftNativeStageCurrentDesktop,
+                    L"The current desktop did not support the known virtual-desktop interface.");
             }
 
             GUID currentId{};
@@ -1980,13 +1918,13 @@ namespace
                     index,
                     __uuidof(IVirtualDesktop24H2),
                     reinterpret_cast<void**>(desktop.ReleaseAndGetAddressOf()));
-                if (FAILED(result))
+                if (FAILED(result) || desktop == nullptr)
                 {
                     return SetError(
                         error,
-                        result,
+                        FAILED(result) ? result : HrContractMismatch,
                         DesktopShiftNativeStageEnumeration,
-                        L"A virtual-desktop entry did not support the selected build ABI.");
+                        L"A virtual-desktop entry did not support the known interface.");
                 }
 
                 DesktopShiftNativeDesktop item{};
@@ -2101,8 +2039,6 @@ namespace
         std::vector<DesktopShiftNativeDesktop> snapshot_;
         GUID currentDesktop_{};
         bool behaviorValidated_{false};
-        bool extendedLayoutValidated_{false};
-        bool pinnedAppsValidated_{false};
         bool layoutProbed_{false};
         bool pinProbed_{false};
     };
@@ -2147,30 +2083,18 @@ extern "C"
         }
         *adapter = nullptr;
 
-        const AdapterProfile* profile = SelectProfile(windowsBuild);
-        if (profile == nullptr)
+        if (windowsBuild < MinimumWindowsBuild)
         {
             return SetError(
                 error,
                 HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED),
                 DesktopShiftNativeStageBuildSelection,
-                L"This exact Windows build family has no DesktopShift native adapter.");
-        }
-
-        if (!profile->Validated)
-        {
-            return SetError(
-                error,
-                HrAdapterNotValidated,
-                DesktopShiftNativeStageBuildSelection,
-                L"The build family is recognized, but its native adapter is not release-validated.");
+                L"The known DesktopShift Shell adapter requires Windows 11 build 26100 or later.");
         }
 
         try
         {
-            auto value = std::make_unique<NativeAdapter>(
-                profile->ExtendedLayoutValidated,
-                profile->PinnedAppsValidated);
+            auto value = std::make_unique<NativeAdapter>();
             const HRESULT result = value->Activate(error);
             if (FAILED(result))
             {

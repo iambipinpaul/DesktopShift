@@ -182,7 +182,7 @@
                             Foreground="{ThemeResource DesktopShift.TextPrimaryBrush}"
                             Text="22621 and later"
                             TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Tested through build 28000" />
+                        <TextBlock Style="{StaticResource DesktopShift.CaptionStyle}" Text="Full Mode checked at startup" />
                     </StackPanel>
                 </Border>
             </Grid>
