@@ -222,7 +222,7 @@ public sealed partial class PackagingRepositoryContractTests
                 project,
                 "AppxPackageSigningTimestampDigestAlgorithm"));
         Assert.AreEqual(
-            "1.0.0.0",
+            "1.2.0.0",
             PackagingRepository.RequireProperty(project, "AppxPackageVersion"));
 
         XElement nativeBridge = project
