@@ -72,9 +72,9 @@ desktops; re-pin silently at startup.
   second parallel service, so assignment, tests, and Limited Mode share one
   capability check. One seam for the decision, one for the transport.
 - Native transport is new private Shell ABI surface (the `IVirtualDesktopPinnedApps`
-  family: view-pin query, pin, unpin), declared build-scoped like the existing
-  manager ABI, gated per Windows build family, and validated by behaviour
-  before use — the same posture as the extended-layout probe for naming and
+  family: view-pin query, pin, unpin), negotiated by exact interface identifier
+  and validated by behaviour before use, including on unlisted Windows builds
+  — the same posture as the extended-layout probe for naming and
   reordering. Failure to prove the layout costs pinning only; enumeration,
   creation, switching, and moves stay in Full Mode. Limited Mode reports pin
   as unavailable.
@@ -149,7 +149,7 @@ desktops; re-pin silently at startup.
 ## Further Notes
 
 - Open Windows questions to confirm during implementation spike: exact
-  `IVirtualDesktopPinnedApps` slot layout per supported build family, whether
+  `IVirtualDesktopPinnedApps` slot layout for each known interface contract, whether
   view-pin (`PinView`) alone suffices or app-id pin (`PinApp`) is also needed
   for processes without an AppUserModelId, and the HRESULT for "not pinned".
   Keep the declaration prefix-only and probe by behaviour; do not claim slots
@@ -157,6 +157,6 @@ desktops; re-pin silently at startup.
 - Activity record should carry a pin outcome alongside the existing move
   outcome vocabulary, so pinned vs already-pinned vs pin-failed reads like
   moved vs already-correct vs failed.
-- If the spike shows per-build pin slots are unstable, fall back to scoping
-  this spec down to view-pin only on proven builds and keep the rest of the
-  decisions unchanged.
+- If a private interface changes its layout under an existing identifier,
+  runtime probes alone cannot guarantee compatibility. Keep pinning disabled
+  until the adapter's contract is corrected; other decisions remain unchanged.

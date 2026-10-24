@@ -122,9 +122,10 @@ the ambiguity only bites if the binding metadata is later lost.
 ### 6a. Naming (needs a machine that supports it)
 
 Naming and reordering reach shell manager slots past the read-only prefix, so
-they are gated twice: the build family must be marked `ExtendedLayoutValidated`
-in the native adapter profile table, **and** a read-only lookup probe must pass
-at activation. Confirm which applies before reading a failure as a bug.
+they require the exact known manager interface, successful base validation,
+**and** a read-only lookup probe at activation. These checks apply to unlisted
+builds too; a new build number alone does not disable the capabilities. The IID
+must still identify the declared private interface contract.
 
 | Step | Expected |
 | --- | --- |

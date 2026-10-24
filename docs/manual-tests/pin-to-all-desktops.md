@@ -20,7 +20,7 @@ desktops, restarting, disabling the rule, pressing **Reassign all**.
 | Releasing a pin an Anywhere rule no longer holds, on the events that repair placement only, and reporting a release that is refused | `tests/DesktopShift.Windows.Tests/Observation/WindowObservationProcessorTests.cs` |
 | Pinning keeps the window in place for tiling rather than reporting a move | `tests/DesktopShift.Windows.Tests/Observation/WindowObservationProcessorTests.cs` |
 | The capability is advertised only after its own read-only probe, and a failed probe costs pinning only | `tests/DesktopShift.Windows.Tests/VirtualDesktops/ValidatedVirtualDesktopTopologyProviderTests.cs` |
-| The pin surface is never reached on a build the adapter has not admitted | `tests/DesktopShift.Windows.Tests/VirtualDesktops/ValidatedVirtualDesktopTopologyProviderTests.cs`, `tests/DesktopShift.Windows.Tests/VirtualDesktops/NativeBridgeOptInContractTests.cs` |
+| Mutating pin operations require the known interface and a successful read-only probe, including on unlisted builds | `tests/DesktopShift.Windows.Tests/VirtualDesktops/ValidatedVirtualDesktopTopologyProviderTests.cs`, `tests/DesktopShift.Windows.Tests/VirtualDesktops/NativeBridgeOptInContractTests.cs` |
 | The editor's third destination, its hidden placement controls, and the stored key surviving a round trip | `tests/DesktopShift.App.Presentation.Tests/Rules/ShowOnAllDesktopsDestinationTests.cs` |
 | Pin rows reading as pins in Activity and never as move failures | `tests/DesktopShift.App.Presentation.Tests/ViewModels/AssignmentActivityPresentationTests.cs`, `tests/DesktopShift.Core.Tests/Diagnostics/ActivityRecordFactoryTests.cs` |
 | A rule whose target key no longer resolves still validates while it pins | `tests/DesktopShift.Core.Tests/Configuration/ApplicationRuleEditingTests.cs` |
@@ -30,10 +30,10 @@ This document covers what those cannot.
 ## Before each run
 
 1. Have **at least three** virtual desktops.
-2. Confirm this machine's build is one whose pin surface was admitted. Today that
-   is build 26100 and 26200. On any other build — or after a probe that failed —
-   pinning is deliberately *unavailable*, and the Limited-Mode cases below are
-   the expected result instead of the normal ones.
+2. Confirm Windows compatibility reports the pin capability. On build 26100
+   and later, this depends on the known pinned-apps interface and its read-only
+   probe, including on unlisted builds. If that probe fails, pinning is
+   deliberately *unavailable* while other validated capabilities remain usable.
 3. Complete first run so the shipped desktops and rules are active.
 4. Pick an application **no** shipped rule names — Music or Paint will do — and
    open the Activity page with **Record local activity** enabled, because that is
@@ -87,7 +87,7 @@ leaves the pin, and the move it defers, alone.
 
 | Case | Action | Expected result |
 | --- | --- | --- |
-| Limited Mode is honest | On a build whose pin surface was not admitted, or with the compatibility test forced to Limited Mode, make the rule pin an app. | The window stays where it opened. Activity reports the pin as unavailable — a deliberate skip with a reason, **not** a failed move and not silence. |
+| Unavailable pinning is honest | On a host whose pin interface or probe failed, or with the compatibility test forced to Limited Mode, make the rule pin an app. | The window stays where it opened. Activity reports the pin as unavailable — a deliberate skip with a reason, **not** a failed move and not silence. |
 | Nothing else degrades | In the same state, use a move rule, the sweep, desktop creation, and desktop switching. | All of them keep working exactly as they did before this feature: only pinning is unavailable. |
 | Editor still offers it | Open the rule editor in that state. | The destination is offered; the review step and Activity are what say the host cannot pin, so the user is told rather than quietly ignored. |
 
@@ -96,6 +96,7 @@ leaves the pin, and the move it defers, alone.
 The exact vtable layout and the "not pinned" HRESULT of the private pinned-apps
 surface are proven by behaviour on a real build, never by the declaration. If the
 probe passes but a pin does nothing visible in Task View, the declaration is
-wrong for this build family: report the build number, and the correct posture is
-to remove that build from the adapter's admitted list rather than to adjust the
-declaration until something appears to work.
+wrong for this interface contract: report the build number and interface probe
+results, and keep pinning disabled until the adapter is corrected. A private
+interface changing layout under an existing IID cannot be ruled out by a
+read-only probe alone.

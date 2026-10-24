@@ -883,7 +883,7 @@ public sealed partial class MainWindow : Window
             WindowsBuildSupport.UnsupportedWindowsVersion => "Unsupported Windows version",
             WindowsBuildSupport.Supported => "Supported build",
             WindowsBuildSupport.SupportedForEnterpriseOnly => "Enterprise support only",
-            WindowsBuildSupport.UnknownWindows11Build => "Unrecognized Windows 11 build",
+            WindowsBuildSupport.UnknownWindows11Build => "Compatibility checked at runtime",
             _ => support.ToString(),
         };
     }
