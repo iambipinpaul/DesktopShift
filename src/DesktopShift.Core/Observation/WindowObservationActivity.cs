@@ -58,6 +58,12 @@ public enum WindowObservationOutcome
 /// the assignment so the decision, the move, the switch, and the result can be
 /// read as one story rather than stitched together by timestamp.
 /// </param>
+/// <param name="Destination">
+/// Where the matched rule sends the window. Trailing and defaulted, so every
+/// activity written before it existed still reads as a Managed Desktop rule.
+/// It is what lets a summary say a pin keeps the window everywhere instead of
+/// naming a desktop the pin never uses.
+/// </param>
 public sealed record WindowObservationActivity(
     DateTimeOffset OccurredAt,
     long EventSequence,
@@ -76,7 +82,8 @@ public sealed record WindowObservationActivity(
     WindowAssignmentError? AssignmentError = null,
     WindowAssignmentActivity? Assignment = null,
     WindowMatchStrength? MatchedOn = null,
-    Guid CorrelationId = default);
+    Guid CorrelationId = default,
+    WindowRuleDestination Destination = WindowRuleDestination.ManagedDesktop);
 
 public interface IWindowObservationActivitySink
 {

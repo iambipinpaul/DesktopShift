@@ -17,6 +17,8 @@ namespace DesktopShift::NativeBridge::ShellAbi
         0xC5E0CDCA, 0x7B6E, 0x41B2, {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}};
     inline constexpr GUID CLSID_VirtualDesktopNotificationService = {
         0xA501FDEC, 0x4A09, 0x464C, {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
+    inline constexpr GUID CLSID_VirtualDesktopPinnedApps = {
+        0xB5A399E7, 0x1C87, 0x46B8, {0x88, 0xE9, 0xFC, 0x57, 0x47, 0xB1, 0x71, 0xBD}};
 
     // DesktopShift only needs an application-view identity and the collection
     // prefix through GetViewForHwnd. Keeping the declarations prefix-only
@@ -38,6 +40,38 @@ namespace DesktopShift::NativeBridge::ShellAbi
         virtual HRESULT STDMETHODCALLTYPE GetViewForHwnd(
             HWND window,
             IApplicationView** view) = 0;
+    };
+
+    // Keeping a window on every desktop ("Show windows from this app on all
+    // desktops" in Task View) lives on its own Shell surface, and the view
+    // slots sit three slots into it because the app-id pins come first. A
+    // vtable cannot be entered halfway, so those three slots are declared at
+    // their real offsets and given deliberately unusable signatures and
+    // DoNotCall names, the same way Reserved_RemoveDesktop_DoNotCall is: they
+    // are the price of reaching IsViewPinned, not capability, and nothing in
+    // DesktopShift may call them.
+    //
+    // Of the view trio only IsViewPinned is reached before this layout has been
+    // proved, and proving it is exactly what the read-only pin probe does: it
+    // queries a window the Shell already owns and changes nothing. PinView and
+    // UnpinView are reached only after that probe has answered and only behind
+    // the per-build AdapterProfile gate, so a build whose pin surface was never
+    // admitted never has a mutating pin slot called on it.
+    MIDL_INTERFACE("4CE81583-1E4C-4632-A621-07A53543148F")
+    IVirtualDesktopPinnedApps : public IUnknown
+    {
+        virtual HRESULT STDMETHODCALLTYPE Reserved_IsAppIdPinned_DoNotCall(
+            void* appUserModelId,
+            void* pinned) = 0;
+        virtual HRESULT STDMETHODCALLTYPE Reserved_PinAppID_DoNotCall(
+            void* appUserModelId) = 0;
+        virtual HRESULT STDMETHODCALLTYPE Reserved_UnpinAppID_DoNotCall(
+            void* appUserModelId) = 0;
+        virtual HRESULT STDMETHODCALLTYPE IsViewPinned(
+            IApplicationView* view,
+            BOOL* pinned) = 0;
+        virtual HRESULT STDMETHODCALLTYPE PinView(IApplicationView* view) = 0;
+        virtual HRESULT STDMETHODCALLTYPE UnpinView(IApplicationView* view) = 0;
     };
 
     MIDL_INTERFACE("3F07F4BE-B107-441A-AF0F-39D82529072C")

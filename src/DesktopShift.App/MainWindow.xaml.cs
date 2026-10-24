@@ -559,7 +559,8 @@ public sealed partial class MainWindow : Window
                         rule,
                         state.Candidate),
                     ApplicationRulePresentationProjection.DescribeMatch(rule),
-                    rule.AllowsAnywhere));
+                    rule.Action == ApplicationRuleAction.MoveToDesktop,
+                    DescribeDestinationNote(rule)));
         }
 
         FirstRunViewModel viewModel = new(
@@ -570,6 +571,26 @@ public sealed partial class MainWindow : Window
         viewModel.ValidationSummary = FormatValidationIssues(state.Issues);
         return viewModel;
     }
+
+    /// <summary>
+    /// What a starter row says instead of a Managed Desktop name when the rule
+    /// has none.
+    /// </summary>
+    /// <remarks>
+    /// Anywhere leaves a window where it opened and Show on all desktops pins it
+    /// where it already is, so neither reads the desktop name the row would
+    /// otherwise offer to edit.
+    /// </remarks>
+    /// <param name="rule">The rule the row describes.</param>
+    /// <returns>The note, empty for a rule that moves windows.</returns>
+    private static string DescribeDestinationNote(ApplicationRule rule) =>
+        rule.Action switch
+        {
+            ApplicationRuleAction.AllowAnywhere => "Not used — stays where opened",
+            ApplicationRuleAction.ShowOnAllDesktops =>
+                "Not used — pinned to every desktop",
+            _ => string.Empty,
+        };
 
     private async Task<FirstRunApplyResult> ApplyFirstRunAsync(
         FirstRunViewModel viewModel,

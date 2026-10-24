@@ -31,6 +31,7 @@ internal static partial class NativeMethods
         DesktopRename = 15,
         ApplicationViewLookup = 16,
         DesktopReorder = 17,
+        WindowPin = 18,
     }
 
     internal enum NativeTopologyReason : uint
@@ -140,6 +141,30 @@ internal static partial class NativeMethods
         nint adapter,
         in Guid desktopId,
         string name,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_IsWindowPinned(
+        nint adapter,
+        nint windowHandle,
+        out int isPinned,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_PinWindow(
+        nint adapter,
+        nint windowHandle,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_UnpinWindow(
+        nint adapter,
+        nint windowHandle,
+        out NativeError error);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]
+    internal static extern int DesktopShiftNative_ProbeWindowPin(
+        nint adapter,
         out NativeError error);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.StdCall)]

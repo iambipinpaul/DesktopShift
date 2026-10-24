@@ -147,6 +147,33 @@ public sealed class ApplicationRuleEditingTests
     }
 
     [TestMethod]
+    public void PinRule_IsAcceptedWithoutAUsableTargetDesktopOrSwitchPolicy()
+    {
+        // A pin never moves a window, so the destination key and the switch
+        // policy say nothing about it. The same reason an Anywhere rule may
+        // leave them stale is the reason a pin rule must not be refused for
+        // them — and the stored key still survives, so switching the
+        // destination back to a Managed Desktop restores a working rule.
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+        ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document) with
+        {
+            Id = "music",
+            DisplayName = "Music",
+            TargetDesktopKey = "a-desktop-that-does-not-exist",
+            ProcessNames = "music.exe",
+            Action = ApplicationRuleAction.ShowOnAllDesktops,
+        };
+
+        Assert.IsEmpty(draft.Validate(document));
+        Assert.IsTrue(draft.ShowsOnAllDesktops);
+        Assert.IsFalse(draft.AllowsAnywhere);
+
+        ApplicationRule rule = draft.ToRule();
+        Assert.IsTrue(rule.ShowsOnAllDesktops);
+        Assert.AreEqual("a-desktop-that-does-not-exist", rule.TargetDesktopKey);
+    }
+
+    [TestMethod]
     public void DuplicateIdentifier_IsReportedAgainstTheIdentifierField()
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();

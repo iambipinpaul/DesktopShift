@@ -123,6 +123,105 @@ public sealed class WindowsWindowDesktopPlacementService :
                 : ClassifyMoveFailure(windowHandle, result));
     }
 
+    public ValueTask<DesktopTopologyProviderResult<bool>> GetWindowPinnedAsync(
+        nint windowHandle,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(disposed, this);
+        DesktopTopologyProviderResult<bool>? invalidResult =
+            ValidateWindow<bool>(windowHandle);
+        if (invalidResult is not null)
+        {
+            return ValueTask.FromResult(invalidResult);
+        }
+
+        try
+        {
+            NativeBridgeResult<bool> result =
+                desktopMover.IsWindowPinned(windowHandle);
+            return ValueTask.FromResult(
+                result.IsSuccess
+                    ? DesktopTopologyProviderResult<bool>.Succeeded(result.Value)
+                    : ClassifyPinQueryFailure(windowHandle, result));
+        }
+        catch (Exception exception)
+        {
+            return ValueTask.FromResult(PinFailed<bool>(exception));
+        }
+    }
+
+    public ValueTask<DesktopTopologyProviderResult> PinWindowAsync(
+        nint windowHandle,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(disposed, this);
+        DesktopTopologyProviderResult? invalidResult =
+            ValidateWindow(windowHandle);
+        if (invalidResult is not null)
+        {
+            return ValueTask.FromResult(invalidResult);
+        }
+
+        return ValueTask.FromResult(Pin(windowHandle));
+    }
+
+    public ValueTask<DesktopTopologyProviderResult> UnpinWindowAsync(
+        nint windowHandle,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(disposed, this);
+        DesktopTopologyProviderResult? invalidResult =
+            ValidateWindow(windowHandle);
+        if (invalidResult is not null)
+        {
+            return ValueTask.FromResult(invalidResult);
+        }
+
+        return ValueTask.FromResult(Unpin(windowHandle));
+    }
+
+    /// <summary>
+    /// Applies a pin, once, and reports what Windows said about it.
+    /// </summary>
+    /// <remarks>
+    /// One attempt, then a structured answer — the same bargain a move makes.
+    /// Whether a window may be shown on every desktop is Windows' answer to
+    /// give, and re-issuing the identical call cannot change it.
+    /// </remarks>
+    private DesktopTopologyProviderResult Pin(nint windowHandle)
+    {
+        try
+        {
+            NativeBridgeResult result = desktopMover.PinWindow(windowHandle);
+            return result.IsSuccess
+                ? DesktopTopologyProviderResult.Succeeded()
+                : ClassifyPinFailure(windowHandle, result);
+        }
+        catch (Exception exception)
+        {
+            return PinFailed(exception);
+        }
+    }
+
+    /// <inheritdoc cref="Pin"/>
+    private DesktopTopologyProviderResult Unpin(nint windowHandle)
+    {
+        try
+        {
+            NativeBridgeResult result = desktopMover.UnpinWindow(windowHandle);
+            return result.IsSuccess
+                ? DesktopTopologyProviderResult.Succeeded()
+                : ClassifyPinFailure(windowHandle, result);
+        }
+        catch (Exception exception)
+        {
+            return PinFailed(exception);
+        }
+    }
+
     public void Dispose()
     {
         if (disposed)
@@ -357,6 +456,140 @@ public sealed class WindowsWindowDesktopPlacementService :
             "Windows could not determine the window's virtual desktop.",
             result.HResult);
     }
+
+    /// <summary>
+    /// Turns a refused pin into the outcome and error that best name what
+    /// happened, drawing the distinctions a refused move draws.
+    /// </summary>
+    /// <remarks>
+    /// A pin has one distinction a move does not: the host may have no pin
+    /// surface at all. That is not a refusal — nothing was attempted and
+    /// nothing can be — so it is reported as unsupported, which is what lets
+    /// assignment record a deliberate skip instead of a failure the user
+    /// cannot act on.
+    /// </remarks>
+    /// <param name="windowHandle">The window whose pin was refused.</param>
+    /// <param name="bridgeError">The refusal the pin seam returned.</param>
+    /// <returns>The outcome to report and the error that explains it.</returns>
+    private (DesktopTopologyResultOutcome Outcome, DesktopTopologyProviderError Error)
+        DescribePinFailure(nint windowHandle, NativeBridgeError? bridgeError)
+    {
+        NativeBridgeError error = bridgeError ??
+            new NativeBridgeError(
+                "native.window_pin_failed",
+                "WindowPin",
+                "The native window pin failed without structured error details.",
+                UnexpectedResultHResult);
+
+        if (string.Equals(
+            error.Code,
+            "native.pin_unsupported",
+            StringComparison.Ordinal))
+        {
+            return (
+                DesktopTopologyResultOutcome.Unsupported,
+                new DesktopTopologyProviderError(
+                    "window_placement.pin_unsupported",
+                    "DesktopShift could not keep the window on every desktop because this host has not proved a pinning surface. " +
+                    error.Message));
+        }
+
+        if (string.Equals(
+            error.Code,
+            "native.window_pin_exception",
+            StringComparison.Ordinal))
+        {
+            return (
+                DesktopTopologyResultOutcome.Failed,
+                new DesktopTopologyProviderError(
+                    "window_placement.pin_exception",
+                    "DesktopShift could not complete the native window pin call. " +
+                    error.Message,
+                    error.HResult));
+        }
+
+        if (string.Equals(
+            error.Stage,
+            ApplicationViewLookupStage,
+            StringComparison.Ordinal))
+        {
+            // The Shell has no application view for this window yet, which is
+            // the same answer the desktop query gives while a window is still
+            // being registered, and so it is reported under the same code. A
+            // window shown a few milliseconds before the Shell caught up is not
+            // a refusal, and the next event pins it.
+            return (
+                DesktopTopologyResultOutcome.Failed,
+                new DesktopTopologyProviderError(
+                    "window_placement.window_not_tracked",
+                    WindowNotTrackedMessage,
+                    error.HResult));
+        }
+
+        if (!windowApi.IsWindow(windowHandle))
+        {
+            // The window closed underneath the pin, which is a race rather than
+            // something the user can act on.
+            return (
+                DesktopTopologyResultOutcome.Failed,
+                new DesktopTopologyProviderError(
+                    "window_placement.stale_window_handle",
+                    "The window closed before it could be kept on every virtual desktop.",
+                    error.HResult));
+        }
+
+        return (
+            DesktopTopologyResultOutcome.Failed,
+            new DesktopTopologyProviderError(
+                "window_placement.pin_failed",
+                $"Windows refused to keep the window on every virtual desktop. {error.Message}",
+                error.HResult));
+    }
+
+    private DesktopTopologyProviderResult ClassifyPinFailure(
+        nint windowHandle,
+        NativeBridgeResult result)
+    {
+        (DesktopTopologyResultOutcome outcome, DesktopTopologyProviderError error) =
+            DescribePinFailure(windowHandle, result.Error);
+        return new DesktopTopologyProviderResult(outcome, error);
+    }
+
+    private DesktopTopologyProviderResult<bool> ClassifyPinQueryFailure(
+        nint windowHandle,
+        NativeBridgeResult<bool> result)
+    {
+        (DesktopTopologyResultOutcome outcome, DesktopTopologyProviderError error) =
+            DescribePinFailure(windowHandle, result.Error);
+        return new DesktopTopologyProviderResult<bool>(outcome, default, error);
+    }
+
+    /// <summary>
+    /// Reports a pin that threw locally rather than being refused.
+    /// </summary>
+    /// <remarks>
+    /// A throw is its own code, because it says something a refusal does not:
+    /// the host was asked and the call did not finish. It is reported here
+    /// rather than left to surface as an unhandled exception so a caller sees
+    /// the same shape whether Windows refused the pin or DesktopShift's own
+    /// seam failed to make the call.
+    /// </remarks>
+    private static DesktopTopologyProviderResult PinFailed(
+        Exception exception) =>
+        DesktopTopologyProviderResult.Failed(
+            "window_placement.pin_exception",
+            "DesktopShift could not complete the native window pin call. " +
+            exception.Message,
+            exception.HResult);
+
+    /// <inheritdoc cref="PinFailed(Exception)"/>
+    private static DesktopTopologyProviderResult<T> PinFailed<T>(
+        Exception exception) =>
+        DesktopTopologyProviderResult<T>.Failed(
+            "window_placement.pin_exception",
+            "DesktopShift could not complete the native window pin call. " +
+            exception.Message,
+            exception.HResult);
 }
 
 internal interface IWindowHandleApi

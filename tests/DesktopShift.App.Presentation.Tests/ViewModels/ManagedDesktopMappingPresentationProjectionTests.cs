@@ -123,6 +123,42 @@ public sealed class ManagedDesktopMappingPresentationProjectionTests
         Assert.IsFalse(presentation.Mappings[0].IsMapped);
     }
 
+    [TestMethod]
+    public void Project_DoesNotCountRulesThatNeverSendWindowsToADesktop()
+    {
+        // An Anywhere rule and a Show on all desktops rule both store a target
+        // key that nothing reads. Counting either here would tell a user a
+        // desktop is where an application is sent when nothing sends it there.
+        ManagedDesktopReconciliationSnapshot snapshot = CreateSnapshot(
+            ManagedDesktopReconciliationOutcome.Succeeded,
+            [
+                CreateMapping(
+                    "ide-development",
+                    "IDE Development",
+                    preferredOrder: 1,
+                    Guid.Parse("10a0d345-a25a-44fc-9740-4191cc049f9e"),
+                    "Development",
+                    runtimePosition: 0,
+                    ManagedDesktopMappingStatus.ReusedPersistedBinding),
+            ]);
+        ConfigurationDocument document = ApplicationRuleCatalog.Add(
+            ConfigurationDefaults.Create(),
+            new ApplicationRule(
+                "music",
+                "Music",
+                IsEnabled: true,
+                TargetDesktopKey: "ide-development",
+                ProcessNames: ["spotify.exe"],
+                Triggers: ConfigurationDefaults.DefaultTriggers,
+                SwitchPolicy: DesktopSwitchPolicy.OnForegroundActivation,
+                Action: ApplicationRuleAction.ShowOnAllDesktops));
+
+        ManagedDesktopMappingPresentationSnapshot presentation =
+            ManagedDesktopMappingPresentationProjection.Project(snapshot, document);
+
+        Assert.AreEqual("1 application rule", presentation.Mappings[0].RuleSummary);
+    }
+
     private static ManagedDesktopReconciliationSnapshot CreateSnapshot(
         ManagedDesktopReconciliationOutcome outcome,
         ImmutableArray<ManagedDesktopRuntimeMapping> mappings,

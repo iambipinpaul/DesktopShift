@@ -317,7 +317,11 @@ public sealed class ApplicationRulePresentationTests
             ]);
 
         ApplicationRuleReassignmentSummary summary =
-            ApplicationRulePresentationProjection.Summarize(batch, "ide-development");
+            ApplicationRulePresentationProjection.Summarize(
+                batch,
+                ApplicationRuleCatalog.Find(
+                    ConfigurationDefaults.Create(),
+                    "ide-development")!);
 
         Assert.AreEqual(12, summary.EnumeratedWindowCount);
         Assert.AreEqual(3, summary.MatchedWindowCount);
@@ -344,7 +348,11 @@ public sealed class ApplicationRulePresentationTests
         Assert.AreEqual(
             "No open window matched this rule. 7 windows were checked.",
             ApplicationRulePresentationProjection
-                .Summarize(batch, "ide-development")
+                .Summarize(
+                    batch,
+                    ApplicationRuleCatalog.Find(
+                        ConfigurationDefaults.Create(),
+                        "ide-development")!)
                 .Message);
     }
 

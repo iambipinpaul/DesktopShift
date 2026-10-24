@@ -220,7 +220,7 @@
                 <StackPanel Grid.Column="1" Spacing="{StaticResource DesktopShift.TightSpacing}">
                     <ComboBox
                         HorizontalAlignment="Stretch"
-                        AutomationProperties.HelpText="Choose a Managed Desktop, or Anywhere to leave this app wherever it opens."
+                        AutomationProperties.HelpText="Choose a Managed Desktop, Anywhere to leave this app wherever it opens, or Show on all desktops to pin it to every desktop."
                         AutomationProperties.Name="Destination"
                         DisplayMemberPath="DisplayName"
                         Header="Destination"
@@ -264,7 +264,7 @@
             <TextBlock
                 Margin="0,0,0,14"
                 Style="{StaticResource DesktopShift.CaptionStyle}"
-                Text="A window that no enabled rule names is moved to the first desktop. Choose Anywhere to leave an app exactly where it opens — disabling a rule does not do that, it unmanages the app instead." />
+                Text="A window that no enabled rule names is moved to the first desktop. Choose Anywhere to leave an app exactly where it opens, or Show on all desktops to keep it visible everywhere — disabling a rule does not do that, it unmanages the app instead." />
 
             <Expander
                 Margin="0,0,0,14"

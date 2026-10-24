@@ -56,6 +56,34 @@ public sealed class NativeBridgeOptInContractTests
                     out entryPoint));
             Assert.AreNotEqual(0, entryPoint);
 
+            // Pinning changes what a window is shown on rather than which
+            // desktop it lives on, so it is written down here with the other
+            // ways the bridge can change the machine, and its read-only probe
+            // sits beside it because that probe is what makes the pin slots
+            // reachable at all.
+            foreach (string export in new[]
+            {
+                "DesktopShiftNative_IsWindowPinned",
+                "DesktopShiftNative_PinWindow",
+                "DesktopShiftNative_UnpinWindow",
+                "DesktopShiftNative_ProbeWindowPin",
+            })
+            {
+                Assert.IsTrue(
+                    NativeLibrary.TryGetExport(library, export, out entryPoint),
+                    $"The native bridge does not export {export}.");
+                Assert.AreNotEqual(0, entryPoint);
+            }
+
+            // The app-id pin slots are declared only so the view slots land at
+            // their real vtable offsets. Nothing reaches them, so nothing
+            // exports a way to.
+            Assert.IsFalse(
+                NativeLibrary.TryGetExport(
+                    library,
+                    "DesktopShiftNative_PinAppId",
+                    out _));
+
             IReadOnlyDictionary<string, uint> stages = Enum
                 .GetValues<NativeMethods.NativeStage>()
                 .ToDictionary(
@@ -68,6 +96,7 @@ public sealed class NativeBridgeOptInContractTests
             Assert.AreEqual(15U, stages["DesktopRename"]);
             Assert.AreEqual(16U, stages["ApplicationViewLookup"]);
             Assert.AreEqual(17U, stages["DesktopReorder"]);
+            Assert.AreEqual(18U, stages["WindowPin"]);
         }
         finally
         {

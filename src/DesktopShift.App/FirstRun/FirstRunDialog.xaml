@@ -187,12 +187,12 @@
                                         Visibility="{x:Bind rules:RuleIconSource.WhenTrue(IsDesktopNameEditable), Mode=OneWay}" />
                                     <StackPanel
                                         Spacing="5"
-                                        Visibility="{x:Bind rules:RuleIconSource.WhenTrue(AllowsAnywhere), Mode=OneWay}">
+                                        Visibility="{x:Bind rules:RuleIconSource.TextVisibility(DestinationNote), Mode=OneWay}">
                                         <TextBlock Style="{StaticResource DesktopShift.FieldLabelStyle}" Text="Managed desktop" />
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             Style="{StaticResource DesktopShift.BodyStyle}"
-                                            Text="Not used — stays where opened" />
+                                            Text="{x:Bind DestinationNote, Mode=OneWay}" />
                                     </StackPanel>
                                     <TextBox
                                         Grid.Column="1"

@@ -238,7 +238,9 @@ public static class ManagedDesktopDefinitionEditor
         }
 
         ImmutableArray<ApplicationRule> dependents = [.. document.ApplicationRules
-            .Where(rule => KeysEqual(rule.TargetDesktopKey, definition.SemanticKey))];
+            .Where(rule =>
+                rule.MovesWindows &&
+                KeysEqual(rule.TargetDesktopKey, definition.SemanticKey))];
         if (!dependents.IsEmpty)
         {
             string names = string.Join(

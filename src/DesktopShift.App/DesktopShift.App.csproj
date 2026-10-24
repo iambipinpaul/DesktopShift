@@ -32,6 +32,11 @@
     <Version>1.0.0</Version>
     <FileVersion>$(AppxPackageVersion)</FileVersion>
     <AssemblyVersion>$(AppxPackageVersion)</AssemblyVersion>
+    <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageDir>$(UserProfile)\Downloads\</AppxPackageDir>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,11 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None
-      Include="..\DesktopShift.NativeBridge\bin\$(Platform)\$(Configuration)\DesktopShift.NativeBridge.dll"
-      Link="DesktopShift.NativeBridge.dll"
-      CopyToOutputDirectory="PreserveNewest"
-      CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\DesktopShift.NativeBridge\bin\$(Platform)\$(Configuration)\DesktopShift.NativeBridge.dll" Link="DesktopShift.NativeBridge.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -82,33 +83,18 @@
     automation needs to provide it without modifying a tracked file. Generate
     an intermediate manifest and point the packaging targets at that copy.
   -->
-  <Target
-    Name="GenerateVersionedPackageManifest"
-    BeforeTargets="_ValidatePresenceOfAppxManifestItems"
-    Condition="'$(GenerateAppxPackageOnBuild)' == 'true'">
+  <Target Name="GenerateVersionedPackageManifest" BeforeTargets="_ValidatePresenceOfAppxManifestItems" Condition="'$(GenerateAppxPackageOnBuild)' == 'true'">
     <PropertyGroup>
       <_VersionedPackageManifest>$(IntermediateOutputPath)VersionedPackage.appxmanifest</_VersionedPackageManifest>
       <_IsValidAppxPackageVersion>$([System.Text.RegularExpressions.Regex]::IsMatch('$(AppxPackageVersion)', '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$'))</_IsValidAppxPackageVersion>
       <_PackageProcessorArchitecture Condition="'$(Platform)' == 'x64'">x64</_PackageProcessorArchitecture>
       <_PackageProcessorArchitecture Condition="'$(Platform)' == 'ARM64'">arm64</_PackageProcessorArchitecture>
     </PropertyGroup>
-    <Error
-      Condition="'$(_IsValidAppxPackageVersion)' != 'True'"
-      Text="AppxPackageVersion must contain four numeric components (for example, 1.2.3.4)." />
-    <Error
-      Condition="'$(_PackageProcessorArchitecture)' == ''"
-      Text="Platform must be x64 or ARM64 when constructing an MSIX package." />
-    <Copy
-      SourceFiles="@(AppxManifest)"
-      DestinationFiles="$(_VersionedPackageManifest)" />
-    <XmlPoke
-      XmlInputPath="$(_VersionedPackageManifest)"
-      Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version"
-      Value="$(AppxPackageVersion)" />
-    <XmlPoke
-      XmlInputPath="$(_VersionedPackageManifest)"
-      Query="/*[local-name()='Package']/*[local-name()='Identity']/@ProcessorArchitecture"
-      Value="$(_PackageProcessorArchitecture)" />
+    <Error Condition="'$(_IsValidAppxPackageVersion)' != 'True'" Text="AppxPackageVersion must contain four numeric components (for example, 1.2.3.4)." />
+    <Error Condition="'$(_PackageProcessorArchitecture)' == ''" Text="Platform must be x64 or ARM64 when constructing an MSIX package." />
+    <Copy SourceFiles="@(AppxManifest)" DestinationFiles="$(_VersionedPackageManifest)" />
+    <XmlPoke XmlInputPath="$(_VersionedPackageManifest)" Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version" Value="$(AppxPackageVersion)" />
+    <XmlPoke XmlInputPath="$(_VersionedPackageManifest)" Query="/*[local-name()='Package']/*[local-name()='Identity']/@ProcessorArchitecture" Value="$(_PackageProcessorArchitecture)" />
     <ItemGroup>
       <AppxManifest Remove="@(AppxManifest)" />
       <AppxManifest Include="$(_VersionedPackageManifest)" />

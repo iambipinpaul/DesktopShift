@@ -13,13 +13,14 @@ namespace DesktopShift.App.Rules;
 /// One entry in the editor's destination picker.
 /// </summary>
 /// <remarks>
-/// Anywhere sits in the same list as the Managed Desktops rather than in a
-/// control of its own. Two lists could both claim the same application, which
-/// would need a tie-break the user has to remember; one list already has one,
-/// because the matcher resolves a tie by strength and then by rule order.
+/// Anywhere and Show on all desktops sit in the same list as the Managed
+/// Desktops rather than in a control of their own. Two lists could both claim
+/// the same application, which would need a tie-break the user has to remember;
+/// one list already has one, because the matcher resolves a tie by strength and
+/// then by rule order.
 /// </remarks>
 /// <param name="SemanticKey">
-/// The key stored on the rule, empty for the Anywhere entry.
+/// The key stored on the rule, empty for the entries that never move a window.
 /// </param>
 /// <param name="DisplayName">The name shown to the user.</param>
 /// <param name="Action">What choosing this entry makes the rule do.</param>
@@ -85,6 +86,10 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
                 string.Empty,
                 "Anywhere — never move this app",
                 ApplicationRuleAction.AllowAnywhere),
+            new ManagedDesktopChoice(
+                string.Empty,
+                "Show on all desktops — pin this app everywhere",
+                ApplicationRuleAction.ShowOnAllDesktops),
         ];
         RunningApplications = [];
     }
@@ -127,9 +132,13 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
     {
         get
         {
-            if (draft.AllowsAnywhere)
+            // A destination that never moves a window is found by its action
+            // rather than by position: it stores an empty key, exactly as the
+            // other one does, so a key could not tell them apart, and where an
+            // entry happens to sit in the list is not a promise.
+            if (draft.Action != ApplicationRuleAction.MoveToDesktop)
             {
-                return ManagedDesktops.Count - 1;
+                return IndexOfDestination(draft.Action);
             }
 
             for (int index = 0; index < ManagedDesktops.Count; index++)
@@ -157,17 +166,20 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
 
             ManagedDesktopChoice choice = ManagedDesktops[value];
 
-            // Choosing Anywhere leaves the previously selected Managed Desktop
-            // on the draft rather than clearing it, so a user who is only
-            // looking at the option can change their mind without losing it.
+            // Choosing a destination that never moves a window leaves the
+            // previously selected Managed Desktop on the draft rather than
+            // clearing it, so a user who is only looking at the option can
+            // change their mind without losing it. Anywhere and Show on all
+            // desktops both keep the stored target, triggers, and switch policy
+            // for that reason, and both write none of them.
             SetDraft(
-                choice.Action == ApplicationRuleAction.AllowAnywhere
-                    ? draft with { Action = choice.Action }
-                    : draft with
+                choice.Action == ApplicationRuleAction.MoveToDesktop
+                    ? draft with
                     {
                         Action = choice.Action,
                         TargetDesktopKey = choice.SemanticKey,
-                    });
+                    }
+                    : draft with { Action = choice.Action });
             Raise(nameof(AllowsAnywhere));
             Raise(nameof(IsPlacementConfigurable));
         }
@@ -182,10 +194,12 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
     /// Whether the trigger and switch policy controls apply at all.
     /// </summary>
     /// <remarks>
-    /// Both say when a window is moved, and an Anywhere rule never moves one, so
-    /// showing them would be offering settings that cannot take effect.
+    /// Both say when a window is moved, and neither an Anywhere rule nor a Show
+    /// on all desktops rule ever moves one, so showing them would be offering
+    /// settings that cannot take effect.
     /// </remarks>
-    public bool IsPlacementConfigurable => !draft.AllowsAnywhere;
+    public bool IsPlacementConfigurable =>
+        !draft.AllowsAnywhere && !draft.ShowsOnAllDesktops;
 
     public string ProcessNames
     {
@@ -476,6 +490,12 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
                 0,
                 "This rule sends these windows Anywhere, so they stay where they open and are never swept to the first desktop.");
         }
+        else if (draft.ShowsOnAllDesktops)
+        {
+            details.Insert(
+                0,
+                "This rule pins these windows to every desktop, so they stay visible everywhere and are never swept to the first desktop.");
+        }
         else if (!result.SupportsManualReassignment)
         {
             details.Insert(
@@ -488,6 +508,19 @@ public sealed class RuleEditorViewModel : INotifyPropertyChanged
 
     private bool HasTrigger(ApplicationRuleTrigger trigger) =>
         draft.Triggers.Contains(trigger);
+
+    private int IndexOfDestination(ApplicationRuleAction action)
+    {
+        for (int index = 0; index < ManagedDesktops.Count; index++)
+        {
+            if (ManagedDesktops[index].Action == action)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
 
     private void SetTrigger(ApplicationRuleTrigger trigger, bool isSelected)
     {

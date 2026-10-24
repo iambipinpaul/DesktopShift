@@ -319,7 +319,7 @@ public sealed partial class RulesPage : Page
                 .WindowReassignmentService
                 .ReassignAllAsync(cancellationToken);
             ApplicationRuleReassignmentSummary summary =
-                ApplicationRulePresentationProjection.Summarize(batch, ruleId);
+                ApplicationRulePresentationProjection.Summarize(batch, rule);
 
             ShowStatus(
                 $"{test.MatchCount} open windows match '{rule.DisplayName}' on {test.StrongestSignal}. {summary.Message}",

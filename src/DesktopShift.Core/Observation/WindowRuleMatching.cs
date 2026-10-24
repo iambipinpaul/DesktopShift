@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using DesktopShift.Core.Assignments;
 using DesktopShift.Core.Configuration;
 
 namespace DesktopShift.Core.Observation;
@@ -101,6 +102,16 @@ public enum WindowRuleDestination
     /// refuses to delete the last virtual desktop, so position 0 always exists.
     /// </remarks>
     FirstDesktop,
+
+    /// <summary>
+    /// Pinned so the window appears on every virtual desktop at once.
+    /// </summary>
+    /// <remarks>
+    /// The pin is the placement: while it holds, the window is never moved
+    /// between desktops. It keeps its place in the current desktop's layout,
+    /// so tiling and other on-desktop placement are unaffected.
+    /// </remarks>
+    PinnedToAllDesktops,
 }
 
 /// <param name="Destination">
@@ -152,8 +163,20 @@ public sealed class WindowRuleMatcher
 
         ApplicationRuleTrigger trigger = ToRuleTrigger(eventKind);
 
+        // A pin rule's stored triggers are not read at all, exactly as its
+        // stored target desktop is not read: it answers its own event set, and
+        // nothing else decides. Reading them here would both stop a pin rule
+        // carried over from a move rule from pinning anything and let a rule
+        // that kept a manual trigger answer lifecycle events — every kind
+        // without a trigger of its own maps to the manual reassignment one —
+        // that it has no business pinning on.
+        bool answersPinEvent = WindowPinRelease.PinAnswersEvent(eventKind);
+
         return rules
-            .Where(rule => rule.IsEnabled && rule.Triggers.Contains(trigger))
+            .Where(rule => rule.IsEnabled &&
+                (rule.Destination == WindowRuleDestination.PinnedToAllDesktops
+                    ? answersPinEvent
+                    : rule.Triggers.Contains(trigger)))
             .Select(rule => CreateMatch(rule, identity))
             .OfType<WindowRuleMatch>()
             .OrderByDescending(static match => match.Strength)
@@ -357,8 +380,28 @@ public sealed class ConfigurationWindowRuleSource : IWindowRuleSource
                         TitleContains: [],
                         CommandLineContains: []),
                     index,
-                    rule.Action == ApplicationRuleAction.AllowAnywhere
-                        ? WindowRuleDestination.Anywhere
-                        : WindowRuleDestination.ManagedDesktop))
+                    ToDestination(rule.Action)))
             .ToArray();
+
+    /// <summary>
+    /// Projects a configured rule's action onto the destination the matcher
+    /// reads.
+    /// </summary>
+    /// <remarks>
+    /// Shared rather than repeated, so a reader that needs the same projection —
+    /// the rule tester, for one — cannot drift from what the running observer
+    /// decides.
+    /// </remarks>
+    /// <param name="action">The configured rule's action.</param>
+    /// <returns>The destination that action means.</returns>
+    public static WindowRuleDestination ToDestination(
+        ApplicationRuleAction action) =>
+        action switch
+        {
+            ApplicationRuleAction.AllowAnywhere =>
+                WindowRuleDestination.Anywhere,
+            ApplicationRuleAction.ShowOnAllDesktops =>
+                WindowRuleDestination.PinnedToAllDesktops,
+            _ => WindowRuleDestination.ManagedDesktop,
+        };
 }

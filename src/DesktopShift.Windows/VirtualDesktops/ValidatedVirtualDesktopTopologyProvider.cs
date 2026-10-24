@@ -38,6 +38,32 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         };
 
     /// <summary>
+    /// Full Mode on a build that proved it can keep a window on every desktop.
+    /// </summary>
+    /// <remarks>
+    /// Pinning rests on its own private Shell interface, so it is proved on its
+    /// own and added on its own. The difference from
+    /// <see cref="FullManagedDesktopCapabilities"/> is deliberately the only
+    /// difference: a build that refuses the pin probe still enumerates, creates,
+    /// switches and moves windows exactly as before, and remains in Full Mode.
+    /// </remarks>
+    private static readonly VirtualDesktopCapabilities FullCapabilitiesWithPin =
+        FullManagedDesktopCapabilities with
+        {
+            CanPinWindow = true,
+        };
+
+    /// <summary>
+    /// Full Mode on a build that proved both the extended manager layout and
+    /// the pinned-apps surface.
+    /// </summary>
+    private static readonly VirtualDesktopCapabilities FullCapabilitiesWithExtendedLayoutAndPin =
+        FullCapabilitiesWithExtendedLayout with
+        {
+            CanPinWindow = true,
+        };
+
+    /// <summary>
     /// The shortest gap between two rebuild attempts.
     /// </summary>
     /// <remarks>
@@ -48,6 +74,23 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     /// the first failure after a restart rebuild immediately.
     /// </remarks>
     private const long ReconnectCooldownMilliseconds = 5_000;
+
+    /// <summary>
+    /// Why a provider cannot pin, stated so a reader of Activity knows which of
+    /// the two happened: no surface was ever proved on this host, or nothing is
+    /// carrying a proved one.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately about the host rather than the build: a Limited Mode host
+    /// also lands here, and telling that user their Windows build is at fault
+    /// would send them looking for the wrong thing.
+    /// </remarks>
+    private const string NoProvedPinSurface =
+        "DesktopShift has not proved a pinning surface on this host, so a window cannot be kept on every desktop.";
+
+    /// <inheritdoc cref="NoProvedPinSurface"/>
+    private const string NoActiveAdapter =
+        "The validated adapter is no longer active, so a window cannot be kept on every desktop.";
 
     private readonly object syncRoot = new();
     private readonly LimitedVirtualDesktopTopologyService limitedProvider;
@@ -245,6 +288,27 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             canUseExtendedLayout = false;
         }
 
+        // Pinning is a different private interface from the manager, so it is
+        // asked for separately and answered separately. The refusal is not a
+        // fallback either: it costs pinning while leaving every other Full Mode
+        // capability standing, and a build that cannot answer for pinning is
+        // still a build DesktopShift manages desktops on.
+        bool canPinWindows;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            canPinWindows = bridge.ProbeWindowPin().IsSuccess;
+        }
+        catch (OperationCanceledException)
+        {
+            bridge.Dispose();
+            throw;
+        }
+        catch (Exception)
+        {
+            canPinWindows = false;
+        }
+
         lock (syncRoot)
         {
             if (disposed)
@@ -255,9 +319,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             activeBridge?.Dispose();
             activeBridge = bridge;
             identity = CreateFullIdentity(build.Build);
-            capabilities = canUseExtendedLayout
-                ? FullCapabilitiesWithExtendedLayout
-                : FullManagedDesktopCapabilities;
+            capabilities = BuildFullCapabilities(canUseExtendedLayout, canPinWindows);
             lastFallback = null;
 
             // Remembered so a later rebuild targets the family this machine
@@ -689,6 +751,18 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
         }
     }
 
+    NativeBridgeResult<bool> IValidatedWindowDesktopMover.IsWindowPinned(
+        nint windowHandle) =>
+        InvokePinOperation(bridge => bridge.IsWindowPinned(windowHandle));
+
+    NativeBridgeResult IValidatedWindowDesktopMover.PinWindow(
+        nint windowHandle) =>
+        InvokePinOperation(bridge => bridge.PinWindow(windowHandle));
+
+    NativeBridgeResult IValidatedWindowDesktopMover.UnpinWindow(
+        nint windowHandle) =>
+        InvokePinOperation(bridge => bridge.UnpinWindow(windowHandle));
+
     public void Dispose()
     {
         lock (syncRoot)
@@ -725,6 +799,26 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             26200 => "windows.shell.25h2.26200",
             28000 => "windows.shell.26h1.28000",
             _ => $"windows.shell.unrecognized.{build}",
+        };
+
+    /// <summary>
+    /// The capabilities Full Mode carries for a machine that proved this much.
+    /// </summary>
+    /// <remarks>
+    /// Activation and every later rebuild answer these two questions the same
+    /// way, so they are answered in one place. The extended layout and the pin
+    /// surface are independent: a machine may prove either, both or neither,
+    /// and a refusal of one never subtracts from the other.
+    /// </remarks>
+    private static VirtualDesktopCapabilities BuildFullCapabilities(
+        bool canUseExtendedLayout,
+        bool canPinWindows) =>
+        (canUseExtendedLayout, canPinWindows) switch
+        {
+            (true, true) => FullCapabilitiesWithExtendedLayoutAndPin,
+            (true, false) => FullCapabilitiesWithExtendedLayout,
+            (false, true) => FullCapabilitiesWithPin,
+            _ => FullManagedDesktopCapabilities,
         };
 
     private static DesktopTopologyProviderError ToProviderError(
@@ -820,6 +914,121 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     }
 
     /// <summary>
+    /// Runs one pin operation against the validated adapter, or refuses it
+    /// without reaching the adapter at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The capability is read rather than tried. Pinning is asked and answered
+    /// at activation: a build whose pin surface the read-only probe never
+    /// proved advertises no pin capability, and a machine in Limited Mode
+    /// advertises nothing. Reading the flag is what keeps every pin slot off a
+    /// build that never admitted the surface.
+    /// </para>
+    /// <para>
+    /// The adapter is held through the single native call, under the same lock
+    /// adapter replacement and disposal take, so recovery cannot invalidate the
+    /// bridge after selection but before the call completes. As with a move, a
+    /// refusal for one window is an operation failure and does not demote the
+    /// validated provider.
+    /// </para>
+    /// </remarks>
+    private NativeBridgeResult<T> InvokePinOperation<T>(
+        Func<INativeVirtualDesktopBridge, NativeBridgeResult<T>> operation)
+    {
+        lock (syncRoot)
+        {
+            ThrowIfDisposed();
+            INativeVirtualDesktopBridge? bridge = activeBridge;
+            if (!capabilities.CanPinWindow)
+            {
+                return NativeBridgeResult<T>.Failed(
+                    UnsupportedPin(NoProvedPinSurface));
+            }
+
+            if (bridge is null)
+            {
+                return NativeBridgeResult<T>.Failed(
+                    UnsupportedPin(NoActiveAdapter));
+            }
+
+            try
+            {
+                return operation(bridge);
+            }
+            catch (Exception exception)
+            {
+                return NativeBridgeResult<T>.Failed(PinExceptionError(exception));
+            }
+        }
+    }
+
+    /// <inheritdoc cref="InvokePinOperation{T}"/>
+    private NativeBridgeResult InvokePinOperation(
+        Func<INativeVirtualDesktopBridge, NativeBridgeResult> operation)
+    {
+        lock (syncRoot)
+        {
+            ThrowIfDisposed();
+            INativeVirtualDesktopBridge? bridge = activeBridge;
+            if (!capabilities.CanPinWindow)
+            {
+                return NativeBridgeResult.Failed(
+                    UnsupportedPin(NoProvedPinSurface));
+            }
+
+            if (bridge is null)
+            {
+                return NativeBridgeResult.Failed(
+                    UnsupportedPin(NoActiveAdapter));
+            }
+
+            try
+            {
+                return operation(bridge);
+            }
+            catch (Exception exception)
+            {
+                return NativeBridgeResult.Failed(PinExceptionError(exception));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The refusal a pin operation gives when the host has no proved pin
+    /// surface.
+    /// </summary>
+    /// <remarks>
+    /// A build that never proved the surface and a provider that is not holding
+    /// a validated adapter answer with one code, because a caller can do the
+    /// same thing about either. Only the message differs, and only so Activity
+    /// says which of the two happened. It is a refusal rather than a failure,
+    /// so assignment records a deliberate skip instead of a failure the user
+    /// cannot act on.
+    /// </remarks>
+    private static NativeBridgeError UnsupportedPin(string message) =>
+        new(
+            "native.pin_unsupported",
+            "WindowPin",
+            message,
+            unchecked((int)0x80004001));
+
+    /// <summary>
+    /// The failure a pin operation reports when the call did not complete.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="UnsupportedPin(string)"/> because the two say
+    /// different things: a refusal means the host cannot pin at all, while this
+    /// means a host that can pin was asked and the call did not finish.
+    /// </remarks>
+    private static NativeBridgeError PinExceptionError(Exception exception) =>
+        new(
+            "native.window_pin_exception",
+            "WindowPin",
+            "The native window pin call failed unexpectedly.",
+            exception.HResult);
+
+    /// <summary>
     /// Rebuilds the native adapter against the build this provider already
     /// validated, and returns the live adapter, or null if Full Mode could not
     /// be re-established.
@@ -829,8 +1038,9 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
     /// This proves exactly what activation proves, in the same order: a bridge
     /// that validates, and notifications that register. A rebuild that skipped
     /// either would be a route into Full Mode that never established Full Mode.
-    /// The extended layout is asked for separately; a refusal costs naming and
-    /// desktop reordering only, which is the same bargain activation makes.
+    /// The extended layout and the pin surface are asked for separately, and a
+    /// refusal costs naming, desktop reordering or pinning alone, which is the
+    /// same bargain activation makes.
     /// </para>
     /// <para>
     /// Activation happens outside the lock because it is COM work against a
@@ -879,6 +1089,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 
         INativeVirtualDesktopBridge bridge = activation.Value!;
         bool canUseExtendedLayout;
+        bool canPinWindows;
         try
         {
             if (!bridge.Validate().IsSuccess ||
@@ -889,6 +1100,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             }
 
             canUseExtendedLayout = bridge.ProbeDesktopLookup().IsSuccess;
+            canPinWindows = bridge.ProbeWindowPin().IsSuccess;
         }
         catch (Exception)
         {
@@ -907,9 +1119,7 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
             activeBridge?.Dispose();
             activeBridge = bridge;
             identity = CreateFullIdentity(build);
-            capabilities = canUseExtendedLayout
-                ? FullCapabilitiesWithExtendedLayout
-                : FullManagedDesktopCapabilities;
+            capabilities = BuildFullCapabilities(canUseExtendedLayout, canPinWindows);
 
             // The fallback record is cleared because it is no longer true. A
             // stale one would keep reporting Limited Mode in compatibility
@@ -982,8 +1192,8 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 }
 
 /// <summary>
-/// Resolves each move against the provider's currently validated native
-/// adapter.
+/// Resolves each move and pin against the provider's currently validated
+/// native adapter.
 /// </summary>
 /// <remarks>
 /// Shell recovery replaces the adapter owned by the provider. Callers retain
@@ -993,4 +1203,28 @@ public sealed class ValidatedVirtualDesktopTopologyProvider :
 internal interface IValidatedWindowDesktopMover
 {
     NativeBridgeResult MoveWindowToDesktop(nint windowHandle, Guid desktopId);
+
+    /// <summary>
+    /// Whether the Shell currently shows the window on every virtual desktop.
+    /// </summary>
+    /// <remarks>
+    /// A mover that has not implemented pinning answers with the refusal below
+    /// rather than with "not pinned", because a host that cannot ask the
+    /// question must not look like a host whose answer is no.
+    /// </remarks>
+    NativeBridgeResult<bool> IsWindowPinned(nint windowHandle) =>
+        NativeBridgeResult<bool>.Failed(UnsupportedPin());
+
+    NativeBridgeResult PinWindow(nint windowHandle) =>
+        NativeBridgeResult.Failed(UnsupportedPin());
+
+    NativeBridgeResult UnpinWindow(nint windowHandle) =>
+        NativeBridgeResult.Failed(UnsupportedPin());
+
+    private static NativeBridgeError UnsupportedPin() =>
+        new(
+            "native.pin_unsupported",
+            "WindowPin",
+            "This mover cannot keep windows on every virtual desktop.",
+            unchecked((int)0x80004001));
 }

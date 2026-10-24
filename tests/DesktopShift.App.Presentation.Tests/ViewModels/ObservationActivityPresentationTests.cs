@@ -189,6 +189,31 @@ public sealed class ObservationActivityPresentationTests
         Assert.AreEqual(string.Empty, presentation.Diagnostic);
     }
 
+    [TestMethod]
+    public void Create_PinnedWindowNamesEveryDesktopAndIgnoresTheStoredKey()
+    {
+        // A pin rule keeps a stored desktop key that nothing reads, so naming
+        // it — or reporting the window as unassigned — would describe a
+        // placement the pin never makes.
+        WindowObservationActivity activity = CreateActivity(
+            WindowObservationOutcome.Matched,
+            WindowSkipReason.None,
+            TerminalIdentity,
+            ruleId: "music",
+            targetDesktopKey: "code",
+            matchedOn: WindowMatchStrength.ProcessName,
+            destination: WindowRuleDestination.PinnedToAllDesktops);
+
+        ObservationActivityPresentation presentation =
+            ObservationActivityPresentation.Create(activity);
+
+        Assert.AreEqual("Every desktop", presentation.TargetDesktop);
+        Assert.AreEqual(
+            "Matched music to every desktop by process name",
+            presentation.Decision);
+        Assert.DoesNotContain("code", presentation.Decision);
+    }
+
     private static WindowSafeIdentity TerminalIdentity =>
         new(
             "WindowsTerminal.exe",
@@ -202,7 +227,8 @@ public sealed class ObservationActivityPresentationTests
         WindowSafeIdentity identity,
         string? ruleId = null,
         string? targetDesktopKey = null,
-        WindowMatchStrength? matchedOn = null) =>
+        WindowMatchStrength? matchedOn = null,
+        WindowRuleDestination destination = WindowRuleDestination.ManagedDesktop) =>
         new(
             DateTimeOffset.UtcNow,
             EventSequence: 7,
@@ -213,5 +239,6 @@ public sealed class ObservationActivityPresentationTests
             ruleId,
             targetDesktopKey,
             identity,
-            MatchedOn: matchedOn);
+            MatchedOn: matchedOn,
+            Destination: destination);
 }

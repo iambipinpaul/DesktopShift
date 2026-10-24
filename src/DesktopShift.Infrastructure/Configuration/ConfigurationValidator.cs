@@ -113,7 +113,7 @@ internal static class ConfigurationValidator
             // A rule that never moves a window has no destination, no useful
             // trigger, and no reachable switch policy, so reporting any of the
             // three would be reporting a member the matcher does not read.
-            if (!rule.AllowsAnywhere)
+            if (rule.MovesWindows)
             {
                 if (string.IsNullOrWhiteSpace(rule.TargetDesktopKey))
                 {
@@ -219,7 +219,7 @@ internal static class ConfigurationValidator
                 "a window class",
                 rule.Id);
 
-            if (rule.AllowsAnywhere)
+            if (!rule.MovesWindows)
             {
                 continue;
             }

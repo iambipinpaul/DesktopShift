@@ -80,7 +80,59 @@ internal interface INativeVirtualDesktopBridge : IDisposable
     /// </remarks>
     NativeBridgeResult SetDesktopName(Guid desktopId, string name);
 
+    /// <summary>
+    /// Whether the Shell currently shows the window on every virtual desktop.
+    /// </summary>
+    /// <remarks>
+    /// The read-only half of the pin surface, and the only pin slot reached
+    /// before that surface has been proved.
+    /// </remarks>
+    NativeBridgeResult<bool> IsWindowPinned(nint windowHandle) =>
+        NativeBridgeResult<bool>.Failed(UnsupportedPin());
+
+    /// <summary>
+    /// Keeps the window visible on every virtual desktop.
+    /// </summary>
+    NativeBridgeResult PinWindow(nint windowHandle) =>
+        NativeBridgeResult.Failed(UnsupportedPin());
+
+    /// <summary>
+    /// Returns a pinned window to normal placement on one desktop.
+    /// </summary>
+    NativeBridgeResult UnpinWindow(nint windowHandle) =>
+        NativeBridgeResult.Failed(UnsupportedPin());
+
+    /// <summary>
+    /// Proves the pinned-apps surface lays its vtable out where this build
+    /// family expects, using a read-only query that changes nothing.
+    /// </summary>
+    /// <remarks>
+    /// Pinning lives on its own private interface with its own vtable, so it is
+    /// established separately from the manager layout. A failure here means
+    /// pinning stays unavailable; it says nothing about enumeration, creation,
+    /// switching, window moves, naming or reordering.
+    /// </remarks>
+    NativeBridgeResult ProbeWindowPin() =>
+        NativeBridgeResult.Failed(UnsupportedPin());
+
     NativeBridgeResult StartNotifications(Action<string> onTopologyChanged);
+
+    /// <summary>
+    /// The refusal every pin default above answers with.
+    /// </summary>
+    /// <remarks>
+    /// A bridge that does not carry the pin surface keeps compiling by
+    /// inheriting these defaults, and such a bridge reports pinning as
+    /// unsupported rather than as a pin that failed. That is the same answer a
+    /// Windows build which cannot pin gives, so a caller has one thing to
+    /// understand instead of two.
+    /// </remarks>
+    private static NativeBridgeError UnsupportedPin() =>
+        new(
+            "native.pin_unsupported",
+            "WindowPin",
+            "This bridge cannot keep windows on every virtual desktop.",
+            unchecked((int)0x80004001));
 }
 
 internal interface INativeVirtualDesktopBridgeFactory

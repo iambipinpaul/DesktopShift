@@ -18,6 +18,32 @@ public enum WindowAssignmentSkipReason
     TargetDesktopUnresolved,
     SelfGeneratedForegroundSuppressed,
     WindowNotTracked,
+
+    /// <summary>
+    /// The window was already pinned to every desktop, so nothing changed.
+    /// </summary>
+    AlreadyPinnedToAllDesktops,
+
+    /// <summary>
+    /// The rule pins windows, but this host has not proved a pinning surface,
+    /// so the window was left alone and the rule says so rather than passing
+    /// for one that worked.
+    /// </summary>
+    PinUnavailable,
+
+    /// <summary>
+    /// A pin an earlier rule left on the window is still held, and a foreground
+    /// activation must not release it, so the move waits for the next event
+    /// that repairs placement.
+    /// </summary>
+    /// <remarks>
+    /// Releasing a pin changes placement, so doing it while the user switches
+    /// to the window would move the window out from under their click. The pin
+    /// is not outlived by its rule for long: window creation, window showing,
+    /// startup reconciliation, or a manual reassignment releases it and applies
+    /// the rule that now matches.
+    /// </remarks>
+    PinHeldUntilRepairEvent,
 }
 
 public enum WindowMoveOutcome
@@ -27,6 +53,17 @@ public enum WindowMoveOutcome
     AlreadyCorrect,
     Failed,
     WindowUnavailable,
+
+    /// <summary>
+    /// The window was pinned to every virtual desktop by this assignment.
+    /// </summary>
+    PinnedToAllDesktops,
+
+    /// <summary>
+    /// The window was already pinned, so no change was needed. It reads the
+    /// way <see cref="AlreadyCorrect"/> reads for a move.
+    /// </summary>
+    AlreadyPinnedToAllDesktops,
 }
 
 public enum DesktopSwitchOutcome
@@ -48,6 +85,12 @@ public enum DesktopSwitchDecisionReason
     CapabilityUnavailable,
     PolicyApproved,
     SwitchFailed,
+
+    /// <summary>
+    /// The rule pins the window to every desktop, and the pin never moves
+    /// between desktops, so no switch was considered.
+    /// </summary>
+    PinnedToAllDesktops,
 
     /// <summary>
     /// The window was moved, and then shutdown cancelled the switch that would

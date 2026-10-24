@@ -11,8 +11,14 @@ public static class ManagedDesktopMappingPresentationProjection
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
+        // Only a rule that moves a window targets a Managed Desktop. An
+        // Anywhere rule and a Show on all desktops rule both store a key they
+        // never read, so counting either here would tell a user a desktop is
+        // where an application is sent when nothing sends it there.
         IReadOnlyDictionary<string, RuleCounts>? ruleCounts =
             configuration?.ApplicationRules
+                .Where(static rule =>
+                    !rule.AllowsAnywhere && !rule.ShowsOnAllDesktops)
                 .GroupBy(rule => rule.TargetDesktopKey, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     group => group.Key,

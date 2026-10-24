@@ -75,6 +75,21 @@ public enum WindowSkipReason
     /// answer this event; tiling hears about it and reconciles once.
     /// </summary>
     TilingMoveSizeEndObserved,
+
+    /// <summary>
+    /// The decision leaves the window where it is — an Anywhere rule claims
+    /// the application, or a rule that names it did not answer this event —
+    /// but a pin an earlier rule left on the window could not be released, so
+    /// the window may still appear on every desktop.
+    /// </summary>
+    /// <remarks>
+    /// Reported instead of the skip the decision would otherwise record
+    /// (<see cref="AllowedAnywhere"/>, <see cref="NoMatchingRule"/>) rather
+    /// than beside it: the window was left where it is, but a window still
+    /// pinned to every desktop is not what "left where it is" describes. The
+    /// next event that repairs placement tries the release again.
+    /// </remarks>
+    PinReleaseFailed,
 }
 
 public sealed record WindowQualification(

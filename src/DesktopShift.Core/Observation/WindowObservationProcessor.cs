@@ -1,4 +1,5 @@
 using DesktopShift.Core.Assignments;
+using DesktopShift.Core.Compatibility;
 using DesktopShift.Core.Performance;
 using DesktopShift.Core.Tiling;
 
@@ -498,6 +499,7 @@ public sealed class WindowObservationProcessor : IDisposable
     private readonly WindowEventCoalescer coalescer;
     private readonly OpenWindowFollowGrace followGrace;
     private readonly IWindowAssignmentService? assignmentService;
+    private readonly IWindowDesktopPlacementService? placementService;
     private readonly INewWindowActivationTracker? activationTracker;
     private readonly IForegroundSwitchSuppression? switchSuppression;
     private readonly IEarlyForegroundActivationMemory? earlyForeground;
@@ -513,6 +515,7 @@ public sealed class WindowObservationProcessor : IDisposable
         WindowRuleMatcher? matcher = null,
         WindowEventCoalescer? coalescer = null,
         IWindowAssignmentService? assignmentService = null,
+        IWindowDesktopPlacementService? placementService = null,
         INewWindowActivationTracker? activationTracker = null,
         IForegroundSwitchSuppression? switchSuppression = null,
         OpenWindowFollowGrace? followGrace = null,
@@ -534,6 +537,7 @@ public sealed class WindowObservationProcessor : IDisposable
         this.coalescer = coalescer ?? new WindowEventCoalescer();
         this.followGrace = followGrace ?? new OpenWindowFollowGrace();
         this.assignmentService = assignmentService;
+        this.placementService = placementService;
         this.activationTracker = activationTracker;
         this.switchSuppression = switchSuppression;
         this.earlyForeground = earlyForeground;
@@ -722,6 +726,17 @@ public sealed class WindowObservationProcessor : IDisposable
 
         if (match is { Rule.Destination: WindowRuleDestination.Anywhere })
         {
+            // An Anywhere rule never moves the window, so the release a move
+            // performs before placing a window has no other moment to happen.
+            // Without it, a window pinned by a rule the user has since removed
+            // would stay on every desktop for as long as this rule claims it.
+            // A refusal is reported rather than hidden: the window may still be
+            // on every desktop, and an activity row saying the rule left it
+            // alone would describe a window the user can see everywhere.
+            DesktopTopologyProviderResult release = await ReleaseHeldPinAsync(
+                window.RootWindowHandle,
+                windowEvent.Kind,
+                cancellationToken).ConfigureAwait(false);
             tilingTrigger?.NotifyAssignmentCompleted(
                 new TilingAssignmentNotification(
                     window.RootWindowHandle,
@@ -730,7 +745,9 @@ public sealed class WindowObservationProcessor : IDisposable
             return await RecordSkipAsync(
                 windowEvent,
                 window.RootWindowHandle,
-                WindowSkipReason.AllowedAnywhere,
+                release.IsSuccess
+                    ? WindowSkipReason.AllowedAnywhere
+                    : WindowSkipReason.PinReleaseFailed,
                 correlationId,
                 identity.ToSafeIdentity(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -765,17 +782,27 @@ public sealed class WindowObservationProcessor : IDisposable
                 hasEnabledRules && matcher.IsNamedByAnyRule(identity, rules);
             if (!answersEvent || isNamedByAnyRule)
             {
+                // A rule that pinned this window is gone — one still in force
+                // would have answered a repair event — but another rule names
+                // the application, so the sweep must not take the window. The
+                // repair event is still the moment the pin is dropped: the
+                // window stops appearing on every desktop even though nothing
+                // places it here.
+                DesktopTopologyProviderResult release =
+                    await ReleaseHeldPinAsync(
+                        window.RootWindowHandle,
+                        windowEvent.Kind,
+                        cancellationToken).ConfigureAwait(false);
+
                 WindowSkipReason reason = !hasEnabledRules
                     ? WindowSkipReason.NoEnabledRules
                     : !answersEvent
                         ? WindowSkipReason.ActivationNotSwept
-                        : WindowSkipReason.NoMatchingRule;
+                        : !release.IsSuccess
+                            ? WindowSkipReason.PinReleaseFailed
+                            : WindowSkipReason.NoMatchingRule;
 
-                if (windowEvent.Kind is
-                    WindowEventKind.Created or
-                    WindowEventKind.Shown or
-                    WindowEventKind.StartupReconciliation or
-                    WindowEventKind.ManualReassignment)
+                if (WindowPinRelease.IsRepairEvent(windowEvent.Kind))
                 {
                     tilingTrigger?.NotifyAssignmentCompleted(
                         new TilingAssignmentNotification(
@@ -855,7 +882,8 @@ public sealed class WindowObservationProcessor : IDisposable
                     rule.TargetDesktopKey,
                     safeIdentity,
                     MatchedOn: matchedOn,
-                    CorrelationId: correlationId);
+                    CorrelationId: correlationId,
+                    Destination: rule.Destination);
             }
         }
         else if (windowEvent.Kind == WindowEventKind.ForegroundActivated)
@@ -974,7 +1002,8 @@ public sealed class WindowObservationProcessor : IDisposable
             AssignmentError: assignment?.Error,
             Assignment: assignment,
             MatchedOn: matchedOn,
-            CorrelationId: correlationId);
+            CorrelationId: correlationId,
+            Destination: rule.Destination);
         await activitySink
             .RecordAsync(activity, cancellationToken)
             .ConfigureAwait(false);
@@ -991,6 +1020,19 @@ public sealed class WindowObservationProcessor : IDisposable
             { SkipReason: WindowAssignmentSkipReason.AlreadyOnTargetDesktop } or
             { MoveOutcome: WindowMoveOutcome.AlreadyCorrect } =>
                 TilingAssignmentDisposition.AlreadyInPlace,
+
+            // A pin is not a move either: the window keeps the tile it already
+            // owns, and tiling may still lay it out on the desktop it is on.
+            { MoveOutcome: WindowMoveOutcome.PinnedToAllDesktops } or
+            { MoveOutcome: WindowMoveOutcome.AlreadyPinnedToAllDesktops } =>
+                TilingAssignmentDisposition.AlreadyInPlace,
+
+            // A pin the window still holds deferred the move: nothing was
+            // confirmed and nothing may be forgotten, so ownership survives
+            // until a repair event releases the pin and places the window.
+            { SkipReason: WindowAssignmentSkipReason.PinHeldUntilRepairEvent } =>
+                TilingAssignmentDisposition.Unconfirmed,
+
             { Outcome: WindowAssignmentOutcome.Succeeded } =>
                 TilingAssignmentDisposition.PlacedOnTargetDesktop,
             _ when sourceEvent == WindowEventKind.ForegroundActivated =>
@@ -1009,6 +1051,58 @@ public sealed class WindowObservationProcessor : IDisposable
         {
             await ProcessAsync(windowEvent, cancellationToken)
                 .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Releases a pin an earlier rule left on this window.
+    /// </summary>
+    /// <remarks>
+    /// Only the events that repair placement release a pin; a foreground
+    /// activation deliberately does not, because releasing a pin changes
+    /// placement and that event must never move a window out from under a
+    /// click. A refusal is returned rather than thrown: it says something about
+    /// the window the caller is about to record, and the window's next event
+    /// tries again.
+    /// </remarks>
+    /// <param name="windowHandle">The root window handle to release.</param>
+    /// <param name="trigger">The window event being observed.</param>
+    /// <param name="cancellationToken">Abandons the release.</param>
+    /// <returns>
+    /// Whether the window is known to hold no pin. It is a success when the
+    /// event does not repair placement, and when this host has no pin surface.
+    /// </returns>
+    private async ValueTask<DesktopTopologyProviderResult> ReleaseHeldPinAsync(
+        nint windowHandle,
+        WindowEventKind trigger,
+        CancellationToken cancellationToken)
+    {
+        if (placementService is null ||
+            !WindowPinRelease.IsRepairEvent(trigger))
+        {
+            return DesktopTopologyProviderResult.Succeeded();
+        }
+
+        try
+        {
+            return await WindowPinRelease
+                .ReleaseHeldPinAsync(
+                    placementService,
+                    windowHandle,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return DesktopTopologyProviderResult.Failed(
+                "observation.pin_release_exception",
+                "The window's pin could not be released.",
+                exception.HResult);
         }
     }
 

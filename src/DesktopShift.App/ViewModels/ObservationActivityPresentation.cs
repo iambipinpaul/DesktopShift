@@ -32,18 +32,24 @@ public sealed record ObservationActivityPresentation(
             activity.SkipReason == WindowSkipReason.ActivationNotSwept
                 ? "Not evaluated"
                 : "No matching rule");
-        string targetDesktop = ValueOrFallback(
-            activity.TargetDesktopKey,
-            "No desktop assigned");
+        // A pin names no desktop: the rule's stored key is not read while its
+        // action is a pin, so repeating it — or reporting it as unassigned —
+        // would describe a placement the pin never makes.
+        bool isPinned =
+            activity.Destination == WindowRuleDestination.PinnedToAllDesktops;
+        string targetDesktop = isPinned
+            ? "Every desktop"
+            : ValueOrFallback(activity.TargetDesktopKey, "No desktop assigned");
         string? signal = isMatched
             ? DescribeMatchSignal(activity.MatchedOn)
             : null;
         string matchSignal = signal ?? NoMatchSignal;
         string skipReason = FormatEnum(activity.SkipReason);
+        string matchedTarget = isPinned ? "every desktop" : targetDesktop;
         string decision = isMatched
             ? signal is null
-                ? $"Matched {rule} to {targetDesktop}"
-                : $"Matched {rule} to {targetDesktop} by {signal}"
+                ? $"Matched {rule} to {matchedTarget}"
+                : $"Matched {rule} to {matchedTarget} by {signal}"
             : $"Skipped: {skipReason}";
         string trigger = FormatEnum(activity.Trigger);
         string occurredAt = activity.OccurredAt

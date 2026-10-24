@@ -35,9 +35,12 @@ public sealed record AssignmentActivityPresentation(
         string processName = ValueOrFallback(
             activity.Identity.ProcessName,
             "Process identity unavailable");
-        string target = ValueOrFallback(
-            activity.TargetDesktopKey,
-            "Unresolved desktop");
+        // A pin never moves the window: its rule keeps a desktop key that
+        // nothing reads, so repeating it, or calling it unresolved, would
+        // describe a move that was never going to happen.
+        string target = IsPin(activity)
+            ? "Every desktop"
+            : ValueOrFallback(activity.TargetDesktopKey, "Unresolved desktop");
         string rule = ValueOrFallback(activity.RuleId, "No matching rule");
         string outcome = FormatOutcome(activity);
         string decision = FormatDecision(activity, processName, target);
@@ -107,6 +110,11 @@ public sealed record AssignmentActivityPresentation(
             return "Move failed";
         }
 
+        if (IsPin(activity) && activity.Outcome == WindowAssignmentOutcome.Failed)
+        {
+            return "Pin failed";
+        }
+
         if (activity.SwitchOutcome == DesktopSwitchOutcome.Failed)
         {
             return activity.MoveOutcome == WindowMoveOutcome.Succeeded
@@ -142,6 +150,8 @@ public sealed record AssignmentActivityPresentation(
         {
             WindowMoveOutcome.Succeeded => "Moved",
             WindowMoveOutcome.AlreadyCorrect => "Already correct",
+            WindowMoveOutcome.PinnedToAllDesktops => "Pinned",
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops => "Already pinned",
             _ => activity.Outcome switch
             {
                 WindowAssignmentOutcome.Succeeded => "Assigned",
@@ -149,6 +159,14 @@ public sealed record AssignmentActivityPresentation(
                     when activity.SkipReason ==
                         WindowAssignmentSkipReason.AlreadyOnTargetDesktop =>
                     "Already correct",
+                WindowAssignmentOutcome.Skipped
+                    when activity.SkipReason ==
+                        WindowAssignmentSkipReason.PinUnavailable =>
+                    "Pin unavailable",
+                WindowAssignmentOutcome.Skipped
+                    when activity.SkipReason ==
+                        WindowAssignmentSkipReason.PinHeldUntilRepairEvent =>
+                    "Still pinned",
                 WindowAssignmentOutcome.Skipped => "Skipped",
                 WindowAssignmentOutcome.Failed => "Failed",
                 _ => activity.Outcome.ToString(),
@@ -159,14 +177,38 @@ public sealed record AssignmentActivityPresentation(
     private static string FormatMovement(
         WindowAssignmentActivity activity,
         string target) =>
+        IsPin(activity)
+            ? FormatPinMovement(activity)
+            : activity.MoveOutcome switch
+            {
+                WindowMoveOutcome.Succeeded => $"Moved to {target}",
+                WindowMoveOutcome.AlreadyCorrect => $"Already on {target}",
+                WindowMoveOutcome.Failed => $"Move to {target} failed",
+                WindowMoveOutcome.WindowUnavailable =>
+                    $"Window became unavailable before move to {target}",
+                _ => "Move not attempted",
+            };
+
+    /// <summary>
+    /// What a pin did to the window, which is never a move to a desktop.
+    /// </summary>
+    /// <remarks>
+    /// A pin this host could not make is reported as a pin that did not happen
+    /// rather than as a failure: the host has said it cannot pin, and saying
+    /// something failed would send the user looking for a fault.
+    /// </remarks>
+    private static string FormatPinMovement(WindowAssignmentActivity activity) =>
         activity.MoveOutcome switch
         {
-            WindowMoveOutcome.Succeeded => $"Moved to {target}",
-            WindowMoveOutcome.AlreadyCorrect => $"Already on {target}",
-            WindowMoveOutcome.Failed => $"Move to {target} failed",
-            WindowMoveOutcome.WindowUnavailable =>
-                $"Window became unavailable before move to {target}",
-            _ => "Move not attempted",
+            WindowMoveOutcome.PinnedToAllDesktops => "Pinned to all desktops",
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops =>
+                "Already pinned to all desktops",
+            _ when activity.SkipReason ==
+                WindowAssignmentSkipReason.PinHeldUntilRepairEvent =>
+                "Kept pinned",
+            _ => activity.Outcome == WindowAssignmentOutcome.Failed
+                ? "Pin failed"
+                : "Pin not attempted",
         };
 
     private static string FormatDecision(
@@ -190,9 +232,22 @@ public sealed record AssignmentActivityPresentation(
             WindowMoveOutcome.Succeeded => $"Moved {processName} to {target}",
             WindowMoveOutcome.AlreadyCorrect => $"{processName} is already on {target}",
             WindowMoveOutcome.Failed => $"Couldn’t move {processName} to {target}",
+            WindowMoveOutcome.PinnedToAllDesktops =>
+                $"Pinned {processName} to all desktops",
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops =>
+                $"{processName} is already pinned to all desktops",
             _ when activity.SkipReason ==
                 WindowAssignmentSkipReason.TargetDesktopUnresolved =>
                 $"Skipped {processName}: target desktop unresolved",
+            _ when activity.SkipReason ==
+                WindowAssignmentSkipReason.PinUnavailable =>
+                $"Skipped {processName}: this host cannot pin windows yet",
+            _ when activity.SkipReason ==
+                WindowAssignmentSkipReason.PinHeldUntilRepairEvent =>
+                $"Kept {processName} pinned; the move waits for its next placement event",
+            _ when IsPin(activity) &&
+                activity.Outcome == WindowAssignmentOutcome.Failed =>
+                $"Couldn’t pin {processName} to all desktops",
             _ => $"Processed {processName} for {target}",
         };
 
@@ -217,6 +272,8 @@ public sealed record AssignmentActivityPresentation(
                 "Move only — desktop switching is unavailable in Limited Mode",
             DesktopSwitchOutcome.Suppressed =>
                 $"Suppressed — {FormatSwitchReason(activity.SwitchDecisionReason)}",
+            _ when IsPin(activity) =>
+                $"No switch — {FormatSwitchReason(activity.SwitchDecisionReason)}",
             _ => $"Move only — {FormatSwitchReason(activity.SwitchDecisionReason)}",
         };
 
@@ -244,6 +301,8 @@ public sealed record AssignmentActivityPresentation(
                 "the foreground event was generated by DesktopShift’s own switch",
             DesktopSwitchDecisionReason.CapabilityUnavailable =>
                 "the provider cannot switch desktops",
+            DesktopSwitchDecisionReason.PinnedToAllDesktops =>
+                "the rule pins the window rather than moving it",
             DesktopSwitchDecisionReason.PolicyApproved =>
                 "the rule policy approved switching",
             DesktopSwitchDecisionReason.SwitchFailed =>
@@ -297,6 +356,21 @@ public sealed record AssignmentActivityPresentation(
             parts.Add($"{label}: {value.Trim()}");
         }
     }
+
+    /// <summary>
+    /// Whether the assignment pinned the window rather than moving it.
+    /// </summary>
+    /// <remarks>
+    /// A pin that this host could not make records no pin outcome of its own,
+    /// so the switch reason is what identifies it: every pin records that no
+    /// switch was considered because the rule pins.
+    /// </remarks>
+    private static bool IsPin(WindowAssignmentActivity activity) =>
+        activity.MoveOutcome is
+            WindowMoveOutcome.PinnedToAllDesktops or
+            WindowMoveOutcome.AlreadyPinnedToAllDesktops ||
+        activity.SwitchDecisionReason ==
+            DesktopSwitchDecisionReason.PinnedToAllDesktops;
 
     private static string ValueOrFallback(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();

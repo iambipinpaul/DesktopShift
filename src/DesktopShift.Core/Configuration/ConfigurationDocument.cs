@@ -81,7 +81,8 @@ public sealed record ManagedDesktopDefinition(
 /// <param name="TargetDesktopKey">
 /// The semantic key of the Managed Desktop matched windows are assigned to.
 /// Ignored when <see cref="Action"/> is
-/// <see cref="ApplicationRuleAction.AllowAnywhere"/>.
+/// <see cref="ApplicationRuleAction.AllowAnywhere"/> or
+/// <see cref="ApplicationRuleAction.ShowOnAllDesktops"/>.
 /// </param>
 /// <param name="ProcessNames">
 /// Executable file names. The weakest identity, and never proof that the
@@ -165,6 +166,33 @@ public sealed record ApplicationRule(
     /// hides them, and the validator does not report them.
     /// </remarks>
     public bool AllowsAnywhere => Action == ApplicationRuleAction.AllowAnywhere;
+
+    /// <summary>
+    /// Whether the rule keeps the windows it claims visible on every virtual
+    /// desktop by pinning them, instead of moving them to one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TargetDesktopKey"/>, <see cref="Triggers"/>, and
+    /// <see cref="SwitchPolicy"/> describe a move, and a pin never makes one,
+    /// so the editor hides the same controls it hides for
+    /// <see cref="AllowsAnywhere"/>.
+    /// </remarks>
+    public bool ShowsOnAllDesktops =>
+        Action == ApplicationRuleAction.ShowOnAllDesktops;
+
+    /// <summary>
+    /// Whether the rule moves the windows it claims to the desktop named by
+    /// <see cref="TargetDesktopKey"/>.
+    /// </summary>
+    /// <remarks>
+    /// Two of the three destinations never move a window: Anywhere leaves it
+    /// where it opened, and Show on all desktops pins it in place. Their
+    /// <see cref="TargetDesktopKey"/>, <see cref="Triggers"/>, and
+    /// <see cref="SwitchPolicy"/> are stored but not read, so a reader that has
+    /// to know which members matter asks this instead of testing the two
+    /// non-moving actions one at a time.
+    /// </remarks>
+    public bool MovesWindows => !AllowsAnywhere && !ShowsOnAllDesktops;
 }
 
 /// <summary>
@@ -280,7 +308,7 @@ public sealed record BehaviorSettings(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The two actions live on one list of rules rather than in two separate lists.
+/// Every action lives on one list of rules rather than in separate lists.
 /// Two lists could both claim the same application, which would need a tie-break
 /// rule the user has to remember; one list already has one, because the matcher
 /// resolves a tie by match strength and then by document order.
@@ -371,6 +399,24 @@ public enum ApplicationRuleAction
     /// </para>
     /// </remarks>
     AllowAnywhere,
+
+    /// <summary>
+    /// Keep every window the rule claims visible on all virtual desktops.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is Task View's "Show windows from this app on all desktops"
+    /// expressed as a rule: the matching windows are pinned instead of moved,
+    /// and they are pinned again after a restart. Pinning never relocates a
+    /// window, so the app keeps its place in the current desktop's layout.
+    /// </para>
+    /// <para>
+    /// Trailing like <see cref="AllowAnywhere"/>, so a document written before
+    /// this member existed still reads as <see cref="MoveToDesktop"/> and the
+    /// schema version does not move.
+    /// </para>
+    /// </remarks>
+    ShowOnAllDesktops,
 }
 
 public enum ApplicationRuleTrigger
