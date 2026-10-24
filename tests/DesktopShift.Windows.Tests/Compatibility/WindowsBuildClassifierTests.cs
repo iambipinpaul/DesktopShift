@@ -10,6 +10,7 @@ public sealed class WindowsBuildClassifierTests
     [DataRow(22631, WindowsBuildSupport.SupportedForEnterpriseOnly, "23H2")]
     [DataRow(26100, WindowsBuildSupport.Supported, "24H2")]
     [DataRow(26200, WindowsBuildSupport.Supported, "25H2")]
+    [DataRow(26300, WindowsBuildSupport.Supported, "26H2")]
     [DataRow(28000, WindowsBuildSupport.Supported, "26H1")]
     public void Classify_RecognizedBuild_ReturnsRelease(
         int buildNumber,

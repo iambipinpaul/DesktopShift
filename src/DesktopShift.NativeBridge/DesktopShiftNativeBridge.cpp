@@ -56,6 +56,9 @@ namespace
         {22631, false, false, false},
         {26100, true, true, true},
         {26200, true, true, true},
+        // 26300.9711 ARM64: inventory, FindDesktop and the read-only pin probe
+        // confirmed the existing layout on a Windows 11 26H2 VM.
+        {26300, true, true, true},
         {28000, false, false, false},
     };
 
