@@ -30,6 +30,24 @@ public interface IWindowsWindowNativeApi
     string? GetWindowTitle(nint windowHandle);
 
     /// <summary>
+    /// Reads the AppUserModelID a window declares for itself through its shell
+    /// property store (<c>PKEY_AppUserModel_ID</c>).
+    /// </summary>
+    /// <remarks>
+    /// A process can host windows that belong to different shell applications:
+    /// every Chrome or Edge installed web app (PWA) runs inside the browser's own
+    /// process, and the only thing that tells its window apart from a browser
+    /// window — and from another installed app — is the ID set on the window.
+    /// It is what the taskbar groups by, and it outranks the process's ID there.
+    /// </remarks>
+    /// <param name="windowHandle">The top-level window.</param>
+    /// <returns>
+    /// The window's explicit AppUserModelID, or <see langword="null"/> when it
+    /// declares none or the property store cannot be read.
+    /// </returns>
+    string? GetWindowAppUserModelId(nint windowHandle);
+
+    /// <summary>
     /// Visits the descendants of <paramref name="windowHandle"/> until
     /// <paramref name="onChild"/> returns <see langword="false"/>.
     /// </summary>
@@ -53,6 +71,12 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
     private const int WindowStyle = -16;
     private const int WindowExtendedStyle = -20;
     private const uint DwmWindowAttributeCloaked = 14;
+    private const ushort VariantTypeWideString = 31;
+
+    // PKEY_AppUserModel_ID: {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5.
+    private static readonly PropertyKey AppUserModelIdKey = new(
+        new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"),
+        5);
 
     public bool IsWindow(nint windowHandle) =>
         NativeMethods.IsWindow(windowHandle);
@@ -128,6 +152,49 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
                 : null;
     }
 
+    public string? GetWindowAppUserModelId(nint windowHandle)
+    {
+        Guid storeId = typeof(IPropertyStore).GUID;
+        if (NativeMethods.SHGetPropertyStoreForWindow(
+                windowHandle,
+                ref storeId,
+                out IPropertyStore? store) < 0 ||
+            store is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            PropertyKey key = AppUserModelIdKey;
+            if (store.GetValue(ref key, out PropVariant value) < 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                return value.ValueType == VariantTypeWideString &&
+                    value.Pointer != 0 &&
+                    Marshal.PtrToStringUni(value.Pointer) is { Length: > 0 } id
+                        ? id
+                        : null;
+            }
+            finally
+            {
+                _ = NativeMethods.PropVariantClear(ref value);
+            }
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            _ = Marshal.ReleaseComObject(store);
+        }
+    }
+
     public void EnumerateChildWindows(nint windowHandle, Func<nint, bool> onChild)
     {
         ArgumentNullException.ThrowIfNull(onChild);
@@ -143,8 +210,64 @@ public sealed class WindowsWindowNativeApi : IWindowsWindowNativeApi
         GC.KeepAlive(callback);
     }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private readonly struct PropertyKey
+    {
+        public PropertyKey(Guid formatId, uint propertyId)
+        {
+            FormatId = formatId;
+            PropertyId = propertyId;
+        }
+
+        public Guid FormatId { get; }
+
+        public uint PropertyId { get; }
+    }
+
+    // A PROPVARIANT is 16 bytes on 32-bit and 24 bytes on 64-bit Windows; only
+    // the type tag and the first pointer-sized value are read.
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct PropVariant
+    {
+        [FieldOffset(0)]
+        public ushort ValueType;
+
+        [FieldOffset(8)]
+        public nint Pointer;
+    }
+
+    [ComImport]
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IPropertyStore
+    {
+        [PreserveSig]
+        int GetCount(out uint count);
+
+        [PreserveSig]
+        int GetAt(uint index, out PropertyKey key);
+
+        [PreserveSig]
+        int GetValue(ref PropertyKey key, out PropVariant value);
+
+        [PreserveSig]
+        int SetValue(ref PropertyKey key, ref PropVariant value);
+
+        [PreserveSig]
+        int Commit();
+    }
+
     private static class NativeMethods
     {
+        [DllImport("shell32.dll")]
+        internal static extern int SHGetPropertyStoreForWindow(
+            nint windowHandle,
+            ref Guid interfaceId,
+            [MarshalAs(UnmanagedType.Interface)] out IPropertyStore? store);
+
+        [DllImport("ole32.dll")]
+        internal static extern int PropVariantClear(ref PropVariant value);
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate bool EnumChildWindowsCallback(
             nint windowHandle,

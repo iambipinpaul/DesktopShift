@@ -224,6 +224,47 @@ public sealed class BrowserWindowMatchingTests
         Assert.AreEqual(WindowMatchStrength.ProcessName, fallback.Strength);
     }
 
+    [TestMethod]
+    public void Match_ChromeInstalledWebAppIsSeparatedFromTheBrowserByAppUserModelId()
+    {
+        // Every Chrome window runs in chrome.exe; only the AppUserModelID each
+        // window declares tells an installed web app from a browser window.
+        const string WebAppId = "Chrome._crx_ifpboipmogocahb.UserData.Profile13";
+        WindowObservationRule browserRule = CreateRefinementRule(
+            "chrome",
+            WindowMatchCriteria.ForProcessNames(["chrome.exe"]));
+        WindowObservationRule webAppRule = CreateRefinementRule(
+            "workflowy",
+            new WindowMatchCriteria([], [WebAppId], [], [], [], [], [])) with
+        {
+            TargetDesktopKey = "notes",
+            Order = 100,
+        };
+        WindowIdentity browserWindow = CreateIdentity("chrome.exe") with
+        {
+            AppUserModelId = "Chrome.UserData.Profile13",
+        };
+        WindowIdentity webAppWindow = CreateIdentity("chrome.exe") with
+        {
+            AppUserModelId = WebAppId,
+        };
+        WindowRuleMatcher matcher = new();
+
+        WindowRuleMatch? browser = matcher.Match(
+            browserWindow,
+            WindowEventKind.Shown,
+            [browserRule, webAppRule]);
+        WindowRuleMatch? webApp = matcher.Match(
+            webAppWindow,
+            WindowEventKind.Shown,
+            [browserRule, webAppRule]);
+
+        Assert.AreEqual("chrome", browser!.Rule.Id);
+        Assert.AreEqual(WindowMatchStrength.ProcessName, browser.Strength);
+        Assert.AreEqual("workflowy", webApp!.Rule.Id);
+        Assert.AreEqual(WindowMatchStrength.AppUserModelId, webApp.Strength);
+    }
+
     private static WindowObservationRule CreateRefinementRule(
         string id,
         WindowMatchCriteria criteria) =>

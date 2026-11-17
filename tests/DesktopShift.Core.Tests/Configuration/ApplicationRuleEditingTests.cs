@@ -456,6 +456,43 @@ public sealed class ApplicationRuleEditingTests
     }
 
     [TestMethod]
+    public void RunningInstalledWebApp_AdoptsItsAppUserModelIdWithoutTheBrowserProcess()
+    {
+        // A Chrome PWA: unpackaged chrome.exe whose window declares the app's
+        // own ID. Adopting chrome.exe too would claim every browser window.
+        ConfigurationDocument document = ConfigurationDefaults.Create();
+        RunningApplicationCandidate candidate = new(
+            "chrome.exe",
+            @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            PackageFamilyName: null,
+            "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+            ["Chrome_WidgetWin_1"],
+            1,
+            Icon: null);
+
+        ApplicationRuleDraft draft = ApplicationRuleDraft.ForNewRule(document)
+            .WithRunningApplication(candidate);
+
+        Assert.AreEqual(string.Empty, draft.ProcessNames);
+        Assert.AreEqual(
+            "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+            draft.AppUserModelIds);
+        Assert.IsEmpty(draft.Validate(document));
+
+        ApplicationRuleDraft captured = ApplicationRuleDraft.ForCapturedWindow(
+            document,
+            new DesktopShift.Core.Observation.WindowSafeIdentity(
+                "chrome.exe",
+                null,
+                "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+                "Chrome_WidgetWin_1"));
+        Assert.AreEqual(string.Empty, captured.ProcessNames);
+        Assert.AreEqual(
+            "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+            captured.AppUserModelIds);
+    }
+
+    [TestMethod]
     public void RunningApplicationSelectedTwice_DoesNotDuplicateAnIdentity()
     {
         ConfigurationDocument document = ConfigurationDefaults.Create();

@@ -231,6 +231,8 @@ public sealed class LeastPrivilegeContractTests
             return null;
         }
 
+        public string? GetWindowAppUserModelId(nint windowHandle) => null;
+
         public void EnumerateChildWindows(
             nint windowHandle,
             Func<nint, bool> onChild)

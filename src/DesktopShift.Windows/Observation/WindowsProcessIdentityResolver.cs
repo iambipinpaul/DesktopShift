@@ -316,7 +316,7 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
             Path.GetFileName(executablePath),
             executablePath,
             processApi.TryGetPackageFamilyName(process),
-            processApi.TryGetAppUserModelId(process),
+            ResolveAppUserModelId(window, process),
             window.WindowClass,
             options.IncludeWindowTitle
                 ? windowApi.GetWindowTitle(window.RootWindowHandle)
@@ -324,6 +324,25 @@ public sealed class WindowsProcessIdentityResolver : IWindowIdentityResolver
             commandLine);
         return WindowIdentityResolution.Succeeded(identity);
     }
+
+    /// <summary>
+    /// The window's own AppUserModelID when it declares one, otherwise the
+    /// process's.
+    /// </summary>
+    /// <remarks>
+    /// This is the precedence the taskbar itself applies. It is what lets a rule
+    /// tell a Chrome or Edge installed web app (whose window declares an ID such
+    /// as <c>Chrome._crx_&lt;app id&gt;.UserData.Profile 1</c>) apart from the
+    /// browser it runs inside, and one browser profile from another. A packaged
+    /// application whose windows declare nothing keeps its process identity.
+    /// </remarks>
+    private string? ResolveAppUserModelId(
+        QualifiedWindow window,
+        SafeProcessHandle process) =>
+        windowApi.GetWindowAppUserModelId(window.RootWindowHandle) is
+            { Length: > 0 } windowId
+            ? windowId
+            : processApi.TryGetAppUserModelId(process);
 
     private bool IsSameWindowProcess(QualifiedWindow window) =>
         windowApi.IsWindow(window.RootWindowHandle) &&

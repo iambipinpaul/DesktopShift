@@ -335,6 +335,8 @@ public sealed class WindowsWindowClassifierTests
 
         public Dictionary<nint, uint> ChildProcessIds { get; } = [];
 
+        public string? GetWindowAppUserModelId(nint windowHandle) => null;
+
         public void EnumerateChildWindows(
             nint windowHandle,
             Func<nint, bool> onChild)

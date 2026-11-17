@@ -226,6 +226,70 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
     }
 
     [TestMethod]
+    public async Task LaunchedWindowActivatedBeforeTheShellPlacesIt_IsStillMovedAndFollowed()
+    {
+        // A Chrome installed web app launched from the taskbar: shown and
+        // activated a millisecond apart, before the Shell has put the window on
+        // any desktop. The activation overtakes the hold but has nothing to move
+        // yet; it used to drop the hold, leaving the window where it opened
+        // until the user next activated it.
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Topology.CurrentDesktopId = OtherDesktopId;
+        harness.Placement.Unplaced.Add(212);
+
+        await harness.ObserveAsync(WindowEventKind.Shown, 212, Now);
+        WindowObservationActivity early = await harness.ObserveAsync(
+            WindowEventKind.ForegroundActivated,
+            212,
+            Now);
+
+        Assert.AreEqual(
+            WindowAssignmentSkipReason.WindowNotTracked,
+            early.Assignment!.SkipReason);
+        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(1, harness.FollowScheduler.PendingCount);
+
+        // Still unplaced at the first retry: it keeps waiting.
+        Assert.AreEqual(1, await harness.FollowScheduler.ReleaseAllAsync());
+        Assert.IsEmpty(harness.Placement.Moves);
+        Assert.AreEqual(1, harness.FollowScheduler.PendingCount);
+
+        // The Shell places it on the desktop it opened on.
+        harness.Placement.Unplaced.Remove(212);
+        harness.Placement.SetCurrent(212, OtherDesktopId);
+        Assert.AreEqual(1, await harness.FollowScheduler.ReleaseAllAsync());
+
+        WindowAssignmentActivity placed = harness.Sink.Last!.Assignment!;
+        Assert.AreEqual(WindowMoveOutcome.Succeeded, placed.MoveOutcome);
+        Assert.AreEqual(DesktopSwitchOutcome.Succeeded, placed.SwitchOutcome);
+        Assert.AreEqual(TargetDesktopId, harness.Topology.CurrentDesktopId);
+        Assert.HasCount(1, harness.Placement.Moves);
+        Assert.AreEqual(0, harness.FollowScheduler.PendingCount);
+    }
+
+    [TestMethod]
+    public async Task ActivatedWindowTheShellNeverPlaces_StopsBeingRetried()
+    {
+        SwitchingHarness harness = new(
+            DesktopSwitchPolicy.OnForegroundActivation);
+        harness.Placement.Unplaced.Add(213);
+
+        await harness.ObserveAsync(WindowEventKind.Shown, 213, Now);
+        await harness.ObserveAsync(WindowEventKind.ForegroundActivated, 213, Now);
+
+        int releases = 0;
+        while (await harness.FollowScheduler.ReleaseAllAsync() > 0)
+        {
+            releases++;
+            Assert.IsLessThanOrEqualTo(10, releases);
+        }
+
+        Assert.AreEqual(10, releases);
+        Assert.IsEmpty(harness.Placement.Moves);
+    }
+
+    [TestMethod]
     public async Task OpenedWindowNothingActivates_IsMovedWithoutFollowing()
     {
         // The window that appears without being asked for. It is still placed,
@@ -653,6 +717,9 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
 
         public List<(nint WindowHandle, Guid DesktopId)> Moves { get; } = [];
 
+        /// <summary>Windows the Shell has not yet placed on any desktop.</summary>
+        public HashSet<nint> Unplaced { get; } = [];
+
         public void SetCurrent(nint windowHandle, Guid desktopId) =>
             current[windowHandle] = desktopId;
 
@@ -661,6 +728,15 @@ public sealed class ForegroundDesktopSwitchingAcceptanceTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Unplaced.Contains(windowHandle))
+            {
+                return ValueTask.FromResult(
+                    DesktopTopologyProviderResult<Guid>.Failed(
+                        "window_placement.window_not_tracked",
+                        "Windows was not tracking this window on a virtual desktop.",
+                        unchecked((int)0x8002802B)));
+            }
+
             return ValueTask.FromResult(
                 DesktopTopologyProviderResult<Guid>.Succeeded(
                     current.TryGetValue(windowHandle, out Guid desktopId)

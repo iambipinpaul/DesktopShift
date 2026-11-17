@@ -57,6 +57,58 @@ public sealed class WindowsProcessIdentityResolverTests
         Assert.AreEqual(1, processApi.OpenCount);
     }
 
+    [TestMethod]
+    public async Task Resolve_WindowDeclaresAppUserModelId_PrefersItOverTheProcess()
+    {
+        // A Chrome installed web app: an unpackaged browser process with no
+        // AppUserModelID of its own, whose window declares the app's ID.
+        FakeWindowApi windowApi = new()
+        {
+            WindowAppUserModelId = "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+        };
+        FakeProcessApi processApi = new() { ProcessAppUserModelId = null };
+        WindowsProcessIdentityResolver resolver = new(windowApi, processApi);
+        QualifiedWindow window = new(
+            (nint)10,
+            (nint)20,
+            123,
+            "Chrome_WidgetWin_1");
+
+        WindowIdentityResolution result = await resolver.ResolveAsync(window);
+
+        Assert.IsTrue(result.IsSuccessful);
+        Assert.AreEqual(
+            "Chrome._crx_ifpboipmogocahb.UserData.Profile13",
+            result.Identity!.AppUserModelId);
+        Assert.AreEqual((nint)20, windowApi.AppUserModelIdWindow);
+    }
+
+    [TestMethod]
+    public async Task Resolve_WindowDeclaresAppUserModelId_OverridesPackagedProcessId()
+    {
+        FakeWindowApi windowApi = new() { WindowAppUserModelId = "Window.Specific" };
+        FakeProcessApi processApi = new();
+        WindowsProcessIdentityResolver resolver = new(windowApi, processApi);
+
+        WindowIdentityResolution result = await resolver.ResolveAsync(
+            new QualifiedWindow((nint)10, (nint)10, 123, "ApplicationWindow"));
+
+        Assert.AreEqual("Window.Specific", result.Identity!.AppUserModelId);
+    }
+
+    [TestMethod]
+    public async Task Resolve_WindowDeclaresEmptyAppUserModelId_FallsBackToTheProcess()
+    {
+        FakeWindowApi windowApi = new() { WindowAppUserModelId = string.Empty };
+        FakeProcessApi processApi = new();
+        WindowsProcessIdentityResolver resolver = new(windowApi, processApi);
+
+        WindowIdentityResolution result = await resolver.ResolveAsync(
+            new QualifiedWindow((nint)10, (nint)10, 123, "ApplicationWindow"));
+
+        Assert.AreEqual("Package!App", result.Identity!.AppUserModelId);
+    }
+
     private sealed class FakeProcessApi : IWindowsProcessIdentityApi
     {
         public uint RequestedAccess { get; private set; }
@@ -82,8 +134,10 @@ public sealed class WindowsProcessIdentityResolverTests
             SafeProcessHandle process) =>
             "Package_family_hash";
 
+        public string? ProcessAppUserModelId { get; set; } = "Package!App";
+
         public string? TryGetAppUserModelId(SafeProcessHandle process) =>
-            "Package!App";
+            ProcessAppUserModelId;
     }
 
     private sealed class FakeWindowApi : IWindowsWindowNativeApi
@@ -91,6 +145,16 @@ public sealed class WindowsProcessIdentityResolverTests
         public Queue<uint> ProcessIds { get; } = [];
 
         public int TitleReadCount { get; private set; }
+
+        public string? WindowAppUserModelId { get; set; }
+
+        public nint AppUserModelIdWindow { get; private set; }
+
+        public string? GetWindowAppUserModelId(nint windowHandle)
+        {
+            AppUserModelIdWindow = windowHandle;
+            return WindowAppUserModelId;
+        }
 
         public bool IsWindow(nint windowHandle) => true;
 

@@ -886,16 +886,17 @@ public sealed class WindowObservationProcessor : IDisposable
                     Destination: rule.Destination);
             }
         }
-        else if (windowEvent.Kind == WindowEventKind.ForegroundActivated)
+        bool overtookOpenHold = false;
+        if (windowEvent.Kind == WindowEventKind.ForegroundActivated)
         {
             // The activation the hold was waiting for. Dropped here, once this
             // event is known to be assigning, rather than when it arrived: an
             // activation that goes on to be skipped has to leave the hold alone,
             // or a window that fails to qualify on activation is never placed.
-            followGrace.Cancel(window.RootWindowHandle);
+            overtookOpenHold = followGrace.Cancel(window.RootWindowHandle);
         }
 
-        return await CompleteMatchAsync(
+        WindowObservationActivity completed = await CompleteMatchAsync(
             windowEvent,
             window.RootWindowHandle,
             safeIdentity,
@@ -906,6 +907,119 @@ public sealed class WindowObservationProcessor : IDisposable
             heldFromTimestamp: null,
             focusedBeforeVisible,
             cancellationToken).ConfigureAwait(false);
+
+        if (overtookOpenHold && IsUnplacedActivation(completed))
+        {
+            HoldUnplacedActivation(
+                windowEvent,
+                window.RootWindowHandle,
+                safeIdentity,
+                rule,
+                matchedOn,
+                receivedTimestamp,
+                attempt: 1);
+        }
+
+        return completed;
+    }
+
+    /// <summary>
+    /// How many times an opening window's activation is retried while Windows
+    /// has not yet placed the window on a desktop.
+    /// </summary>
+    /// <remarks>
+    /// Each retry waits one grace period, so this bounds the wait at roughly a
+    /// second and a half — far longer than the Shell has been seen to take, and
+    /// short enough that a window it never places is not chased indefinitely.
+    /// </remarks>
+    internal const int MaximumUnplacedActivationRetries = 10;
+
+    /// <summary>
+    /// Whether an activation was skipped only because Windows had not yet placed
+    /// the window on any desktop.
+    /// </summary>
+    private static bool IsUnplacedActivation(WindowObservationActivity activity) =>
+        activity.Assignment is
+        {
+            Outcome: WindowAssignmentOutcome.Skipped,
+            SkipReason: WindowAssignmentSkipReason.WindowNotTracked,
+        };
+
+    /// <summary>
+    /// Keeps a just-opened window's assignment alive when its activation arrived
+    /// before Windows had placed the window on a desktop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A Chrome or Edge installed web app shows its window and takes the
+    /// foreground a millisecond apart, tens of milliseconds before the Shell
+    /// registers the window on a virtual desktop. The activation overtakes the
+    /// open-time hold — as it should, so the desktop can follow — but finds
+    /// nothing to move, and the assignment service rightly refuses to treat an
+    /// activation on an unplaced window as proof that it needs to move. With the
+    /// hold gone, nothing else would ever place the window, and it stayed on the
+    /// desktop it opened on until the user next activated it.
+    /// </para>
+    /// <para>
+    /// So the activation is held again and retried as the activation it was:
+    /// the window is marked new once more so a follow policy still follows it,
+    /// and a real activation arriving meanwhile overtakes the retry exactly as
+    /// it would the original hold.
+    /// </para>
+    /// </remarks>
+    private void HoldUnplacedActivation(
+        WindowEvent windowEvent,
+        nint windowHandle,
+        WindowSafeIdentity identity,
+        WindowObservationRule rule,
+        WindowMatchStrength? matchedOn,
+        long receivedTimestamp,
+        int attempt)
+    {
+        if (assignmentService is null ||
+            !followGrace.IsEnabled ||
+            attempt > MaximumUnplacedActivationRetries)
+        {
+            return;
+        }
+
+        activationTracker?.MarkMatchedWindowNew(windowHandle);
+        long heldFromTimestamp = timeProvider.GetTimestamp();
+        try
+        {
+            followGrace.Hold(
+                windowHandle,
+                async () =>
+                {
+                    WindowObservationActivity retried = await CompleteMatchAsync(
+                        windowEvent,
+                        windowHandle,
+                        identity,
+                        rule,
+                        matchedOn,
+                        Guid.NewGuid(),
+                        receivedTimestamp,
+                        heldFromTimestamp,
+                        focusedBeforeVisible: false,
+                        CancellationToken.None).ConfigureAwait(false);
+
+                    if (IsUnplacedActivation(retried))
+                    {
+                        HoldUnplacedActivation(
+                            windowEvent,
+                            windowHandle,
+                            identity,
+                            rule,
+                            matchedOn,
+                            receivedTimestamp,
+                            attempt + 1);
+                    }
+                });
+        }
+        catch (ObjectDisposedException)
+        {
+            // The observer is shutting down; nothing is left to place windows.
+        }
     }
 
     /// <summary>

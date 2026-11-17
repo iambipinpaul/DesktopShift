@@ -294,6 +294,8 @@ public sealed class AccessDeniedActivityTests
             return null;
         }
 
+        public string? GetWindowAppUserModelId(nint windowHandle) => null;
+
         public void EnumerateChildWindows(
             nint windowHandle,
             Func<nint, bool> onChild)

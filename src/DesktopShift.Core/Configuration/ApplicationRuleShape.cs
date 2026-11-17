@@ -149,6 +149,28 @@ public static class ApplicationRuleShape
         !value.Contains(Path.AltDirectorySeparatorChar);
 
     /// <summary>
+    /// Whether an observed AppUserModelId names something narrower than the
+    /// process that shows the window.
+    /// </summary>
+    /// <remarks>
+    /// Windows only reports a process-level AppUserModelId for a packaged
+    /// process, so an ID observed on an application without a package family
+    /// was declared by the window itself. That is how a Chrome or Edge installed
+    /// web app (PWA) is told apart from the browser hosting it: every one of them
+    /// runs as <c>chrome.exe</c> or <c>msedge.exe</c>. Adopting the process name
+    /// next to such an ID would make the rule claim every window of the host
+    /// process too, so the ID is adopted on its own.
+    /// </remarks>
+    /// <param name="packageFamilyName">The observed package family name.</param>
+    /// <param name="appUserModelId">The observed AppUserModelId.</param>
+    /// <returns>Whether the ID alone should identify the application.</returns>
+    public static bool AppUserModelIdNarrowsProcess(
+        string? packageFamilyName,
+        string? appUserModelId) =>
+        string.IsNullOrWhiteSpace(packageFamilyName) &&
+        IsValidAppUserModelId(appUserModelId);
+
+    /// <summary>
     /// Tests a window class. A class is compared for equality, never as a
     /// pattern, and cannot be longer than the buffer it is read into.
     /// </summary>

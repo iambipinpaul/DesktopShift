@@ -228,7 +228,11 @@ public sealed record ApplicationRuleDraft(
                 document,
                 ToRuleIdSeed(name)),
             DisplayName = name,
-            ProcessNames = AppendEntry(string.Empty, identity.ProcessName),
+            ProcessNames = ApplicationRuleShape.AppUserModelIdNarrowsProcess(
+                identity.PackageFamilyName,
+                identity.AppUserModelId)
+                ? string.Empty
+                : AppendEntry(string.Empty, identity.ProcessName),
             PackageFamilyNames = AppendEntry(
                 string.Empty,
                 identity.PackageFamilyName),
@@ -300,8 +304,11 @@ public sealed record ApplicationRuleDraft(
     /// Adopts the identities detected on a running application.
     /// </summary>
     /// <remarks>
-    /// The packaged identities and the process name are always adopted, because
-    /// they say which application the rule is about. The executable path and the
+    /// The packaged identities and the process name are adopted, because they
+    /// say which application the rule is about — except that the process name is
+    /// left out when the window declares an AppUserModelId of its own, as an
+    /// installed web app does; see
+    /// <see cref="ApplicationRuleShape.AppUserModelIdNarrowsProcess"/>. The executable path and the
     /// window class are adopted only on request: both narrow a rule, a path to
     /// one installation and a class to one window shape, and narrowing is a
     /// decision rather than a detail of the selection.
@@ -326,7 +333,11 @@ public sealed record ApplicationRuleDraft(
             DisplayName = string.IsNullOrWhiteSpace(DisplayName)
                 ? candidate.DisplayName
                 : DisplayName,
-            ProcessNames = AppendEntry(ProcessNames, candidate.ProcessName),
+            ProcessNames = ApplicationRuleShape.AppUserModelIdNarrowsProcess(
+                candidate.PackageFamilyName,
+                candidate.AppUserModelId)
+                ? ProcessNames
+                : AppendEntry(ProcessNames, candidate.ProcessName),
             PackageFamilyNames = AppendEntry(
                 PackageFamilyNames,
                 candidate.PackageFamilyName),
